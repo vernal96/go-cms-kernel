@@ -1,0 +1,10 @@
+.idea
+.env
+.codebase-memory/
+backend/var/log/
+frontend-admin/node_modules/
+frontend-admin/dist/
+var
+frontend-admin/dist-sdk/
+examples/admin-plugin/node_modules/
+examples/admin-plugin/dist/
