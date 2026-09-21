@@ -1,7 +1,7 @@
 # Go CMS Kernel
 
 Reusable Go kernel, built-in modules, persistence adapters, and infrastructure
-connectors for [Go CMS](https://github.com/vernal96/go-cms-start).
+connectors for [Go CMS](https://github.com/vernal96/go-cms).
 
 ## Installation
 
