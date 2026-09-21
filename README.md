@@ -1,7 +1,7 @@
 # Go CMS Kernel
 
 Reusable Go kernel, built-in modules, persistence adapters, and infrastructure
-connectors for [Go CMS](https://github.com/vernal96/go-cms).
+connectors for [Go CMS](https://github.com/vernal96/go-cms-start).
 
 ## Installation
 
@@ -47,3 +47,8 @@ skip when their documented environment variables are not configured.
 
 Releases use semantic Go module tags. Consumers should depend on a fixed tag;
 the project intentionally does not require a `replace` directive or `go.work`.
+
+The PostgreSQL connector uses a one-hour connection lifetime when
+`Config.ConnMaxLifetime` is zero. Set a positive duration to override it;
+negative durations are rejected. This applies to both the pgx pool and
+migration connections.

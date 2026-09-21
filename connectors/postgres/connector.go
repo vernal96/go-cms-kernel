@@ -36,7 +36,7 @@ type Config struct {
 	SSLMode         string
 	MaxConns        int32
 	MinConns        int32
-	ConnMaxLifetime time.Duration
+	ConnMaxLifetime time.Duration // Zero defaults to one hour; negative values are invalid.
 	ConnectTimeout  time.Duration
 }
 
@@ -73,6 +73,9 @@ func New(
 
 	if err := validateConfig(config); err != nil {
 		return nil, err
+	}
+	if config.ConnMaxLifetime == 0 {
+		config.ConnMaxLifetime = time.Hour
 	}
 
 	dsn := connectionString(config)
@@ -260,6 +263,8 @@ func validateConfig(config Config) error {
 		return errors.New(
 			"postgres min connections cannot exceed max connections",
 		)
+	case config.ConnMaxLifetime < 0:
+		return errors.New("postgres connection max lifetime cannot be negative")
 	case config.ConnectTimeout <= 0:
 		return errors.New(
 			"postgres connect timeout must be positive",
