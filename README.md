@@ -42,7 +42,7 @@ go build ./...
 go mod tidy -diff
 ```
 
-Integration tests requiring PostgreSQL, Kafka, RabbitMQ, Loki, Redis, or S3
+Integration tests requiring PostgreSQL, Kafka, Redis, or S3
 skip when their documented environment variables are not configured.
 
 Releases use semantic Go module tags. Consumers should depend on a fixed tag;

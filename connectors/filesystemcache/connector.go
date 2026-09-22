@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vernal96/go-cms-kernel/connectors/support/cacheentry"
 	"github.com/vernal96/go-cms-kernel/cache"
+	"github.com/vernal96/go-cms-kernel/connectors/support/cacheentry"
 	"github.com/vernal96/go-cms-kernel/filesystem"
 )
 
@@ -223,31 +223,50 @@ func (c *Connector) Set(
 			c.maxSize,
 		)
 	}
-	tags, err := c.tagTokens(ctx, options.Tags)
+	set, err := c.Prepare(ctx, options.Tags)
 	if err != nil {
 		return err
 	}
-	var expiresAt int64
-	if options.TTL > 0 {
-		expiresAt = c.now().Add(options.TTL).UnixNano()
-	}
-	raw, err := cacheentry.Encode(cacheentry.Entry{
-		ExpiresAt: expiresAt,
-		Tags:      tags,
-		Value:     append([]byte(nil), value...),
-	})
+	return set(ctx, key, value, options.TTL)
+}
+
+func (c *Connector) Prepare(ctx context.Context, dependencies []cache.Tag) (cache.PreparedSet, error) {
+	tags, err := c.tagTokens(ctx, dependencies)
 	if err != nil {
-		return fmt.Errorf("encode filesystem cache entry: %w", err)
+		return nil, err
 	}
-	if err := c.writer.Put(
-		ctx,
-		c.entryKey(key),
-		bytes.NewReader(raw),
-		"application/octet-stream",
-	); err != nil {
-		return fmt.Errorf("write filesystem cache entry: %w", err)
-	}
-	return nil
+	return func(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+		if err := validateContextAndKey(ctx, key); err != nil {
+			return err
+		}
+		if ttl < 0 {
+			return cache.ErrInvalidTTL
+		}
+		if c.maxSize > 0 && int64(len(value)) > c.maxSize {
+			return fmt.Errorf("filesystem cache value exceeds %d bytes", c.maxSize)
+		}
+		var expiresAt int64
+		if ttl > 0 {
+			expiresAt = c.now().Add(ttl).UnixNano()
+		}
+		raw, err := cacheentry.Encode(cacheentry.Entry{
+			ExpiresAt: expiresAt,
+			Tags:      tags,
+			Value:     append([]byte(nil), value...),
+		})
+		if err != nil {
+			return fmt.Errorf("encode filesystem cache entry: %w", err)
+		}
+		if err := c.writer.Put(
+			ctx,
+			c.entryKey(key),
+			bytes.NewReader(raw),
+			"application/octet-stream",
+		); err != nil {
+			return fmt.Errorf("write filesystem cache entry: %w", err)
+		}
+		return nil
+	}, nil
 }
 
 func (c *Connector) Exists(

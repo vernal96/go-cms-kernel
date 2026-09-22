@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"hash/fnv"
+	"reflect"
 	"sort"
 	"sync"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/cache"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
+	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/core/template"
 	"github.com/vernal96/go-cms-kernel/modules/core/widget"
@@ -321,7 +323,7 @@ func (r *invalidatingResourceRepository) RestoreRevision(ctx context.Context, ac
 		var mutationErr error
 		result, mutationErr = repository.RestoreRevision(ctx, actorID, current, candidate, source)
 		if mutationErr == nil {
-			r.policy.invalidate(ctx, append(resourceTags(current), resourceTags(result)...)...)
+			r.policy.invalidate(ctx, append(treeMutationTags(current), treeMutationTags(result)...)...)
 		}
 		return mutationErr
 	})
@@ -339,7 +341,7 @@ func (r *invalidatingResourceRepository) RestoreLibraryItemRevision(ctx context.
 		var mutationErr error
 		result, mutationErr = repository.RestoreLibraryItemRevision(ctx, actorID, current, candidate, source)
 		if mutationErr == nil {
-			r.policy.invalidate(ctx, append(tags, libraryItemTags(result)...)...)
+			r.policy.invalidate(ctx, append(append(tags, libraryItemTags(result)...), siteRoutesTag(current.SiteID), siteRoutesTag(result.SiteID))...)
 		}
 		return mutationErr
 	})
@@ -362,7 +364,7 @@ func (r *invalidatingResourceRepository) Create(
 			if err != nil {
 				return err
 			}
-			r.policy.invalidate(ctx, resourceTags(result)...)
+			r.policy.invalidate(ctx, append(resourceTags(result), siteRoutesTag(result.SiteID))...)
 			return nil
 		},
 	)
@@ -452,7 +454,7 @@ func (r *invalidatingResourceRepository) TransferToSite(
 		if writeErr != nil {
 			return writeErr
 		}
-		invalidate := append([]cache.Tag(nil), tags...)
+		invalidate := append(append([]cache.Tag(nil), tags...), siteRoutesTag(sourceSiteID), siteRoutesTag(targetSiteID), siteResourceTreeTag(sourceSiteID), siteResourceTreeTag(targetSiteID))
 		for _, resourceID := range result.ResourceIDs {
 			invalidate = append(invalidate, resourceTag(resourceID))
 		}
@@ -494,13 +496,12 @@ func (r *invalidatingResourceRepository) Update(
 			if err != nil {
 				return err
 			}
-			r.policy.invalidate(
-				ctx,
-				siteResourcesTag(current.SiteID),
-				siteResourcesTag(result.SiteID),
-				resourceTag(current.ID),
-				resourceTag(result.ID),
-			)
+			tags := append(resourceTags(current), resourceTags(result)...)
+			if routeChanged(current, result) {
+				tags = append(tags, siteRoutesTag(current.SiteID), siteRoutesTag(result.SiteID), siteResourceTreeTag(current.SiteID), siteResourceTreeTag(result.SiteID))
+			}
+			r.policy.invalidate(ctx, tags...)
+
 			return nil
 		},
 	)
@@ -592,7 +593,7 @@ func (r *invalidatingResourceRepository) Delete(
 		if err := r.base.Delete(ctx, id); err != nil {
 			return err
 		}
-		r.policy.invalidate(ctx, resourceTags(current)...)
+		r.policy.invalidate(ctx, treeMutationTags(current)...)
 		return nil
 	})
 }
@@ -614,7 +615,7 @@ func (r *invalidatingResourceRepository) SoftDelete(
 		if err := lifecycle.SoftDelete(ctx, actorID, id); err != nil {
 			return err
 		}
-		r.policy.invalidate(ctx, resourceTags(current)...)
+		r.policy.invalidate(ctx, treeMutationTags(current)...)
 		return nil
 	})
 }
@@ -637,7 +638,7 @@ func (r *invalidatingResourceRepository) Restore(
 		if err := lifecycle.Restore(ctx, actorID, id, withDescendants); err != nil {
 			return err
 		}
-		r.policy.invalidate(ctx, resourceTags(current)...)
+		r.policy.invalidate(ctx, treeMutationTags(current)...)
 		return nil
 	})
 }
@@ -664,7 +665,7 @@ func (r *invalidatingResourceRepository) CreateLibraryItem(ctx context.Context, 
 		var writeErr error
 		result, writeErr = repository.CreateLibraryItem(ctx, actorID, item, recordRevision)
 		if writeErr == nil {
-			r.policy.invalidate(ctx, libraryItemTags(result)...)
+			r.policy.invalidate(ctx, append(libraryItemTags(result), siteRoutesTag(result.SiteID))...)
 		}
 		return writeErr
 	})
@@ -688,7 +689,11 @@ func (r *invalidatingResourceRepository) UpdateLibraryItem(ctx context.Context, 
 		var writeErr error
 		result, writeErr = repository.UpdateLibraryItem(ctx, actorID, current, item, recordRevision)
 		if writeErr == nil {
-			r.policy.invalidate(ctx, append(tags, libraryItemTags(result)...)...)
+			invalidate := append(tags, libraryItemTags(result)...)
+			if current.Slug != result.Slug || current.LibraryID != result.LibraryID || !reflect.DeepEqual(current.PublishedAt, result.PublishedAt) {
+				invalidate = append(invalidate, siteRoutesTag(current.SiteID), siteRoutesTag(result.SiteID))
+			}
+			r.policy.invalidate(ctx, invalidate...)
 		}
 		return writeErr
 	})
@@ -708,7 +713,7 @@ func (r *invalidatingResourceRepository) mutateLibraryItem(ctx context.Context, 
 		if err := mutate(repository); err != nil {
 			return err
 		}
-		r.policy.invalidate(ctx, tags...)
+		r.policy.invalidate(ctx, append(tags, siteRoutesTag(current.SiteID))...)
 		return nil
 	})
 }
@@ -740,7 +745,7 @@ func (r *invalidatingResourceRepository) MoveLibraryItem(ctx context.Context, ac
 		var writeErr error
 		result, writeErr = repository.MoveLibraryItem(ctx, actorID, id, target, expectedVersion, recordRevision)
 		if writeErr == nil {
-			r.policy.invalidate(ctx, append(tags, libraryItemTags(result)...)...)
+			r.policy.invalidate(ctx, append(append(tags, libraryItemTags(result)...), siteRoutesTag(current.SiteID), siteRoutesTag(result.SiteID))...)
 		}
 		return writeErr
 	})
@@ -821,11 +826,31 @@ func (r *invalidatingFileRepository) DeleteConfirmed(ctx context.Context, actorI
 	}
 	tags := make([]cache.Tag, 0, len(impact.ResourceSites))
 	for _, id := range impact.ResourceSites {
-		tags = append(tags, siteResourcesTag(site.ID(id)))
+		tags = append(tags, siteResourcesTag(site.ID(id)), siteResourceTreeTag(site.ID(id)))
 	}
 	return withRepositoryCacheWrite(r.policy, tags, func() error {
 		err := r.cascade.DeleteConfirmed(ctx, actorID, items, token, physical)
 		r.policy.invalidate(ctx, tags...)
 		return err
 	})
+}
+
+func treeMutationTags(item resource.Resource) []cache.Tag {
+	return append(resourceTags(item), siteRoutesTag(item.SiteID), siteResourceTreeTag(item.SiteID))
+}
+func routeChanged(before, after resource.Resource) bool {
+	return before.SiteID != after.SiteID || before.Slug != after.Slug || before.Type != after.Type ||
+		!reflect.DeepEqual(before.ParentID, after.ParentID) || !reflect.DeepEqual(before.Path, after.Path) ||
+		libraryRoutePattern(before) != libraryRoutePattern(after)
+}
+
+func libraryRoutePattern(item resource.Resource) string {
+	if item.Type != resourcetype.Library {
+		return ""
+	}
+	pattern, _ := item.TypeSettings["item_url_pattern"].(string)
+	if pattern == "" {
+		return resourcetype.DefaultItemURLPattern
+	}
+	return pattern
 }

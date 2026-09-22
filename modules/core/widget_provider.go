@@ -3,7 +3,6 @@ package core
 import (
 	"fmt"
 
-	"github.com/vernal96/go-cms-kernel/cache"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
 	"github.com/vernal96/go-cms-kernel/modules/core/template"
@@ -18,7 +17,7 @@ func (r *Runtime) Widgets() []widget.Widget {
 	return append([]widget.Widget(nil), r.widgets...)
 }
 
-func buildWidgets(r *Runtime, store cache.Store, types []resourcetype.Code, templates []template.Definition) error {
+func buildWidgets(r *Runtime, types []resourcetype.Code, templates []template.Definition) error {
 	if r == nil || r.database == nil {
 		return fmt.Errorf("core runtime database is nil")
 	}
@@ -30,7 +29,7 @@ func buildWidgets(r *Runtime, store cache.Store, types []resourcetype.Code, temp
 	if err != nil {
 		return err
 	}
-	r.widgets = append(widgets.All(), widgets.NewResourceList(query, store, types, templates))
+	r.widgets = append(widgets.All(), widgets.NewResourceList(query, types, templates))
 	return nil
 }
 

@@ -453,6 +453,7 @@ func (s *LibraryService) ResolvePublished(ctx context.Context, actor security.Ac
 	}
 	now := time.Now().UTC()
 	if library.DeletedAt != nil || item.DeletedAt != nil || !library.IsPublic || !item.IsPublic ||
+		(library.PublishedAt != nil && now.Before(*library.PublishedAt)) || (library.UnpublishedAt != nil && !now.Before(*library.UnpublishedAt)) ||
 		(item.PublishedAt != nil && now.Before(*item.PublishedAt)) || (item.UnpublishedAt != nil && !now.Before(*item.UnpublishedAt)) {
 		return LibraryItem{}, Resource{}, ErrNotFound
 	}

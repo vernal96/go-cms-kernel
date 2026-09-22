@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/vernal96/go-cms-kernel"
@@ -174,11 +175,9 @@ func (m Module) Build(
 	}
 
 	var descriptor *RepositoryCacheDescriptor
-	var durableStore cache.Store
 	if caches := ctx.Caches(); caches != nil {
 		store, exists := caches.Store(DurableCacheAlias)
 		if exists {
-			durableStore = store
 			binding, bindingExists := caches.Binding(DurableCacheAlias)
 			if !bindingExists {
 				return nil, errors.New(
@@ -190,16 +189,22 @@ func (m Module) Build(
 				Namespace: binding.Namespace,
 				TTL:       config.RepositoryCacheTTL,
 			}
+			siteID, err := strconv.ParseInt(ctx.Scope().SiteID(), 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("repository cache requires site scope: %w", err)
+			}
 			database = newCachedDatabase(
 				database,
 				store,
 				config.RepositoryCacheTTL,
 				m.services.cachePolicy,
+				site.ID(siteID),
 			)
 		}
 	}
 
 	runtime := &Runtime{
+		resultStore:     hotStore,
 		database:        database,
 		repositoryCache: descriptor,
 		services:        m.services,
@@ -210,7 +215,7 @@ func (m Module) Build(
 		menuStore:       hotStore,
 		menuTTL:         config.MenuCacheTTL,
 	}
-	if err := buildWidgets(runtime, durableStore, ctx.Registry().ResourceTypes(), ctx.Profile().Templates); err != nil {
+	if err := buildWidgets(runtime, ctx.Registry().ResourceTypes(), ctx.Profile().Templates); err != nil {
 		return nil, fmt.Errorf("build core widgets: %w", err)
 	}
 	catalog, err := media.CompileSettings(config.MediaSettings, ctx.Registry())
@@ -227,6 +232,7 @@ func (m Module) Build(
 }
 
 type Runtime struct {
+	resultStore     cache.Store
 	mediaSettings   *media.SettingsService
 	menuStore       cache.Store
 	menuTTL         time.Duration

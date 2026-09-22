@@ -13,8 +13,8 @@ import (
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
-	"github.com/vernal96/go-cms-kernel/connectors/support/cacheentry"
 	"github.com/vernal96/go-cms-kernel/cache"
+	"github.com/vernal96/go-cms-kernel/connectors/support/cacheentry"
 )
 
 type Config struct {
@@ -64,6 +64,7 @@ func (f Factory) Open(
 type client interface {
 	Ping(context.Context) error
 	Get(context.Context, string) ([]byte, error)
+	GetMany(context.Context, []string) map[string]cache.ReadResult
 	Set(context.Context, string, []byte, time.Duration) error
 	Delete(context.Context, string) error
 	Close() error
@@ -86,6 +87,26 @@ func (c universalClient) Get(
 		return nil, cache.ErrMiss
 	}
 	return result, err
+}
+
+func (c universalClient) GetMany(ctx context.Context, keys []string) map[string]cache.ReadResult {
+	result := make(map[string]cache.ReadResult, len(keys))
+	pipeline := c.client.Pipeline()
+	commands := make(map[string]*goredis.StringCmd, len(keys))
+	for _, key := range keys {
+		if _, exists := commands[key]; !exists {
+			commands[key] = pipeline.Get(ctx, key)
+		}
+	}
+	_, _ = pipeline.Exec(ctx)
+	for key, command := range commands {
+		value, err := command.Bytes()
+		if errors.Is(err, goredis.Nil) {
+			err = cache.ErrMiss
+		}
+		result[key] = cache.ReadResult{Value: value, Err: err}
+	}
+	return result
 }
 
 func (c universalClient) Set(
@@ -233,40 +254,71 @@ func (c *Connector) Get(
 	ctx context.Context,
 	key string,
 ) ([]byte, error) {
-	if err := validateContextAndKey(ctx, key); err != nil {
-		return nil, err
+	result := c.GetMany(ctx, []string{key})[key]
+	return result.Value, result.Err
+}
+
+// GetMany uses two pipelines regardless of the number of entries/tags.
+func (c *Connector) GetMany(ctx context.Context, keys []string) map[string]cache.ReadResult {
+	result := make(map[string]cache.ReadResult, len(keys))
+	physical := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if err := validateContextAndKey(ctx, key); err != nil {
+			result[key] = cache.ReadResult{Err: err}
+			continue
+		}
+		physical = append(physical, c.entryKey(key))
 	}
-	physicalKey := c.entryKey(key)
-	raw, err := c.client.Get(ctx, physicalKey)
-	if err != nil {
-		return nil, err
-	}
-	entry, err := cacheentry.Decode(raw)
-	if err != nil {
-		_ = c.client.Delete(ctx, physicalKey)
-		return nil, fmt.Errorf(
-			"%w: %w: %v",
-			cache.ErrMiss,
-			cache.ErrCorrupt,
-			err,
-		)
-	}
-	if entry.ExpiresAt > 0 &&
-		!c.now().Before(time.Unix(0, entry.ExpiresAt)) {
-		_ = c.client.Delete(ctx, physicalKey)
-		return nil, cache.ErrMiss
-	}
-	for tag, expected := range entry.Tags {
-		current, err := c.tagToken(ctx, cache.Tag(tag))
+	raw := c.client.GetMany(ctx, physical)
+	entries := make(map[string]cacheentry.Entry)
+	tagKeys := make([]string, 0)
+	for _, key := range keys {
+		if _, invalid := result[key]; invalid {
+			continue
+		}
+		item := raw[c.entryKey(key)]
+		if item.Err != nil {
+			result[key] = item
+			continue
+		}
+		entry, err := cacheentry.Decode(item.Value)
 		if err != nil {
-			return nil, err
+			result[key] = cache.ReadResult{Err: errors.Join(cache.ErrMiss, cache.ErrCorrupt, err)}
+			continue
 		}
-		if current != expected {
-			_ = c.client.Delete(ctx, physicalKey)
-			return nil, cache.ErrMiss
+		if entry.ExpiresAt > 0 && !c.now().Before(time.Unix(0, entry.ExpiresAt)) {
+			result[key] = cache.ReadResult{Err: cache.ErrMiss}
+			continue
+		}
+		entries[key] = entry
+		for tag := range entry.Tags {
+			tagKeys = append(tagKeys, c.tagKey(cache.Tag(tag)))
 		}
 	}
-	return append([]byte(nil), entry.Value...), nil
+	tokens := c.client.GetMany(ctx, tagKeys)
+	for key, entry := range entries {
+		result[key] = cache.ReadResult{Value: append([]byte(nil), entry.Value...)}
+		for tag, expected := range entry.Tags {
+			item := tokens[c.tagKey(cache.Tag(tag))]
+			var token cacheentry.Token
+			if item.Err != nil && !errors.Is(item.Err, cache.ErrMiss) {
+				result[key] = cache.ReadResult{Err: item.Err}
+				break
+			}
+			if item.Err == nil {
+				if len(item.Value) != len(token) {
+					result[key] = cache.ReadResult{Err: errors.Join(cache.ErrMiss, cache.ErrCorrupt)}
+					break
+				}
+				copy(token[:], item.Value)
+			}
+			if token != expected {
+				result[key] = cache.ReadResult{Err: cache.ErrMiss}
+				break
+			}
+		}
+	}
+	return result
 }
 
 func (c *Connector) Set(
@@ -281,26 +333,42 @@ func (c *Connector) Set(
 	if options.TTL < 0 {
 		return cache.ErrInvalidTTL
 	}
-	tags, err := c.tagTokens(ctx, options.Tags)
+	set, err := c.Prepare(ctx, options.Tags)
 	if err != nil {
 		return err
 	}
-	var expiresAt int64
-	if options.TTL > 0 {
-		expiresAt = c.now().Add(options.TTL).UnixNano()
-	}
-	raw, err := cacheentry.Encode(cacheentry.Entry{
-		ExpiresAt: expiresAt,
-		Tags:      tags,
-		Value:     append([]byte(nil), value...),
-	})
+	return set(ctx, key, value, options.TTL)
+}
+
+func (c *Connector) Prepare(ctx context.Context, dependencies []cache.Tag) (cache.PreparedSet, error) {
+	tags, err := c.tagTokens(ctx, dependencies)
 	if err != nil {
-		return fmt.Errorf("encode redis cache entry: %w", err)
+		return nil, err
 	}
-	if err := c.client.Set(ctx, c.entryKey(key), raw, options.TTL); err != nil {
-		return fmt.Errorf("write redis cache entry: %w", err)
-	}
-	return nil
+	return func(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+		if err := validateContextAndKey(ctx, key); err != nil {
+			return err
+		}
+		if ttl < 0 {
+			return cache.ErrInvalidTTL
+		}
+		var expiresAt int64
+		if ttl > 0 {
+			expiresAt = c.now().Add(ttl).UnixNano()
+		}
+		raw, err := cacheentry.Encode(cacheentry.Entry{
+			ExpiresAt: expiresAt,
+			Tags:      tags,
+			Value:     append([]byte(nil), value...),
+		})
+		if err != nil {
+			return fmt.Errorf("encode redis cache entry: %w", err)
+		}
+		if err := c.client.Set(ctx, c.entryKey(key), raw, ttl); err != nil {
+			return fmt.Errorf("write redis cache entry: %w", err)
+		}
+		return nil
+	}, nil
 }
 
 func (c *Connector) Exists(

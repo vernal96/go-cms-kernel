@@ -239,7 +239,8 @@ type fakeCacheStore struct {
 }
 
 type taggedCacheStore struct {
-	code cache.Code
+	generation uint64
+	code       cache.Code
 
 	mu        sync.Mutex
 	values    map[string][]byte
@@ -281,6 +282,10 @@ func (s *taggedCacheStore) Set(
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.setLocked(key, value, options)
+}
+
+func (s *taggedCacheStore) setLocked(key string, value []byte, options cache.SetOptions) error {
 	s.deleteLocked(key)
 	s.values[key] = append([]byte(nil), value...)
 	s.entryTags[key] = append([]cache.Tag(nil), options.Tags...)
@@ -321,6 +326,7 @@ func (s *taggedCacheStore) InvalidateTag(
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.generation++
 	keys := make([]string, 0, len(s.tagged[tag]))
 	for key := range s.tagged[tag] {
 		keys = append(keys, key)
@@ -1218,7 +1224,7 @@ func TestAppRequiresHealthyLoggerBeforeInfrastructure(t *testing.T) {
 	databaseOpened := false
 	loggerConnector := &fakeLoggerConnector{
 		logger:  slog.New(slog.NewJSONHandler(io.Discard, nil)),
-		pingErr: errors.New("Loki is not ready"),
+		pingErr: errors.New("logger is not ready"),
 		onClose: func() {
 			loggerClosed = true
 		},
@@ -1241,7 +1247,7 @@ func TestAppRequiresHealthyLoggerBeforeInfrastructure(t *testing.T) {
 			},
 		},
 	)
-	if err == nil || !strings.Contains(err.Error(), "Loki is not ready") {
+	if err == nil || !strings.Contains(err.Error(), "logger is not ready") {
 		t.Fatalf("New error = %v", err)
 	}
 	if databaseOpened {
@@ -3087,3 +3093,17 @@ func TestBootFailureIsRememberedAndNotRetried(t *testing.T) {
 }
 
 var _ fs.FS = fstest.MapFS{}
+
+func (s *taggedCacheStore) Prepare(ctx context.Context, tags []cache.Tag) (cache.PreparedSet, error) {
+	s.mu.Lock()
+	generation := s.generation
+	s.mu.Unlock()
+	return func(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if generation != s.generation {
+			return nil
+		}
+		return s.setLocked(key, value, cache.SetOptions{TTL: ttl, Tags: tags})
+	}, nil
+}

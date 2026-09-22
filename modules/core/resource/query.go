@@ -88,8 +88,10 @@ type Query struct {
 }
 
 type Page struct {
-	Items []Resource
-	Total int
+	// ValidUntil bounds cached public collections at the next publication transition.
+	ValidUntil time.Time
+	Items      []Resource
+	Total      int
 }
 
 type QueryRepository interface {

@@ -273,3 +273,12 @@ func (c *memoryClient) Close() error {
 }
 
 var _ client = (*memoryClient)(nil)
+
+func (c *memoryClient) GetMany(ctx context.Context, keys []string) map[string]cache.ReadResult {
+	result := make(map[string]cache.ReadResult, len(keys))
+	for _, key := range keys {
+		value, err := c.Get(ctx, key)
+		result[key] = cache.ReadResult{Value: value, Err: err}
+	}
+	return result
+}

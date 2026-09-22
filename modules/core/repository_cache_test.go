@@ -178,7 +178,7 @@ func TestCachedResourceRepositoryKeysTagsAndInvalidation(t *testing.T) {
 		},
 	}
 	policy := newTestRepositoryCachePolicy(store)
-	repository := &cachedResourceRepository{
+	repository := &cachedResourceRepository{siteID: 3,
 		base: &invalidatingResourceRepository{
 			base: base, policy: policy,
 		},
@@ -207,10 +207,10 @@ func TestCachedResourceRepositoryKeysTagsAndInvalidation(t *testing.T) {
 		value.String() != "3" {
 		t.Fatalf("cached widget params = %#v", second.Widgets[0].Params)
 	}
-	key := "resource:id:v2:7"
+	key := resourceCacheKey(7)
 	if !reflect.DeepEqual(
 		store.options[key].Tags,
-		[]cache.Tag{siteTag(3), siteResourcesTag(3), resourceTag(7)},
+		[]cache.Tag{siteTag(3), siteResourceTreeTag(3), resourceTag(7)},
 	) {
 		t.Fatalf("resource tags = %v", store.options[key].Tags)
 	}
@@ -230,7 +230,7 @@ func TestCachedResourceRepositoryKeysTagsAndInvalidation(t *testing.T) {
 	}
 	if !reflect.DeepEqual(
 		store.invalidated,
-		[]cache.Tag{siteResourcesTag(3), resourceTag(7)},
+		[]cache.Tag{siteResourcesTag(3), resourceTag(7), siteRoutesTag(3)},
 	) {
 		t.Fatalf("create invalidated = %v", store.invalidated)
 	}
@@ -251,9 +251,7 @@ func TestCachedResourceRepositoryKeysTagsAndInvalidation(t *testing.T) {
 	if !reflect.DeepEqual(
 		store.invalidated,
 		[]cache.Tag{
-			siteResourcesTag(3),
-			siteResourcesTag(4),
-			resourceTag(7),
+			siteResourcesTag(3), resourceTag(7), siteResourcesTag(4), siteRoutesTag(3), siteRoutesTag(4), siteResourceTreeTag(3), siteResourceTreeTag(4),
 		},
 	) {
 		t.Fatalf("update invalidated = %v", store.invalidated)
@@ -267,7 +265,7 @@ func TestCachedResourceRepositoryKeysTagsAndInvalidation(t *testing.T) {
 		t.Fatalf("transfer result = %#v", transferResult)
 	}
 	if !reflect.DeepEqual(store.invalidated, []cache.Tag{
-		siteResourcesTag(4), siteResourcesTag(5), resourceTag(7), resourceTag(8),
+		siteResourcesTag(4), siteResourcesTag(5), resourceTag(7), siteRoutesTag(4), siteRoutesTag(5), siteResourceTreeTag(4), siteResourceTreeTag(5), resourceTag(8),
 	}) {
 		t.Fatalf("transfer invalidated = %v", store.invalidated)
 	}
@@ -303,7 +301,7 @@ func TestCachedResourceRepositoryKeysTagsAndInvalidation(t *testing.T) {
 	}
 	if !reflect.DeepEqual(
 		store.invalidated,
-		[]cache.Tag{siteResourcesTag(5), resourceTag(7)},
+		[]cache.Tag{siteResourcesTag(5), resourceTag(7), siteRoutesTag(5), siteResourceTreeTag(5)},
 	) {
 		t.Fatalf("soft delete invalidated = %v", store.invalidated)
 	}
@@ -314,7 +312,7 @@ func TestCachedResourceRepositoryKeysTagsAndInvalidation(t *testing.T) {
 	}
 	if !reflect.DeepEqual(
 		store.invalidated,
-		[]cache.Tag{siteResourcesTag(5), resourceTag(7)},
+		[]cache.Tag{siteResourcesTag(5), resourceTag(7), siteRoutesTag(5), siteResourceTreeTag(5)},
 	) {
 		t.Fatalf("restore invalidated = %v", store.invalidated)
 	}
@@ -325,7 +323,7 @@ func TestCachedResourceRepositoryKeysTagsAndInvalidation(t *testing.T) {
 	}
 	if !reflect.DeepEqual(
 		store.invalidated,
-		[]cache.Tag{siteResourcesTag(5), resourceTag(7)},
+		[]cache.Tag{siteResourcesTag(5), resourceTag(7), siteRoutesTag(5), siteResourceTreeTag(5)},
 	) {
 		t.Fatalf("delete invalidated = %v", store.invalidated)
 	}
@@ -341,7 +339,7 @@ func TestRepositoryCacheCoherencePreventsStaleReadFillAfterWrite(t *testing.T) {
 		release: make(chan struct{}),
 	}
 	policy := newTestRepositoryCachePolicy(store)
-	repository := &cachedResourceRepository{
+	repository := &cachedResourceRepository{siteID: 3,
 		base: &invalidatingResourceRepository{
 			base: base, policy: policy,
 		},
@@ -819,7 +817,7 @@ func TestConfirmedFileCascadeInvalidatesCachedResourceOwnership(t *testing.T) {
 	policy := newTestRepositoryCachePolicy(store)
 	id := media.ID(10)
 	base := &resourceRepositoryStub{item: resource.Resource{ID: 7, SiteID: 3, ImageMediaID: &id}}
-	cached := &cachedResourceRepository{base: base, store: store, ttl: time.Minute, policy: policy}
+	cached := &cachedResourceRepository{siteID: 3, base: base, store: store, ttl: time.Minute, policy: policy}
 	first, err := cached.ByID(ctx, 7)
 	if err != nil || first.ImageMediaID == nil {
 		t.Fatal(err)
@@ -854,7 +852,7 @@ func TestLibraryWidgetMutationsInvalidateItemAndLibraryDependencies(t *testing.T
 	store := newMemoryCacheStore()
 	policy := newTestRepositoryCachePolicy(store)
 	base := &widgetLibraryRepository{resourceRepositoryStub: &resourceRepositoryStub{item: resource.Resource{ID: 20, SiteID: 3}}}
-	repository := &cachedResourceRepository{base: &invalidatingResourceRepository{base: base, policy: policy}, store: store, ttl: time.Minute, policy: policy}
+	repository := &cachedResourceRepository{siteID: 3, base: &invalidatingResourceRepository{base: base, policy: policy}, store: store, ttl: time.Minute, policy: policy}
 	binding := widget.Binding{ID: 1, Code: "test", Area: widget.AreaBody, Presentation: widget.DefaultPresentation(), ParamBindings: widget.ParamBindings{"text": widget.ResourceProperty("title")}}
 	operations := []struct {
 		name  string
@@ -906,4 +904,14 @@ func TestLibraryWidgetMutationsInvalidateItemAndLibraryDependencies(t *testing.T
 			}
 		})
 	}
+}
+
+func (s *memoryCacheStore) Prepare(ctx context.Context, tags []cache.Tag) (cache.PreparedSet, error) {
+	generation := len(s.invalidated)
+	return func(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+		if generation != len(s.invalidated) {
+			return nil
+		}
+		return s.Set(ctx, key, value, cache.SetOptions{TTL: ttl, Tags: tags})
+	}, nil
 }

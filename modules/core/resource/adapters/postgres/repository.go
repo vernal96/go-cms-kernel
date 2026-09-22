@@ -56,7 +56,13 @@ func (r *Repository) Query(ctx context.Context, query resource.Query) (resource.
 		limitArg = append(limitArg, (query.Page-1)*query.PerPage)
 		offset = " OFFSET $" + strconv.Itoa(len(limitArg))
 	}
-	rows, err := r.connector.Pool().Query(ctx, `
+	queriedAt := time.Now().UTC()
+	tx, err := r.connector.Pool().BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return resource.Page{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `
 SELECT id, site_id, parent_id, type, template, content_type,
        title, menu_title, slug, path, annotation, content, image_media_id,
        target_resource_id, external_url, is_public, is_searchable, in_menu,
@@ -82,13 +88,23 @@ LIMIT `+limit+offset+`;`, limitArg...)
 		return resource.Page{}, fmt.Errorf("iterate resources: %w", err)
 	}
 	rows.Close()
-	if err := loadResourceFields(ctx, r.connector.Pool(), items); err != nil {
+	if err := loadResourceFields(ctx, tx, items); err != nil {
 		return resource.Page{}, err
 	}
 	result := resource.Page{Items: items}
 	if query.PerPage > 0 {
-		if err := r.connector.Pool().QueryRow(ctx, `SELECT count(*) FROM core.resources r WHERE `+where+`;`, whereArgs...).Scan(&result.Total); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM core.resources r WHERE `+where+`;`, whereArgs...).Scan(&result.Total); err != nil {
 			return resource.Page{}, fmt.Errorf("count resources: %w", err)
+		}
+	}
+	if query.PublicOnly {
+		var next *time.Time
+		err := tx.QueryRow(ctx, `SELECT min(boundary) FROM core.resources r CROSS JOIN LATERAL (VALUES (r.published_at), (r.unpublished_at)) AS schedule(boundary) WHERE r.site_id=$1 AND r.is_public AND r.deleted_at IS NULL AND boundary > $2`, query.SiteID, queriedAt).Scan(&next)
+		if err != nil {
+			return resource.Page{}, err
+		}
+		if next != nil {
+			result.ValidUntil = *next
 		}
 	}
 	return result, nil
@@ -688,7 +704,12 @@ func (r *Repository) ByID(
 		)
 	}
 
-	result, err := scanResource(r.connector.Pool().QueryRow(ctx, `
+	tx, err := r.connector.Pool().BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return resource.Resource{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	result, err := scanResource(tx.QueryRow(ctx, `
 SELECT
     id, site_id, parent_id, type, template, content_type,
 	    title, menu_title, slug, path, annotation, content, image_media_id,
@@ -712,15 +733,15 @@ WHERE id = $1;
 	items := []resource.Resource{result}
 	if err := loadResourceWidgets(
 		ctx,
-		r.connector.Pool(),
+		tx,
 		items,
 	); err != nil {
 		return resource.Resource{}, err
 	}
-	if err := loadResourceFields(ctx, r.connector.Pool(), items); err != nil {
+	if err := loadResourceFields(ctx, tx, items); err != nil {
 		return resource.Resource{}, err
 	}
-	if err := r.connector.Pool().QueryRow(ctx, `SELECT version FROM core.resource_entities WHERE id=$1;`, id).Scan(&items[0].Version); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT version FROM core.resource_entities WHERE id=$1;`, id).Scan(&items[0].Version); err != nil {
 		return resource.Resource{}, translateError(err)
 	}
 
@@ -2240,6 +2261,10 @@ func loadResourceWidgets(
 	queryer rowQueryer,
 	items []resource.Resource,
 ) error {
+	return loadSelectedResourceWidgets(ctx, queryer, items, nil)
+}
+
+func loadSelectedResourceWidgets(ctx context.Context, queryer rowQueryer, items []resource.Resource, selected []widget.BindingID) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -2256,9 +2281,9 @@ func loadResourceWidgets(
 SELECT resource_id, id, widget_code, area, position, view, columns,
        margin_top, margin_bottom, enabled, params, param_bindings
 FROM core.resource_widgets
-WHERE resource_id = ANY($1::bigint[])
+WHERE resource_id = ANY($1::bigint[]) AND ($2::bigint[] IS NULL OR id = ANY($2::bigint[]))
 ORDER BY resource_id, area, position, id;
-`, ids)
+`, ids, selected)
 	if err != nil {
 		return fmt.Errorf("query resource widgets: %w", err)
 	}

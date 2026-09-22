@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/vernal96/go-cms-kernel/cache"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
@@ -22,9 +23,10 @@ func (r *listRepository) Query(_ context.Context, query resource.Query) (resourc
 }
 
 type widgetCache struct {
-	mu      sync.Mutex
-	entries map[string][]byte
-	tags    map[cache.Tag]map[string]bool
+	generation uint64
+	mu         sync.Mutex
+	entries    map[string][]byte
+	tags       map[cache.Tag]map[string]bool
 }
 
 func (s *widgetCache) Code() cache.Code         { return "test" }
@@ -41,6 +43,10 @@ func (s *widgetCache) Get(_ context.Context, key string) ([]byte, error) {
 func (s *widgetCache) Set(_ context.Context, key string, value []byte, options cache.SetOptions) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.setLocked(key, value, options)
+}
+
+func (s *widgetCache) setLocked(key string, value []byte, options cache.SetOptions) error {
 	s.entries[key] = append([]byte(nil), value...)
 	for _, tag := range options.Tags {
 		if s.tags[tag] == nil {
@@ -60,6 +66,7 @@ func (s *widgetCache) Delete(_ context.Context, key string) error {
 func (s *widgetCache) InvalidateTag(_ context.Context, tag cache.Tag) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.generation++
 	for key := range s.tags[tag] {
 		delete(s.entries, key)
 	}
@@ -74,17 +81,17 @@ func TestResourceListExplicitIDsStillApplyExclusionsAndCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := &widgetCache{entries: map[string][]byte{}, tags: map[cache.Tag]map[string]bool{}}
-	current := NewResourceList(service, store, []resourcetype.Code{resourcetype.Page}, nil)
+	current := NewResourceList(service, []resourcetype.Code{resourcetype.Page}, nil)
 	instance, err := current.New(map[string]any{"parent_mode": "root", "resources": []any{float64(20), float64(10)}, "exclude": []any{float64(20)}, "limit": int64(20), "pagination_enabled": false, "exclude_current": false, "filters": []any{}, "sorting": []any{}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	input := widget.RenderInput{Site: widget.SiteSnapshot{ID: 7}, Resource: widget.ResourceSnapshot{ID: 3}}
-	first, err := instance.Render(context.Background(), input)
+	first, err := renderCachedList(t, store, instance, input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = instance.Render(context.Background(), input)
+	_, err = renderCachedList(t, store, instance, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +109,7 @@ func TestResourceListExplicitIDsStillApplyExclusionsAndCache(t *testing.T) {
 	if err := store.InvalidateTag(context.Background(), cache.Tag("site:7:resources")); err != nil {
 		t.Fatal(err)
 	}
-	_, err = instance.Render(context.Background(), input)
+	_, err = renderCachedList(t, store, instance, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,4 +127,24 @@ func TestResourceListValidatesSelectedParentAndPagination(t *testing.T) {
 	if err == nil {
 		t.Fatal("missing query service error")
 	}
+}
+
+func renderCachedList(t *testing.T, store cache.Store, instance widget.Instance, input widget.RenderInput) (map[string]any, error) {
+	t.Helper()
+	result := widget.RenderBatch(context.Background(), store, "test", []widget.RenderJob{{Identity: "list", Fingerprint: "config", Instance: instance, Input: input}})
+	return result[0].Data, result[0].Err
+}
+
+func (s *widgetCache) Prepare(ctx context.Context, tags []cache.Tag) (cache.PreparedSet, error) {
+	s.mu.Lock()
+	generation := s.generation
+	s.mu.Unlock()
+	return func(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if generation != s.generation {
+			return nil
+		}
+		return s.setLocked(key, value, cache.SetOptions{TTL: ttl, Tags: tags})
+	}, nil
 }

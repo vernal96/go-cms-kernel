@@ -121,11 +121,16 @@ func (r *Repository) LibraryItemByID(ctx context.Context, id resource.ID) (resou
 	if ctx == nil || id <= 0 {
 		return resource.LibraryItem{}, resource.ErrInvalid
 	}
-	item, err := r.libraryItemByID(ctx, r.connector.Pool(), id, false)
+	tx, err := r.connector.Pool().BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return resource.LibraryItem{}, err
 	}
-	if err := r.loadLibraryItemFields(ctx, r.connector.Pool(), &item); err != nil {
+	defer func() { _ = tx.Rollback(ctx) }()
+	item, err := r.libraryItemByID(ctx, tx, id, false)
+	if err != nil {
+		return resource.LibraryItem{}, err
+	}
+	if err := r.loadLibraryItemFields(ctx, tx, &item); err != nil {
 		return resource.LibraryItem{}, err
 	}
 	return item, nil
@@ -899,17 +904,25 @@ func fieldStorageKindSQL(kind field.StorageKind) (string, error) {
 	}
 }
 
-func (r *Repository) ResolveLibraryItemRoute(ctx context.Context, siteID site.ID, path string) (resource.LibraryItem, resource.Resource, error) {
+func (r *Repository) lookupLibraryItemRoute(ctx context.Context, siteID site.ID, path string) (resource.LibraryItem, resource.Resource, error) {
 	rows, err := r.connector.Pool().Query(ctx, `SELECT id, site_id, parent_id, type, template, content_type, title, menu_title, slug, path, annotation, content, image_media_id, target_resource_id, external_url, is_public, is_searchable, in_menu, in_sitemap, sort, published_at, unpublished_at, type_settings, created_at, updated_at, created_by, updated_by, deleted_at, deleted_by FROM core.resources WHERE site_id=$1 AND type='library' AND path IS NOT NULL AND (path='/' OR $2=path OR $2 LIKE path||'/%') ORDER BY length(path) DESC, id;`, siteID, path)
 	if err != nil {
 		return resource.LibraryItem{}, resource.Resource{}, err
 	}
 	defer rows.Close()
+	libraries := make([]resource.Resource, 0)
 	for rows.Next() {
 		library, err := scanResource(rows)
 		if err != nil {
 			return resource.LibraryItem{}, resource.Resource{}, err
 		}
+		libraries = append(libraries, library)
+	}
+	if err := rows.Err(); err != nil {
+		return resource.LibraryItem{}, resource.Resource{}, err
+	}
+	rows.Close()
+	for _, library := range libraries {
 		pattern, _ := library.TypeSettings["item_url_pattern"].(string)
 		if pattern == "" {
 			pattern = resourcetype.DefaultItemURLPattern
@@ -943,9 +956,6 @@ func (r *Repository) ResolveLibraryItemRoute(ctx context.Context, siteID site.ID
 		}
 		if effectiveURL != path {
 			continue
-		}
-		if err := r.loadLibraryItemFields(ctx, r.connector.Pool(), &item); err != nil {
-			return resource.LibraryItem{}, resource.Resource{}, err
 		}
 		return item, library, nil
 	}
@@ -1050,3 +1060,14 @@ func (r *Repository) loadLibraryItemVersions(ctx context.Context, queryer rowQue
 }
 
 var _ resource.LibraryItemRepository = (*Repository)(nil)
+
+func (r *Repository) ResolveLibraryItemRoute(ctx context.Context, siteID site.ID, path string) (resource.LibraryItem, resource.Resource, error) {
+	item, library, err := r.lookupLibraryItemRoute(ctx, siteID, path)
+	if err != nil {
+		return item, library, err
+	}
+	if err = r.loadLibraryItemFields(ctx, r.connector.Pool(), &item); err != nil {
+		return resource.LibraryItem{}, resource.Resource{}, err
+	}
+	return item, library, nil
+}

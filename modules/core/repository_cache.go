@@ -2,8 +2,6 @@ package core
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -32,6 +30,7 @@ func newCachedDatabase(
 	store cache.Store,
 	ttl time.Duration,
 	policy *repositoryCachePolicy,
+	siteID site.ID,
 ) Database {
 	return &cachedDatabase{
 		Database: database,
@@ -42,6 +41,7 @@ func newCachedDatabase(
 			policy: policy,
 		},
 		resources: &cachedResourceRepository{
+			siteID: siteID,
 			base:   database.Resources(),
 			store:  store,
 			ttl:    ttl,
@@ -168,6 +168,7 @@ func (r *cachedSiteRepository) Delete(
 }
 
 type cachedResourceRepository struct {
+	siteID site.ID
 	base   resource.Repository
 	store  cache.Store
 	ttl    time.Duration
@@ -187,65 +188,27 @@ func (r *cachedResourceRepository) Create(
 	return result, nil
 }
 
-func (r *cachedResourceRepository) ByID(
-	ctx context.Context,
-	id resource.ID,
-) (resource.Resource, error) {
-	return withRepositoryCacheRead(r.policy, []cache.Tag{resourceTag(id)}, func() (resource.Resource, error) {
-		key := fmt.Sprintf("resource:id:v2:%d", id)
-		return cache.RememberJSONWithOptions(
-			ctx,
-			r.store,
-			key,
-			func(result resource.Resource) cache.SetOptions {
-				return cache.SetOptions{
-					TTL:  r.ttl,
-					Tags: resourceDependencies(result),
-				}
-			},
-			func(ctx context.Context) (resource.Resource, error) {
-				result, err := r.base.ByID(ctx, id)
-				if err != nil {
-					return resource.Resource{}, err
-				}
-				return result, nil
-			},
-		)
-	})
+func (r *cachedResourceRepository) ByID(ctx context.Context, id resource.ID) (resource.Resource, error) {
+	return withRepositoryCacheRead(r.policy, []cache.Tag{resourceTag(id)}, func() (resource.Resource, error) { return r.readResource(ctx, id) })
 }
 
-func (r *cachedResourceRepository) ByPath(
-	ctx context.Context,
-	siteID site.ID,
-	pathValue string,
-) (resource.Resource, error) {
+func (r *cachedResourceRepository) ByPath(ctx context.Context, siteID site.ID, path string) (resource.Resource, error) {
 	return withRepositoryCacheRead(r.policy, []cache.Tag{siteResourcesTag(siteID)}, func() (resource.Resource, error) {
-		sum := sha256.Sum256([]byte(pathValue))
-		key := fmt.Sprintf(
-			"resource:path:v2:%d:%s",
-			siteID,
-			hex.EncodeToString(sum[:]),
-		)
-		return cache.RememberJSON(
-			ctx,
-			r.store,
-			key,
-			cache.SetOptions{
-				TTL: r.ttl,
-				Tags: []cache.Tag{
-					siteTag(siteID),
-					siteResourcesTag(siteID),
-					resourcePathTag(siteID, pathValue),
-				},
-			},
-			func(ctx context.Context) (resource.Resource, error) {
-				result, err := r.base.ByPath(ctx, siteID, pathValue)
-				if err != nil {
-					return resource.Resource{}, err
-				}
-				return result, nil
-			},
-		)
+		target, err := r.lookupRoute(ctx, siteID, path)
+		if err != nil {
+			return resource.Resource{}, err
+		}
+		if target.Kind != resource.StorageTree || target.SiteID != siteID {
+			return resource.Resource{}, resource.ErrNotFound
+		}
+		item, err := r.readResource(ctx, target.ID)
+		if err != nil {
+			return resource.Resource{}, err
+		}
+		if item.SiteID != siteID || item.Path == nil || *item.Path != path {
+			return resource.Resource{}, resource.ErrNotFound
+		}
+		return item, nil
 	})
 }
 
@@ -444,11 +407,7 @@ func (r *cachedResourceRepository) CreateLibraryItem(ctx context.Context, actorI
 	return repository.CreateLibraryItem(ctx, actorID, item, recordRevision)
 }
 func (r *cachedResourceRepository) LibraryItemByID(ctx context.Context, id resource.ID) (resource.LibraryItem, error) {
-	repository, err := r.libraryItems()
-	if err != nil {
-		return resource.LibraryItem{}, err
-	}
-	return repository.LibraryItemByID(ctx, id)
+	return withRepositoryCacheRead(r.policy, []cache.Tag{resourceTag(id)}, func() (resource.LibraryItem, error) { return r.readLibraryItem(ctx, id) })
 }
 func (r *cachedResourceRepository) UpdateLibraryItem(ctx context.Context, actorID *security.UserID, current, item resource.LibraryItem, recordRevision bool) (resource.LibraryItem, error) {
 	repository, err := r.libraryItems()
@@ -508,11 +467,33 @@ func (r *cachedResourceRepository) LibraryItemWidgetCodes(ctx context.Context, s
 	return repository.LibraryItemWidgetCodes(ctx, siteID, libraryID)
 }
 func (r *cachedResourceRepository) ResolveLibraryItemRoute(ctx context.Context, siteID site.ID, path string) (resource.LibraryItem, resource.Resource, error) {
-	repository, err := r.libraryItems()
-	if err != nil {
-		return resource.LibraryItem{}, resource.Resource{}, err
+	type resolved struct {
+		item    resource.LibraryItem
+		library resource.Resource
 	}
-	return repository.ResolveLibraryItemRoute(ctx, siteID, path)
+	result, err := withRepositoryCacheRead(r.policy, []cache.Tag{siteResourcesTag(siteID)}, func() (resolved, error) {
+		target, err := r.lookupRoute(ctx, siteID, path)
+		if err != nil {
+			return resolved{}, err
+		}
+		if target.Kind != resource.StorageLibraryItem || target.SiteID != siteID {
+			return resolved{}, resource.ErrNotFound
+		}
+		item, err := r.readLibraryItem(ctx, target.ID)
+		if err != nil {
+			return resolved{}, err
+		}
+		library, err := r.readResource(ctx, target.LibraryID)
+		if err != nil {
+			return resolved{}, err
+		}
+		url, err := resource.EffectiveLibraryItemURL(library, item)
+		if err != nil || url != path || item.SiteID != siteID || library.SiteID != siteID || item.LibraryID != library.ID {
+			return resolved{}, resource.ErrNotFound
+		}
+		return resolved{item, library}, nil
+	})
+	return result.item, result.library, err
 }
 
 func siteTag(id site.ID) cache.Tag {
@@ -527,25 +508,8 @@ func siteResourcesTag(id site.ID) cache.Tag {
 	return cache.Tag(fmt.Sprintf("site:%d:resources", id))
 }
 
-func resourcePathTag(siteID site.ID, value string) cache.Tag {
-	sum := sha256.Sum256([]byte(value))
-	return cache.Tag(fmt.Sprintf(
-		"site:%d:resource-path:%s",
-		siteID,
-		hex.EncodeToString(sum[:]),
-	))
-}
-
 func resourceTags(item resource.Resource) []cache.Tag {
 	return []cache.Tag{
-		siteResourcesTag(item.SiteID),
-		resourceTag(item.ID),
-	}
-}
-
-func resourceDependencies(item resource.Resource) []cache.Tag {
-	return []cache.Tag{
-		siteTag(item.SiteID),
 		siteResourcesTag(item.SiteID),
 		resourceTag(item.ID),
 	}

@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/vernal96/go-cms-kernel"
+	"github.com/vernal96/go-cms-kernel/cache"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
@@ -47,6 +49,15 @@ func (r *Runtime) HTTP() httptransport.Builder {
 			return httptransport.Contribution{}, err
 		}
 
+		libraryRepository, ok := r.database.Resources().(resource.LibraryItemRepository)
+		if !ok {
+			return httptransport.Contribution{}, errors.New("resource library item repository is unavailable")
+		}
+		libraryItems, err := resource.NewLibraryService(libraryRepository, r.services.Resources)
+		if err != nil {
+			return httptransport.Contribution{}, err
+		}
+		generation := rand.Text()
 		return httptransport.Contribution{
 			Routes: func(registrar httptransport.Registrar) error {
 				if err := registrar.Route(httptransport.Route{Name: "core.menu", Method: http.MethodGet, Pattern: "/menu", Handler: http.HandlerFunc(r.serveMenu)}); err != nil {
@@ -57,11 +68,11 @@ func (r *Runtime) HTTP() httptransport.Builder {
 			ResourceHandlers: []httptransport.ResourceHandler{
 				{
 					Type:    httptransport.ResourceHandlerCode(resourcetype.Page),
-					Handler: pageResourceHandler{logger: r.logger, files: r.Files()},
+					Handler: pageResourceHandler{logger: r.logger, files: r.Files(), resultStore: r.resultStore, generation: generation},
 				},
 				{
 					Type:    httptransport.ResourceHandlerCode(resourcetype.Library),
-					Handler: pageResourceHandler{logger: r.logger, files: r.Files()},
+					Handler: pageResourceHandler{logger: r.logger, files: r.Files(), resultStore: r.resultStore, generation: generation},
 				},
 				{
 					Type:    httptransport.ResourceHandlerCode(resourcetype.Link),
@@ -85,7 +96,7 @@ func (r *Runtime) HTTP() httptransport.Builder {
 					}
 					return &terminalResourceHandler{
 						resolver: resolver, handlers: handlers,
-						libraryItems: r.services.LibraryItems,
+						libraryItems: libraryItems,
 					}, nil
 				},
 			},
@@ -207,8 +218,10 @@ type pageWidgetError struct {
 }
 
 type pageResourceHandler struct {
-	logger *slog.Logger
-	files  file.Service
+	resultStore cache.Store
+	generation  string
+	logger      *slog.Logger
+	files       file.Service
 }
 
 func (h pageResourceHandler) ServeHTTP(
@@ -280,114 +293,75 @@ func (h pageResourceHandler) ServeHTTP(
 	_, _ = response.Write(append(raw, '\n'))
 }
 
-func (h pageResourceHandler) renderWidgets(
-	ctx context.Context,
-	siteRuntime *site.Runtime,
-	item resource.Resource,
-	placements []widget.Placement,
-) []pageWidgetResponse {
+func (h pageResourceHandler) renderWidgets(ctx context.Context, siteRuntime *site.Runtime, item resource.Resource, placements []widget.Placement) []pageWidgetResponse {
 	result := make([]pageWidgetResponse, 0, len(placements))
+	jobs := make([]widget.RenderJob, 0, len(placements))
+	indexes := make([]int, 0, len(placements))
+	bindings := make([]widget.Binding, 0, len(placements))
+	templateRuntime, _ := siteRuntime.Profile().Template(*item.Template)
 	for _, placement := range placements {
-		if err := ctx.Err(); err != nil {
+		if ctx.Err() != nil {
 			return result
 		}
 		if !placement.Presentation.Enabled {
 			continue
 		}
-		binding := widget.Binding{
-			ID: placement.BindingID, Code: placement.Code, Area: placement.Area,
-			Position: placement.Position, Presentation: placement.Presentation,
-			Params: placement.Params,
-		}
-		rendered := pageWidgetResponse{
-			Key: placement.Key, Code: placement.Code,
-			View:         widget.PublicView(placement.Presentation.View),
-			Columns:      placement.Presentation.Columns,
-			MarginTop:    placement.Presentation.MarginTop,
-			MarginBottom: placement.Presentation.MarginBottom,
-		}
+		binding := widget.Binding{ID: placement.BindingID, Code: placement.Code, Area: placement.Area, Position: placement.Position, Presentation: placement.Presentation, Params: placement.Params}
+		rendered := pageWidgetResponse{Key: placement.Key, Code: placement.Code, View: widget.PublicView(placement.Presentation.View), Columns: placement.Presentation.Columns, MarginTop: placement.Presentation.MarginTop, MarginBottom: placement.Presentation.MarginBottom}
 		runtime, exists := siteRuntime.Profile().Widget(placement.Code)
 		if !exists {
-			rendered.Error = h.widgetError(
-				ctx,
-				item,
-				binding,
-				widgetUnavailableError,
-				fmt.Errorf("widget %q is unavailable", binding.Code),
-			)
+			rendered.Error = h.widgetError(ctx, item, binding, widgetUnavailableError, fmt.Errorf("widget %q is unavailable", binding.Code))
 			result = append(result, rendered)
 			continue
 		}
-
-		templateRuntime, _ := siteRuntime.Profile().Template(*item.Template)
 		instance, err := h.newWidgetInstance(ctx, runtime, placement, templateRuntime.FieldSchema(), item.WidgetValues())
 		if err != nil {
 			code := instanceFailedError
 			if errors.Is(err, widget.ErrInvalidParams) {
 				code = invalidParamsError
 			}
-			rendered.Error = h.widgetError(
-				ctx,
-				item,
-				binding,
-				code,
-				err,
-			)
+			rendered.Error = h.widgetError(ctx, item, binding, code, err)
 			result = append(result, rendered)
 			continue
 		}
-
-		data, err := instance.Render(ctx, widget.RenderInput{
-			Site: widget.SiteSnapshot{
-				ID: int64(siteRuntime.Site().ID), Domain: siteRuntime.Site().Domain,
-				Locale: siteRuntime.Site().Locale,
-			},
-			Resource: widget.ResourceSnapshot{
-				ID:      int64(item.ID),
-				Title:   item.Title,
-				Content: item.Content,
-			},
+		identity := fmt.Sprintf("%d:%d:%s:%d", item.SiteID, item.ID, placement.Code, placement.BindingID)
+		if placement.BindingID == 0 {
+			identity += ":" + placement.Key
+		}
+		jobs = append(jobs, widget.RenderJob{Identity: identity, Instance: instance,
+			Fingerprint: struct {
+				Params   map[string]any
+				Bindings widget.ParamBindings
+				Values   widget.ResourceValues
+			}{placement.Params, placement.ParamBindings, item.WidgetValues()},
+			Input: widget.RenderInput{Site: widget.SiteSnapshot{ID: int64(item.SiteID), Domain: siteRuntime.Site().Domain, Locale: siteRuntime.Site().Locale}, Resource: widget.ResourceSnapshot{ID: int64(item.ID), Title: item.Title, Content: item.Content}},
 		})
-		if ctx.Err() != nil {
-			return result
-		}
-		if err != nil {
-			rendered.Error = h.widgetError(
-				ctx,
-				item,
-				binding,
-				renderFailedError,
-				err,
-			)
-			result = append(result, rendered)
-			continue
-		}
-		if data == nil {
-			rendered.Error = h.widgetError(
-				ctx,
-				item,
-				binding,
-				invalidResultError,
-				errors.New("widget returned nil data"),
-			)
-			result = append(result, rendered)
-			continue
-		}
-		rawData, err := json.Marshal(data)
-		if err != nil {
-			rendered.Error = h.widgetError(
-				ctx,
-				item,
-				binding,
-				invalidResultError,
-				err,
-			)
-			result = append(result, rendered)
-			continue
-		}
-
-		rendered.Data = rawData
+		indexes = append(indexes, len(result))
+		bindings = append(bindings, binding)
 		result = append(result, rendered)
+	}
+	store := h.resultStore
+	if httptransport.PreviewFromContext(ctx) {
+		store = nil
+	}
+	outputs := widget.RenderBatch(ctx, store, h.generation, jobs)
+	for index, output := range outputs {
+		rendered := &result[indexes[index]]
+		binding := bindings[index]
+		if output.Err != nil {
+			rendered.Error = h.widgetError(ctx, item, binding, renderFailedError, output.Err)
+			continue
+		}
+		if output.Data == nil {
+			rendered.Error = h.widgetError(ctx, item, binding, invalidResultError, errors.New("widget returned nil data"))
+			continue
+		}
+		raw, err := json.Marshal(output.Data)
+		if err != nil {
+			rendered.Error = h.widgetError(ctx, item, binding, invalidResultError, err)
+			continue
+		}
+		rendered.Data = raw
 	}
 	return result
 }

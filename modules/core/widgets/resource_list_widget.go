@@ -2,8 +2,6 @@ package widgets
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,20 +25,19 @@ const resourceListCacheTTL = 5 * time.Minute
 
 type resourceListWidget struct {
 	query  *resource.QueryService
-	cache  cache.Store
 	fields []field.Choice
 	types  []field.Choice
 }
 
 // NewResourceList builds the site-scoped core widget implementation. Services
-// and the module-local durable store are captured during module runtime build.
-func NewResourceList(query *resource.QueryService, store cache.Store, types []resourcetype.Code, templates []template.Definition) widget.Widget {
+// are captured during module runtime build; the HTTP widget layer caches results.
+func NewResourceList(query *resource.QueryService, types []resourcetype.Code, templates []template.Definition) widget.Widget {
 	fieldChoices := resourceListFieldChoices(templates)
 	typeChoices := make([]field.Choice, len(types))
 	for index, code := range types {
 		typeChoices[index] = field.Choice{Value: string(code), Label: string(code)}
 	}
-	return resourceListWidget{query: query, cache: store, fields: fieldChoices, types: typeChoices}
+	return resourceListWidget{query: query, fields: fieldChoices, types: typeChoices}
 }
 
 func resourceListFieldChoices(templates []template.Definition) []field.Choice {
@@ -99,7 +96,7 @@ func (w resourceListWidget) New(values map[string]any) (widget.Instance, error) 
 	if err != nil {
 		return nil, err
 	}
-	return resourceListInstance{widget: w, config: config}, nil
+	return &resourceListInstance{widget: w, config: config}, nil
 }
 
 type resourceListConfig struct {
@@ -114,11 +111,12 @@ type resourceListConfig struct {
 	pagination, excludeCurrent bool
 }
 type resourceListInstance struct {
-	widget resourceListWidget
-	config resourceListConfig
+	deadline time.Time
+	widget   resourceListWidget
+	config   resourceListConfig
 }
 
-func (i resourceListInstance) Render(ctx context.Context, input widget.RenderInput) (map[string]any, error) {
+func (i *resourceListInstance) Render(ctx context.Context, input widget.RenderInput) (map[string]any, error) {
 	if ctx == nil {
 		return nil, errors.New("widget render context is nil")
 	}
@@ -144,20 +142,12 @@ func (i resourceListInstance) Render(ctx context.Context, input widget.RenderInp
 		query.Page = 1
 		query.PerPage = i.config.perPage
 	}
-	key, err := resourceListCacheKey(query)
+	page, err := i.widget.query.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}
-	result, err := cache.RememberJSON(ctx, i.widget.cache, key, cache.SetOptions{TTL: resourceListCacheTTL, Tags: []cache.Tag{cache.Tag(fmt.Sprintf("site:%d", input.Site.ID)), cache.Tag(fmt.Sprintf("site:%d:resources", input.Site.ID))}}, func(ctx context.Context) (resourceListResult, error) {
-		page, err := i.widget.query.Query(ctx, query)
-		if err != nil {
-			return resourceListResult{}, err
-		}
-		return buildResourceListResult(page, query), nil
-	})
-	if err != nil {
-		return nil, err
-	}
+	i.deadline = page.ValidUntil
+	result := buildResourceListResult(page, query)
 	return map[string]any{"items": result.Items, "pagination": result.Pagination}, nil
 }
 
@@ -385,12 +375,7 @@ func resourceSorting(value any) ([]resource.Sort, error) {
 	}
 	return result, nil
 }
-func resourceListCacheKey(query resource.Query) (string, error) {
-	normalized := query.Normalized()
-	raw, err := json.Marshal(normalized)
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(raw)
-	return "widget:resource-list:v1:" + hex.EncodeToString(sum[:]), nil
+func (i *resourceListInstance) ResultCachePolicy(input widget.RenderInput) widget.ResultCachePolicy {
+	return widget.ResultCachePolicy{TTL: resourceListCacheTTL, Tags: []cache.Tag{cache.Tag(fmt.Sprintf("site:%d:resources", input.Site.ID))}}
 }
+func (i *resourceListInstance) ResultCacheDeadline() time.Time { return i.deadline }
