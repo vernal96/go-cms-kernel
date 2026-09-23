@@ -16,12 +16,14 @@ import (
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/core/user"
 	"github.com/vernal96/go-cms-kernel/permission"
+	"github.com/vernal96/go-cms-kernel/security"
 )
 
 // Services is the application-scoped domain runtime owned by cms.core.
 // Site-specific module runtimes may reference these concurrency-safe services,
 // while their registries, module instances, and bindings remain site-scoped.
 type Services struct {
+	Sessions      security.SessionStore
 	Sites         *site.Catalog
 	Resources     *resource.Service
 	Revisions     *resource.RevisionService
@@ -121,7 +123,9 @@ func NewServices(
 		return nil, err
 	}
 
+	sessions, _ := database.Users().(security.SessionStore)
 	return &Services{
+		Sessions:      sessions,
 		Files:         files,
 		Media:         mediaService,
 		Users:         users,

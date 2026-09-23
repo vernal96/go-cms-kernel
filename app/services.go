@@ -12,11 +12,13 @@ import (
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	coreuser "github.com/vernal96/go-cms-kernel/modules/core/user"
+	"github.com/vernal96/go-cms-kernel/security"
 )
 
 // Services groups the assembled domain services without making App a facade
 // for every domain operation.
 type Services struct {
+	Sessions      security.SessionStore
 	Sites         *site.Catalog
 	Resources     *resource.Service
 	Files         corefile.ManagementService
@@ -31,6 +33,7 @@ func servicesFromCore(services *core.Services) Services {
 		return Services{}
 	}
 	return Services{
+		Sessions:      services.Sessions,
 		Sites:         services.Sites,
 		Resources:     services.Resources,
 		Files:         services.Files,

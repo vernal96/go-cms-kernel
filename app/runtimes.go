@@ -149,6 +149,9 @@ func (a *App) ManagementSiteRuntime(
 	if !exists || runtime == nil {
 		return nil, site.ErrNotFound
 	}
+	if err := a.sites.CheckCurrent(ctx, runtime); err != nil {
+		return nil, err
+	}
 	return runtime, nil
 }
 

@@ -143,6 +143,7 @@ func NewHandler(
 		return nil, err
 	}
 	root.Method(http.MethodPost, "/api/auth/login", login)
+	root.Method(http.MethodPost, "/api/auth/logout", logoutHandler(config.accessTokens))
 	adminHandler, err := newAdminHandler(application)
 	if err != nil {
 		return nil, err
@@ -371,6 +372,8 @@ func writeSiteManagementError(response http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, security.ErrForbidden):
 		httptransport.WriteJSONError(response, http.StatusForbidden, "forbidden", "access denied")
+	case errors.Is(err, site.ErrUnavailable):
+		http.Error(response, "site runtime is updating", http.StatusServiceUnavailable)
 	case errors.Is(err, site.ErrNotFound):
 		httptransport.WriteJSONError(response, http.StatusNotFound, "not_found", "not found")
 	default:
@@ -414,6 +417,8 @@ func (h *Handler) serveRuntime(
 	)
 	if err != nil {
 		switch {
+		case errors.Is(err, site.ErrUnavailable):
+			http.Error(response, "site runtime is updating", http.StatusServiceUnavailable)
 		case errors.Is(err, site.ErrNotFound):
 			http.Error(
 				response,
@@ -480,6 +485,8 @@ func (h *Handler) dispatchProfile(
 		compiled.runtime,
 	); err != nil {
 		switch {
+		case errors.Is(err, site.ErrUnavailable):
+			http.Error(response, "site runtime is updating", http.StatusServiceUnavailable)
 		case errors.Is(err, site.ErrNotFound):
 			http.NotFound(response, request)
 		case errors.Is(err, security.ErrForbidden),

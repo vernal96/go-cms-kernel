@@ -63,6 +63,7 @@ func (f Factory) Open(
 }
 
 type Connector struct {
+	cache.LoadLocks
 	code    cache.Code
 	disk    filesystem.Disk
 	writer  filesystem.OverwriteDisk

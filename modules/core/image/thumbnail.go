@@ -10,6 +10,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/cache"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	"github.com/vernal96/go-cms-kernel/security"
+	"golang.org/x/sync/singleflight"
 )
 
 type ThumbnailSpec struct {
@@ -19,6 +20,7 @@ type ThumbnailSpec struct {
 	Position string
 }
 type Thumbnails struct {
+	flights   singleflight.Group
 	files     file.Service
 	processor Processor
 	store     cache.Store
@@ -26,7 +28,7 @@ type Thumbnails struct {
 }
 
 func NewThumbnails(files file.Service, processor Processor, store cache.Store, limits Limits) *Thumbnails {
-	return &Thumbnails{files, processor, store, limits}
+	return &Thumbnails{files: files, processor: processor, store: store, limits: limits}
 }
 func (s *Thumbnails) Get(ctx context.Context, actor security.Actor, id file.ID, spec ThumbnailSpec) (Result, error) {
 	options, err := NormalizeThumbnail(spec, s.limits)
@@ -41,14 +43,27 @@ func (s *Thumbnails) Get(ctx context.Context, actor security.Actor, id file.ID, 
 	if !EditableMIME(source.MIMEType) {
 		return Result{}, ErrUnsupportedFormat
 	}
-	return cache.RememberJSON(ctx, s.store, ThumbnailKey(source, options), cache.SetOptions{TTL: 24 * time.Hour}, func(ctx context.Context) (Result, error) {
-		opened, err := s.files.Open(ctx, actor, id)
-		if err != nil {
-			return Result{}, err
-		}
-		defer opened.Body.Close()
-		return s.processor.Transform(ctx, opened.Body, options)
+	flight := s.flights.DoChan(ThumbnailKey(source, options), func() (any, error) {
+		return cache.RememberJSON(ctx, s.store, ThumbnailKey(source, options), cache.SetOptions{TTL: 24 * time.Hour}, func(ctx context.Context) (Result, error) {
+			opened, err := s.files.Open(ctx, actor, id)
+			if err != nil {
+				return Result{}, err
+			}
+			defer opened.Body.Close()
+			return s.processor.Transform(ctx, opened.Body, options)
+		})
 	})
+	select {
+	case <-ctx.Done():
+		return Result{}, ctx.Err()
+	case result := <-flight:
+		if result.Err != nil {
+			return Result{}, result.Err
+		}
+		value := result.Val.(Result)
+		value.Bytes = append([]byte(nil), value.Bytes...)
+		return value, nil
+	}
 }
 func NormalizeThumbnail(spec ThumbnailSpec, l Limits) (TransformOptions, error) {
 	if spec.Width == 0 {

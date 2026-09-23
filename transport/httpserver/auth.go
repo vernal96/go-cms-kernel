@@ -29,6 +29,7 @@ type credentialAuthenticator interface {
 type loginHandler struct {
 	authenticator credentialAuthenticator
 	tokens        security.AccessTokenIssuer
+	limits        *loginLimits
 }
 
 type loginRequest struct {
@@ -54,6 +55,7 @@ func newLoginHandler(
 	}
 	return &loginHandler{
 		authenticator: authenticator,
+		limits:        newLoginLimits(),
 		tokens:        tokens,
 	}, nil
 }
@@ -89,6 +91,19 @@ func (h *loginHandler) ServeHTTP(
 		return
 	}
 
+	if !h.limits.allow(request, input.Identifier) {
+		response.Header().Set("Retry-After", "60")
+		httptransport.WriteJSONError(response, 429, "rate_limited", "too many login attempts")
+		return
+	}
+	select {
+	case h.limits.slots <- struct{}{}:
+		defer func() { <-h.limits.slots }()
+	default:
+		response.Header().Set("Retry-After", "1")
+		httptransport.WriteJSONError(response, 503, "busy", "authentication capacity exhausted")
+		return
+	}
 	user, err := h.authenticator.Authenticate(
 		request.Context(),
 		coreuser.AuthenticateInput{
@@ -121,7 +136,7 @@ func (h *loginHandler) ServeHTTP(
 
 	accessToken, err := h.tokens.IssueAccessToken(
 		request.Context(),
-		security.User(user.ID),
+		security.AuthenticatedUser(user.ID, user.SessionVersion),
 	)
 	if err != nil {
 		httptransport.WriteJSONError(
@@ -252,3 +267,24 @@ func writeUnauthorized(response http.ResponseWriter, message string) {
 }
 
 var _ http.Handler = (*loginHandler)(nil)
+
+func logoutHandler(tokens security.AccessTokens) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		actor, ok := httptransport.ActorFromContext(r.Context())
+		if !ok || !actor.IsUser() {
+			writeUnauthorized(w, "authentication required")
+			return
+		}
+		revoker, ok := tokens.(security.AccessTokenRevoker)
+		if !ok {
+			httptransport.WriteJSONError(w, 503, "unavailable", "session revocation is unavailable")
+			return
+		}
+		_, value, _ := strings.Cut(r.Header.Get("Authorization"), " ")
+		if err := revoker.RevokeAccessToken(r.Context(), value); err != nil {
+			httptransport.WriteJSONError(w, 503, "unavailable", "session revocation failed")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}

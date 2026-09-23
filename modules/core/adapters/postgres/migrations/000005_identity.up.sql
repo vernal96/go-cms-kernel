@@ -177,3 +177,13 @@ ALTER TABLE core.media
         FOREIGN KEY (updated_by)
             REFERENCES core.users (id)
             ON DELETE SET NULL;
+
+ALTER TABLE core.users ADD COLUMN session_version BIGINT NOT NULL DEFAULT 1;
+CREATE TABLE core.auth_sessions (
+ token_hash TEXT PRIMARY KEY,
+ user_id BIGINT NOT NULL REFERENCES core.users(id) ON DELETE CASCADE,
+ session_version BIGINT NOT NULL,
+ expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX auth_sessions_expiry ON core.auth_sessions(expires_at);
+CREATE INDEX auth_sessions_user ON core.auth_sessions(user_id);

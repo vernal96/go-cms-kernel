@@ -46,12 +46,13 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 	}
 	profile := kernel.ProfileCode("routing-cache")
 	code := template.Code("cached")
-	application, err := appkernel.New(ctx, appkernel.Definition{
+	definition := appkernel.Definition{
 		Logger: fakeLoggerFactory{}, EventBus: fakeEventBusFactory{}, PasswordHasher: argon2id.Factory{},
 		MainDatabase: appkernel.DatabaseDefinition{Connector: pg.Factory{Config: pg.Config{Code: "main", Host: host, Port: port, Database: os.Getenv("CMS_TEST_POSTGRES_DB"), User: os.Getenv("CMS_TEST_POSTGRES_USER"), Password: os.Getenv("CMS_TEST_POSTGRES_PASSWORD"), SSLMode: "disable", MaxConns: 4, ConnMaxLifetime: time.Minute, ConnectTimeout: 5 * time.Second}}, Adapters: []kernel.ModuleDatabaseFactory{corepg.DatabaseFactory{}}},
 		Caches:       []cache.Factory{rediscache.Factory{Config: rediscache.Config{Code: "test", Addrs: []string{redisAddr}, Prefix: fmt.Sprintf("routing-test:%d", time.Now().UnixNano())}}},
 		Profiles:     []kernel.Profile{{Code: profile, Modules: []kernel.ProfileModule{{Module: core.Module{}, Caches: []cache.Binding{{Alias: core.DurableCacheAlias, Code: "test"}, {Alias: core.HotCacheAlias, Code: "test"}}}, {Module: admin.Module{}}}, Templates: []template.Definition{{Code: code, Label: "Cached", Layout: template.Layout{Body: []template.Item{template.ResourceWidgets{}}, Sidebar: []template.Item{template.ResourceWidgets{}}}}}}},
-	})
+	}
+	application, err := appkernel.New(ctx, definition)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,6 +73,38 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 		return runtime
 	}
 	first, second := createSite("a"), createSite("b")
+	replica, err := appkernel.New(ctx, definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replica.Close()
+	if err := replica.Boot(ctx); err != nil {
+		t.Fatal(err)
+	}
+	oldRuntime, _ := replica.Sites().RuntimeByID(first.Site().ID)
+	siteState := first.Site()
+	closed, err := application.Sites().Update(ctx, actor, site.UpdateInput{ID: siteState.ID, ProfileCode: siteState.ProfileCode, Domain: siteState.Domain, Locale: siteState.Locale, Settings: siteState.Settings, IsPublic: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := replica.Sites().CheckCurrent(ctx, oldRuntime); !errors.Is(err, site.ErrUnavailable) {
+		t.Fatalf("replica accepted stale runtime: %v", err)
+	}
+	if err := replica.Sites().Synchronize(ctx); err != nil {
+		t.Fatal(err)
+	}
+	refreshed, _ := replica.Sites().RuntimeByID(siteState.ID)
+	if refreshed.Site().IsPublic || refreshed.Site().Version != closed.Site().Version {
+		t.Fatal("replica did not adopt closed site")
+	}
+	if err := replica.Sites().CheckCurrent(ctx, refreshed); err != nil {
+		t.Fatal(err)
+	}
+	first, err = application.Sites().Update(ctx, actor, site.UpdateInput{ID: siteState.ID, ProfileCode: siteState.ProfileCode, Domain: siteState.Domain, Locale: siteState.Locale, Settings: siteState.Settings, IsPublic: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	repository := func(runtime *site.Runtime) resource.Repository {
 		module, _ := runtime.Profile().Registry().Module(core.ModuleCode)
 		return module.(*core.Runtime).Database().Resources()

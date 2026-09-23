@@ -6,7 +6,7 @@ connectors for [Go CMS](https://github.com/vernal96/go-cms).
 ## Installation
 
 ```bash
-go get github.com/vernal96/go-cms-kernel@v0.1.0
+go get github.com/vernal96/go-cms-kernel@v0.2.0
 ```
 
 The kernel package lives at the module root. Common packages include:

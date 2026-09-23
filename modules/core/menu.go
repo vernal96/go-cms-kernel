@@ -31,6 +31,16 @@ type menuDeadlineStore struct {
 	logger *slog.Logger
 }
 
+func (s menuDeadlineStore) LockLoad(ctx context.Context, key string) (func(), error) {
+	if locks, ok := s.Store.(cache.LoadLocker); ok {
+		return locks.LockLoad(ctx, key)
+	}
+	return func() {}, nil
+}
+func (s menuDeadlineStore) Prepare(ctx context.Context, tags []cache.Tag) (cache.PreparedSet, error) {
+	return cache.Prepare(ctx, s.Store, tags), nil
+}
+
 func (s menuDeadlineStore) Get(ctx context.Context, key string) ([]byte, error) {
 	raw, err := s.Store.Get(ctx, key)
 	if err == nil {
@@ -135,7 +145,7 @@ func (r *Runtime) cachedMenu(ctx context.Context, siteID site.ID, input resource
 		store = menuDeadlineStore{Store: r.menuStore, now: time.Now, logger: r.logger}
 	}
 	envelope, err := withRepositoryCacheRead(r.services.cachePolicy, []cache.Tag{siteResourcesTag(siteID)}, func() (menuEnvelope, error) {
-		return cache.RememberJSONWithOptions(ctx, store, key, func(value menuEnvelope) cache.SetOptions {
+		return cache.RememberJSONWithOptions(ctx, store, key, tags, func(value menuEnvelope) cache.SetOptions {
 			ttl := time.Until(value.ExpiresAt)
 			if ttl <= 0 {
 				ttl = time.Nanosecond

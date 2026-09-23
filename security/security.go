@@ -22,8 +22,9 @@ var (
 )
 
 type Actor struct {
-	kind   ActorKind
-	userID UserID
+	sessionVersion int64
+	kind           ActorKind
+	userID         UserID
 }
 
 func Guest() Actor {

@@ -130,6 +130,7 @@ func (c universalClient) Close() error {
 }
 
 type Connector struct {
+	cache.LoadLocks
 	code   cache.Code
 	client client
 	prefix string
@@ -301,7 +302,7 @@ func (c *Connector) GetMany(ctx context.Context, keys []string) map[string]cache
 		for tag, expected := range entry.Tags {
 			item := tokens[c.tagKey(cache.Tag(tag))]
 			var token cacheentry.Token
-			if item.Err != nil && !errors.Is(item.Err, cache.ErrMiss) {
+			if item.Err != nil {
 				result[key] = cache.ReadResult{Err: item.Err}
 				break
 			}
@@ -443,7 +444,11 @@ func (c *Connector) tagToken(
 ) (cacheentry.Token, error) {
 	raw, err := c.client.Get(ctx, c.tagKey(tag))
 	if errors.Is(err, cache.ErrMiss) {
-		return cacheentry.Token{}, nil
+		// Missing generations must never validate a previously stored entry.
+		if err := c.InvalidateTag(ctx, tag); err != nil {
+			return cacheentry.Token{}, err
+		}
+		raw, err = c.client.Get(ctx, c.tagKey(tag))
 	}
 	if err != nil {
 		return cacheentry.Token{}, err
@@ -466,11 +471,13 @@ func (c *Connector) tagToken(
 }
 
 func (c *Connector) entryKey(key string) string {
-	return c.prefix + ":entry:" + digest(key)
+	return c.prefix + ":entry:v2:" + digest(key)
 }
 
 func (c *Connector) tagKey(tag cache.Tag) string {
-	return c.prefix + ":tag:" + digest(string(tag))
+	// Bounded generation buckets: collisions only invalidate extra entries,
+	// never mix values. Metadata is bounded to 65,536 keys per store.
+	return c.prefix + ":generation:v2:" + digest(string(tag))[:4]
 }
 
 func digest(value string) string {

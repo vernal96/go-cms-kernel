@@ -129,7 +129,16 @@ func (r *cachedResourceRepository) loadWidgets(ctx context.Context, siteID site.
 
 func (r *cachedResourceRepository) readResource(ctx context.Context, id resource.ID) (resource.Resource, error) {
 	key := resourceCacheKey(id)
-	if record, hit := cache.ReadJSON[cachedResourceRecord](ctx, r.store, key); hit && record.Resource.ID == id {
+	record, hit := cache.ReadJSON[cachedResourceRecord](ctx, r.store, key)
+	if !hit || record.Resource.ID != id {
+		release, lockErr := cache.LockLoad(ctx, r.store, key)
+		if lockErr != nil {
+			return resource.Resource{}, lockErr
+		}
+		defer release()
+		record, hit = cache.ReadJSON[cachedResourceRecord](ctx, r.store, key)
+	}
+	if hit && record.Resource.ID == id {
 		bindings, consistent, err := r.loadWidgets(ctx, record.Resource.SiteID, id, record.Widgets)
 		if err != nil {
 			return resource.Resource{}, err
@@ -161,7 +170,7 @@ func (r *cachedResourceRepository) readResource(ctx context.Context, id resource
 	if err != nil {
 		return resource.Resource{}, err
 	}
-	record := cachedResourceRecord{Resource: item, Widgets: refs}
+	record = cachedResourceRecord{Resource: item, Widgets: refs}
 	record.Resource.Widgets = nil
 	cache.WritePreparedJSON(ctx, r.store, prepared, key, record, r.ttl)
 	return item, nil
@@ -169,7 +178,16 @@ func (r *cachedResourceRepository) readResource(ctx context.Context, id resource
 
 func (r *cachedResourceRepository) readLibraryItem(ctx context.Context, id resource.ID) (resource.LibraryItem, error) {
 	key := libraryItemCacheKey(id)
-	if record, hit := cache.ReadJSON[cachedLibraryItemRecord](ctx, r.store, key); hit && record.Item.ID == id {
+	record, hit := cache.ReadJSON[cachedLibraryItemRecord](ctx, r.store, key)
+	if !hit || record.Item.ID != id {
+		release, lockErr := cache.LockLoad(ctx, r.store, key)
+		if lockErr != nil {
+			return resource.LibraryItem{}, lockErr
+		}
+		defer release()
+		record, hit = cache.ReadJSON[cachedLibraryItemRecord](ctx, r.store, key)
+	}
+	if hit && record.Item.ID == id {
 		bindings, consistent, err := r.loadWidgets(ctx, record.Item.SiteID, id, record.Widgets)
 		if err != nil {
 			return resource.LibraryItem{}, err
@@ -203,7 +221,7 @@ func (r *cachedResourceRepository) readLibraryItem(ctx context.Context, id resou
 	if err != nil {
 		return resource.LibraryItem{}, err
 	}
-	record := cachedLibraryItemRecord{Item: item, Widgets: refs}
+	record = cachedLibraryItemRecord{Item: item, Widgets: refs}
 	record.Item.Widgets = nil
 	cache.WritePreparedJSON(ctx, r.store, prepared, key, record, r.ttl)
 	return item, nil
@@ -214,7 +232,16 @@ func (r *cachedResourceRepository) lookupRoute(ctx context.Context, siteID site.
 		return resource.RouteTarget{}, resource.ErrNotFound
 	}
 	key := routeCacheKey(siteID, path)
-	if target, hit := cache.ReadJSON[resource.RouteTarget](ctx, r.store, key); hit {
+	target, hit := cache.ReadJSON[resource.RouteTarget](ctx, r.store, key)
+	if !hit {
+		release, lockErr := cache.LockLoad(ctx, r.store, key)
+		if lockErr != nil {
+			return resource.RouteTarget{}, lockErr
+		}
+		defer release()
+		target, hit = cache.ReadJSON[resource.RouteTarget](ctx, r.store, key)
+	}
+	if hit {
 		return target, nil
 	}
 	prepared := cache.Prepare(ctx, r.store, []cache.Tag{siteTag(siteID), siteRoutesTag(siteID)})
@@ -222,7 +249,7 @@ func (r *cachedResourceRepository) lookupRoute(ctx context.Context, siteID site.
 	if err != nil {
 		return resource.RouteTarget{}, err
 	}
-	target, err := repository.LookupRoute(ctx, siteID, path)
+	target, err = repository.LookupRoute(ctx, siteID, path)
 	if err != nil {
 		return target, err
 	}

@@ -59,23 +59,24 @@ func (*identityConflictError) Unwrap() error {
 }
 
 type User struct {
-	ID            ID
-	Login         string
-	Email         string
-	Name          string
-	LastName      *string
-	MiddleName    *string
-	Phone         *string
-	AvatarMediaID *media.ID
-	ColorScheme   ColorScheme
-	AccentColor   AccentColor
-	LastLoginAt   *time.Time
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	BlockedAt     *time.Time
-	CreatedBy     *security.UserID
-	UpdatedBy     *security.UserID
-	BlockedBy     *security.UserID
+	SessionVersion int64 `json:"-"`
+	ID             ID
+	Login          string
+	Email          string
+	Name           string
+	LastName       *string
+	MiddleName     *string
+	Phone          *string
+	AvatarMediaID  *media.ID
+	ColorScheme    ColorScheme
+	AccentColor    AccentColor
+	LastLoginAt    *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	BlockedAt      *time.Time
+	CreatedBy      *security.UserID
+	UpdatedBy      *security.UserID
+	BlockedBy      *security.UserID
 }
 
 type Record struct {
@@ -170,7 +171,7 @@ type Repository interface {
 		ID,
 		string,
 	) (Record, error)
-	RecordLogin(context.Context, ID, *string) (Record, error)
+	RecordLogin(context.Context, ID, string, *string) (Record, error)
 	Block(context.Context, *security.UserID, ID) (Record, error)
 	Unblock(context.Context, *security.UserID, ID) (Record, error)
 }

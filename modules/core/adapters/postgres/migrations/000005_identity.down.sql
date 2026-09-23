@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS core.auth_sessions;
 ALTER TABLE core.media
     DROP COLUMN updated_by,
     DROP COLUMN created_by;

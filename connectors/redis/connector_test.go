@@ -20,7 +20,7 @@ func TestRedisCacheOverwriteExpiryAndTags(t *testing.T) {
 			Code:   "redis",
 			Prefix: "test",
 			Now:    func() time.Time { return now },
-			Random: bytes.NewReader(bytes.Repeat([]byte{9}, 128)),
+			Random: bytes.NewReader(append(bytes.Repeat([]byte{9}, 32), bytes.Repeat([]byte{10}, 96)...)),
 		},
 		backend,
 	)
@@ -281,4 +281,22 @@ func (c *memoryClient) GetMany(ctx context.Context, keys []string) map[string]ca
 		result[key] = cache.ReadResult{Value: value, Err: err}
 	}
 	return result
+}
+
+func TestEvictedGenerationNeverRevivesEntry(t *testing.T) {
+	backend := &memoryClient{values: make(map[string][]byte)}
+	store := newConnector(Config{Code: "test"}, backend)
+	ctx := context.Background()
+	if err := store.Set(ctx, "resource", []byte("old"), cache.SetOptions{TTL: time.Hour, Tags: []cache.Tag{"resource:1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.InvalidateTag(ctx, "resource:1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.Delete(ctx, store.tagKey("resource:1")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Get(ctx, "resource"); !errors.Is(err, cache.ErrMiss) {
+		t.Fatalf("eviction revived stale entry: %v", err)
+	}
 }

@@ -62,7 +62,7 @@ func TestServiceIssuesAndVerifiesAccessToken(t *testing.T) {
 			t.Fatalf("required claim %q is missing: %#v", required, unverified)
 		}
 	}
-	if len(unverified) != 6 {
+	if len(unverified) != 7 {
 		t.Fatalf("unexpected access token claims: %#v", unverified)
 	}
 

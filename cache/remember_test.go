@@ -23,7 +23,7 @@ func TestRememberJSONMissLoadThenHit(t *testing.T) {
 		calls++
 		return cachedValue{Count: 2}, nil
 	}
-	options := SetOptions{TTL: time.Minute, Tags: []Tag{"resource:7"}}
+	options := SetOptions{TTL: time.Minute, Tags: nil}
 
 	first, err := RememberJSON(
 		context.Background(), observed, "resource:7", options, loader,

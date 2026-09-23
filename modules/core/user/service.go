@@ -515,6 +515,7 @@ func (s *ApplicationService) Authenticate(
 	authenticated, err := s.repository.RecordLogin(
 		ctx,
 		record.ID,
+		record.PasswordHash,
 		passwordHash,
 	)
 	if err != nil {

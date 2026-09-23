@@ -13,7 +13,7 @@ import (
 
 // ReadHookState also serves membership mutations owned by the group adapter.
 func ReadHookState(ctx context.Context, tx pgx.Tx, id user.ID) (user.Record, user.EventState, error) {
-	record, err := scanRecord(tx.QueryRow(ctx, `SELECT id,login,email,password_hash,name,last_name,middle_name,phone,avatar_media_id,color_scheme,accent_color,last_login_at,created_at,updated_at,blocked_at,created_by,updated_by,blocked_by FROM core.users WHERE id=$1 FOR UPDATE`, id))
+	record, err := scanRecord(tx.QueryRow(ctx, `SELECT id,login,email,password_hash,session_version,name,last_name,middle_name,phone,avatar_media_id,color_scheme,accent_color,last_login_at,created_at,updated_at,blocked_at,created_by,updated_by,blocked_by FROM core.users WHERE id=$1 FOR UPDATE`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return user.Record{}, user.EventState{}, user.ErrNotFound
 	}

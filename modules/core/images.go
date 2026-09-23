@@ -39,7 +39,8 @@ func (s *Services) ConfigureManagementImages(files *management.Files, profiles [
 	if err != nil {
 		return err
 	}
-	editor, err := media.NewImageService(s.database.Media(), s.Files, media.FilePolicies{resource.ImageMediaUsage: resource.ValidateImageMediaFile, user.AvatarMediaUsage: user.ValidateAvatarMediaFile}, s.Authorization, processor, limits, logger)
+	limited := image.NewLimitedProcessor(processor, 2)
+	editor, err := media.NewImageService(s.database.Media(), s.Files, media.FilePolicies{resource.ImageMediaUsage: resource.ValidateImageMediaFile, user.AvatarMediaUsage: user.ValidateAvatarMediaFile}, s.Authorization, limited, limits, logger)
 	if err != nil {
 		return err
 	}
@@ -57,16 +58,13 @@ func (s *Services) ConfigureManagementImages(files *management.Files, profiles [
 			if config.Images != nil {
 				l = *config.Images
 			}
-			p, err := imaging.New(l)
-			if err != nil {
-				return err
-			}
+
 			manager, err := cache.NewModuleManager(caches, string(profile.Code), string(ModuleCode), module.Caches)
 			if err != nil {
 				return err
 			}
 			store, _ := manager.Store(ThumbnailCacheAlias)
-			thumbnails[string(profile.Code)] = image.NewThumbnails(s.Files, p, store, l)
+			thumbnails[string(profile.Code)] = image.NewThumbnails(s.Files, limited, store, l)
 		}
 	}
 	s.Images = editor

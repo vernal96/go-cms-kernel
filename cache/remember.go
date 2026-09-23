@@ -1,11 +1,7 @@
 package cache
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
-	"io"
 )
 
 // RememberJSON provides typed, fail-open JSON read-through caching. Cache
@@ -22,17 +18,19 @@ func RememberJSON[T any](
 		ctx,
 		store,
 		key,
+		options.Tags,
 		func(T) SetOptions { return options },
 		loader,
 	)
 }
 
-// RememberJSONWithOptions allows dependency tags to be derived from the
-// authoritative result on a miss.
+// RememberJSONWithOptions captures dependencies before loading. The options
+// callback controls only TTL; dependencies must be declared before the read.
 func RememberJSONWithOptions[T any](
 	ctx context.Context,
 	store Store,
 	key string,
+	tags []Tag,
 	options func(T) SetOptions,
 	loader func(context.Context) (T, error),
 ) (T, error) {
@@ -41,44 +39,30 @@ func RememberJSONWithOptions[T any](
 		return loader(ctx)
 	}
 
-	raw, err := store.Get(ctx, key)
-	if err == nil {
-		var result T
-		decoder := json.NewDecoder(bytes.NewReader(raw))
-		decoder.UseNumber()
-		decodeErr := decoder.Decode(&result)
-		if decodeErr == nil {
-			decodeErr = decoder.Decode(&struct{}{})
-			if errors.Is(decodeErr, io.EOF) {
-				return result, nil
-			}
-			if decodeErr == nil {
-				decodeErr = errors.New("cached JSON contains trailing value")
-			}
-		}
-		report(ctx, store, Event{
-			Type: EventDecodeError, Key: key, Error: decodeErr,
-		})
-		_ = store.Delete(ctx, key)
+	if result, hit := ReadJSON[T](ctx, store, key); hit {
+		return result, nil
 	}
 
+	if locks, ok := store.(LoadLocker); ok {
+		release, err := locks.LockLoad(ctx, key)
+		if err != nil {
+			return zero, err
+		}
+		defer release()
+	}
+	if result, hit := ReadJSON[T](ctx, store, key); hit {
+		return result, nil
+	}
+
+	prepared := Prepare(ctx, store, tags)
 	result, err := loader(ctx)
 	if err != nil {
 		return zero, err
 	}
-	raw, err = json.Marshal(result)
-	if err != nil {
-		report(ctx, store, Event{
-			Type: EventWriteError, Key: key, Error: err,
-		})
-		return result, nil
-	}
-	// Cache is an optimization: an observable write failure must not turn a
-	// successful authoritative read into a domain failure.
 	setOptions := SetOptions{}
 	if options != nil {
 		setOptions = options(result)
 	}
-	_ = store.Set(ctx, key, raw, setOptions)
+	WritePreparedJSON(ctx, store, prepared, key, result, setOptions.TTL)
 	return result, nil
 }

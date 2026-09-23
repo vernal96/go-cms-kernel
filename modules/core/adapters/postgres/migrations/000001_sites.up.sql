@@ -17,3 +17,5 @@ CREATE UNIQUE INDEX uq_sites_normalized_domain
 
 CREATE INDEX idx_sites_profile_code
     ON core.sites (profile_code);
+
+ALTER TABLE core.sites ADD COLUMN runtime_version BIGINT NOT NULL DEFAULT 1;

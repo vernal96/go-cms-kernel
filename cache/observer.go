@@ -34,6 +34,7 @@ func NewSlogObserver(logger *slog.Logger) Observer {
 }
 
 type observedStore struct {
+	LoadLocks
 	store    Store
 	observer Observer
 }

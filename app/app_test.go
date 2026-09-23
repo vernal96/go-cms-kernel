@@ -2072,26 +2072,23 @@ func TestAppNewBootConsoleAndRuntimeLifecycle(t *testing.T) {
 	if err := application.ReloadSites(ctx); err == nil {
 		t.Fatal("expected invalid stored settings error")
 	}
-	preserved, lookupErr := application.RuntimeByDomain(
-		ctx,
-		security.System(),
-		"new.example.com",
-	)
-	if lookupErr != nil || preserved != current {
-		t.Fatal("invalid settings reload replaced the previous snapshot")
+	if _, err := application.RuntimeByDomain(ctx, security.System(), "new.example.com"); !errors.Is(err, site.ErrNotFound) {
+		t.Fatalf("stale deleted runtime allowed: %v", err)
 	}
-
+	preserved, _ := application.Sites().RuntimeByDomain("new.example.com")
+	if preserved != current {
+		t.Fatal("failed candidate replaced snapshot")
+	}
 	repository.set(nil, errors.New("database unavailable"))
 	if err := application.ReloadSites(ctx); err == nil {
 		t.Fatal("expected reload error")
 	}
-	preserved, lookupErr = application.RuntimeByDomain(
-		ctx,
-		security.System(),
-		"new.example.com",
-	)
-	if lookupErr != nil || preserved != current {
-		t.Fatal("failed reload replaced the previous snapshot")
+	if _, err := application.RuntimeByDomain(ctx, security.System(), "new.example.com"); !errors.Is(err, site.ErrUnavailable) {
+		t.Fatalf("unverifiable runtime allowed: %v", err)
+	}
+	preserved, _ = application.Sites().RuntimeByDomain("new.example.com")
+	if preserved != current {
+		t.Fatal("failed reload replaced snapshot")
 	}
 
 	if err := application.Close(); err != nil {

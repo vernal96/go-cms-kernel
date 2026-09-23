@@ -270,6 +270,7 @@ func (a *App) boot(ctx context.Context) error {
 		a.workers.Wait()
 		return fmt.Errorf("prepare runtime background tasks: %w", err)
 	}
+	a.startSiteSynchronization(workerContext)
 	a.startEntityHooks(workerContext, hookRunner, hookTopics)
 	if len(a.outboxSources) > 0 {
 		a.outboxPublisher = publisher

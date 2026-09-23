@@ -24,6 +24,7 @@ require (
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1
 	golang.org/x/crypto v0.52.0
 	golang.org/x/net v0.55.0
+	golang.org/x/sync v0.22.0
 	golang.org/x/text v0.40.0
 )
 
@@ -54,7 +55,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/image v0.0.0-20191009234506-e7c1f5e7dbb8 // indirect
-	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/image v0.43.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 )

@@ -123,6 +123,9 @@ func writeResult(response http.ResponseWriter, status int, result any, err error
 
 func writeManagementError(response http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, image.ErrBusy):
+		response.Header().Set("Retry-After", "1")
+		httptransport.WriteJSONError(response, http.StatusServiceUnavailable, "busy", "image processing capacity exhausted")
 	case errors.Is(err, image.ErrInvalidTransform), errors.Is(err, image.ErrLimit), errors.Is(err, image.ErrUnsupportedFormat):
 		writeValidation(response, err.Error())
 	case errors.Is(err, media.ErrImageConflict):

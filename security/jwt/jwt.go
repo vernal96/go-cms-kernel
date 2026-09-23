@@ -2,6 +2,7 @@ package jwt
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"regexp"
@@ -31,6 +32,7 @@ type Config struct {
 type Option func(*Service) error
 
 type Service struct {
+	sessions   security.SessionStore
 	signingKey []byte
 	issuer     string
 	audience   string
@@ -116,6 +118,7 @@ func (s *Service) IssueAccessToken(
 	issuedAt := s.now().UTC()
 	expiresAt := issuedAt.Add(s.accessTTL)
 	claims := accessClaims{RegisteredClaims: jwtlib.RegisteredClaims{
+		ID:        rand.Text(),
 		Issuer:    s.issuer,
 		Subject:   strconv.FormatInt(int64(userID), 10),
 		Audience:  jwtlib.ClaimStrings{s.audience},
@@ -127,6 +130,11 @@ func (s *Service) IssueAccessToken(
 	value, err := token.SignedString(s.signingKey)
 	if err != nil {
 		return security.AccessToken{}, fmt.Errorf("sign JWT access token: %w", err)
+	}
+	if s.sessions != nil {
+		if err := s.sessions.CreateSession(ctx, security.Session{TokenHash: tokenHash(value), UserID: userID, Version: actor.SessionVersion(), ExpiresAt: expiresAt.Add(s.clockSkew)}); err != nil {
+			return security.AccessToken{}, err
+		}
 	}
 	return security.AccessToken{
 		Value:     value,
@@ -177,6 +185,11 @@ func (s *Service) VerifyAccessToken(
 	id, err := strconv.ParseInt(claims.Subject, 10, 64)
 	if err != nil || id <= 0 {
 		return security.Actor{}, security.ErrInvalidAccessToken
+	}
+	if s.sessions != nil {
+		if err := s.sessions.ValidateSession(ctx, tokenHash(value), security.UserID(id)); err != nil {
+			return security.Actor{}, err
+		}
 	}
 	return security.User(security.UserID(id)), nil
 }

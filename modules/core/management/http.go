@@ -1090,6 +1090,9 @@ func writeResult(response http.ResponseWriter, status int, result any, err error
 
 func writeManagementError(response http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, image.ErrBusy):
+		response.Header().Set("Retry-After", "1")
+		httptransport.WriteJSONError(response, 503, "busy", "image processing capacity exhausted")
 	case errors.Is(err, image.ErrInvalidTransform), errors.Is(err, image.ErrUnsupportedFormat), errors.Is(err, image.ErrLimit):
 		writeValidation(response, err.Error())
 	case errors.Is(err, media.ErrSettings):
@@ -1106,6 +1109,8 @@ func writeManagementError(response http.ResponseWriter, err error) {
 		httptransport.WriteJSONError(response, http.StatusForbidden, "forbidden", "operation is forbidden")
 	case errors.Is(err, site.ErrNotFound), errors.Is(err, resource.ErrNotFound), errors.Is(err, resource.ErrRevisionNotFound), errors.Is(err, file.ErrNotFound), errors.Is(err, file.ErrFolderNotFound), errors.Is(err, file.ErrStorageNotFound):
 		httptransport.WriteJSONError(response, http.StatusNotFound, "not_found", "requested object was not found")
+	case errors.Is(err, site.ErrUnavailable):
+		httptransport.WriteJSONError(response, http.StatusServiceUnavailable, "unavailable", "site runtime is updating")
 	case errors.Is(err, site.ErrConflict), errors.Is(err, resource.ErrConflict), errors.Is(err, file.ErrConflict):
 		httptransport.WriteJSONError(response, http.StatusConflict, "conflict", "object conflicts with existing data")
 	case errors.Is(err, resource.ErrRouteConflict):

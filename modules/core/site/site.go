@@ -22,9 +22,10 @@ import (
 type ID int64
 
 var (
-	ErrNotFound = errors.New("site not found")
-	ErrConflict = errors.New("site conflict")
-	ErrInvalid  = errors.New("invalid site")
+	ErrNotFound    = errors.New("site not found")
+	ErrConflict    = errors.New("site conflict")
+	ErrInvalid     = errors.New("invalid site")
+	ErrUnavailable = errors.New("site runtime is stale or unavailable")
 
 	readPermission = permission.MustCode(
 		"core",
@@ -49,6 +50,7 @@ var (
 )
 
 type Site struct {
+	Version        int64
 	ID             ID
 	ProfileCode    kernel.ProfileCode
 	Domain         string
@@ -564,6 +566,9 @@ func (c *Catalog) CheckReadAccess(
 	if runtime == nil {
 		return ErrNotFound
 	}
+	if err := c.CheckCurrent(ctx, runtime); err != nil {
+		return err
+	}
 	if err := c.access.Check(ctx, actor, readPermission); err != nil {
 		return err
 	}
@@ -838,6 +843,7 @@ func (c *Catalog) Update(
 		abortRuntimePreparations(preparations)
 		return nil, fmt.Errorf("update site: %w", err)
 	}
+	nextRuntime.site.Version = stored.Version
 	nextRuntime.site.CreatedAt = stored.CreatedAt
 	nextRuntime.site.UpdatedAt = stored.UpdatedAt
 	nextRuntime.site.CreatedBy = cloneUserID(stored.CreatedBy)

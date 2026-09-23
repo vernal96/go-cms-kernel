@@ -19,7 +19,7 @@ import (
 
 const siteColumns = `
     id, profile_code, domain, locale, settings, is_public,
-    created_at, updated_at, created_by, updated_by`
+    created_at, updated_at, created_by, updated_by, runtime_version`
 
 type Repository struct {
 	connector *connectorpostgres.Connector
@@ -232,8 +232,8 @@ func (r *Repository) Update(
 	result, err := scanOne(tx.QueryRow(ctx, `
 UPDATE core.sites
 SET profile_code = $2, domain = $3, locale = $4, settings = $5::jsonb,
-    is_public = $6, updated_at = now(), updated_by = $7
-WHERE id = $1
+    is_public = $6, updated_at = now(), updated_by = $7, runtime_version = runtime_version + 1
+WHERE id = $1 AND runtime_version = $8
 RETURNING `+siteColumns+`;`,
 		item.ID,
 		item.ProfileCode,
@@ -242,8 +242,12 @@ RETURNING `+siteColumns+`;`,
 		rawSettings,
 		item.IsPublic,
 		actorID,
+		item.Version,
 	))
 	if err != nil {
+		if errors.Is(err, site.ErrNotFound) {
+			return site.Site{}, site.ErrConflict
+		}
 		return site.Site{}, translateError(fmt.Sprintf("update core site %d", item.ID), err)
 	}
 	if err := replaceFileReferences(ctx, tx, "site", int64(result.ID), item.FileReferences); err != nil {
@@ -303,6 +307,7 @@ func scanOne(row rowScanner) (site.Site, error) {
 		&item.UpdatedAt,
 		&item.CreatedBy,
 		&item.UpdatedBy,
+		&item.Version,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return site.Site{}, site.ErrNotFound

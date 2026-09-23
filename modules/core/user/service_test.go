@@ -240,6 +240,7 @@ func (r *memoryRepository) ChangePassword(
 func (r *memoryRepository) RecordLogin(
 	_ context.Context,
 	id ID,
+	expectedHash string,
 	passwordHash *string,
 ) (Record, error) {
 	record, exists := r.records[id]
