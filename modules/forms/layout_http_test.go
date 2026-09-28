@@ -3,6 +3,7 @@ package forms
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/permission"
 	"github.com/vernal96/go-cms-kernel/security"
@@ -111,4 +112,24 @@ func TestLayoutHTTPPlacementAndAuthorization(t *testing.T) {
 	if res.Code != http.StatusOK || json.Unmarshal(res.Body.Bytes(), &editor) != nil || len(editor.ContainerTypes) != 2 {
 		t.Fatalf("container metadata: %d %s", res.Code, res.Body.String())
 	}
+}
+
+func (a *layoutAuthorizer) Allowed(ctx context.Context, actor security.Actor, codes []permission.Code) ([]permission.Code, error) {
+	result := make([]permission.Code, 0, len(codes))
+	seen := make(map[permission.Code]bool, len(codes))
+	for _, code := range codes {
+		if seen[code] {
+			continue
+		}
+		seen[code] = true
+		err := a.Check(ctx, actor, code)
+		if errors.Is(err, security.ErrForbidden) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, code)
+	}
+	return result, nil
 }

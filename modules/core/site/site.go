@@ -82,6 +82,7 @@ type ManagementRepository interface {
 	Delete(context.Context, ID) error
 }
 
+// StatisticsRepository supports concurrent calls and must honor context cancellation.
 type StatisticsRepository interface {
 	Statistics(context.Context, StatisticsQuery) (Statistics, error)
 }

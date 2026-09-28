@@ -258,18 +258,15 @@ func (m *Files) OpenFilesystemFile(
 
 func (m *Files) filePermissions(ctx context.Context, actor security.Actor) (PermissionSet, error) {
 	codes := []permission.Code{FileReadPermission, FileCreatePermission, FileUpdatePermission, FileDeletePermission}
-	values := make([]bool, len(codes))
-	for index, code := range codes {
-		err := m.authorizer.Check(ctx, actor, code)
-		switch {
-		case err == nil:
-			values[index] = true
-		case errors.Is(err, security.ErrForbidden):
-		default:
-			return PermissionSet{}, fmt.Errorf("check file permission %q: %w", code, err)
-		}
+	allowed, err := m.authorizer.Allowed(ctx, actor, codes)
+	if err != nil {
+		return PermissionSet{}, fmt.Errorf("check file permissions: %w", err)
 	}
-	return PermissionSet{Read: values[0], Create: values[1], Update: values[2], Delete: values[3]}, nil
+	values := make(map[permission.Code]bool, len(allowed))
+	for _, code := range allowed {
+		values[code] = true
+	}
+	return PermissionSet{Read: values[codes[0]], Create: values[codes[1]], Update: values[codes[2]], Delete: values[codes[3]]}, nil
 }
 
 func filesystemDiskDTO(item filesystem.DiskInfo) FilesystemDiskDTO {

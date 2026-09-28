@@ -28,14 +28,18 @@ type Grant struct {
 	UpdatedBy  *security.UserID
 }
 
+// Authorization contains facts read together for one authorization operation.
+// The service owns the policy for applying group and guest permissions.
+type Authorization struct {
+	Subject          Subject
+	GroupPermissions []permission.Code
+	GuestPermissions []permission.Code
+}
+
 type Repository interface {
 	Subject(context.Context, security.UserID) (Subject, error)
-	GroupAllowed(
-		context.Context,
-		security.UserID,
-		permission.Code,
-	) (bool, error)
-	GuestAllowed(context.Context, permission.Code) (bool, error)
+	// A nil user ID requests guest permissions only.
+	Authorization(context.Context, *security.UserID, []permission.Code) (Authorization, error)
 	GuestPermissions(context.Context) ([]Grant, error)
 	GrantGuest(
 		context.Context,

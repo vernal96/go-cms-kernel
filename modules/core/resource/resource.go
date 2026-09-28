@@ -249,6 +249,7 @@ type SiteTransferRepository interface {
 	) (SiteTransferResult, error)
 }
 
+// StatisticsRepository supports concurrent calls and must honor context cancellation.
 type StatisticsRepository interface {
 	Statistics(context.Context, StatisticsQuery) (Statistics, error)
 }

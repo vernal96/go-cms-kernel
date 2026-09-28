@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/vernal96/go-cms-kernel/modules/core/group"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/core/user"
+	"github.com/vernal96/go-cms-kernel/permission"
 	"github.com/vernal96/go-cms-kernel/security"
 )
 
@@ -52,24 +55,12 @@ func (m *Management) Dashboard(
 	ctx context.Context,
 	actor security.Actor,
 ) (Dashboard, error) {
-	canReadSites, err := m.allowed(ctx, actor, SiteReadPermission)
+	allowed, err := m.allowedPermissions(ctx, actor, []permission.Code{SiteReadPermission, ResourceReadPermission, UserReadPermission, GroupReadPermission})
 	if err != nil {
 		return Dashboard{}, err
 	}
-	canReadResources, err := m.allowed(ctx, actor, ResourceReadPermission)
-	if err != nil {
-		return Dashboard{}, err
-	}
-	canReadUsers, err := m.allowed(ctx, actor, UserReadPermission)
-	if err != nil {
-		return Dashboard{}, err
-	}
-	canReadGroups, err := m.allowed(ctx, actor, GroupReadPermission)
-	if err != nil {
-		return Dashboard{}, err
-	}
-
-	var result Dashboard
+	canReadSites, canReadResources := allowed[SiteReadPermission], allowed[ResourceReadPermission]
+	canReadUsers, canReadGroups := allowed[UserReadPermission], allowed[GroupReadPermission]
 	var viewScope site.Scope
 	if canReadSites {
 		accessScope, err := m.policy.Scope(ctx, actor, SiteAccessView)
@@ -90,85 +81,103 @@ func (m *Management) Dashboard(
 		editScope = site.Scope{All: accessScope.All, SiteIDs: append([]site.ID(nil), accessScope.SiteIDs...)}
 	}
 
-	var siteIDs []site.ID
-	if canReadSites {
-		repository, ok := m.repository.(site.StatisticsRepository)
-		if !ok {
-			return Dashboard{}, fmt.Errorf("site statistics repository is unavailable")
-		}
-		statistics, err := repository.Statistics(ctx, site.StatisticsQuery{
-			Scope: viewScope,
-			Limit: dashboardSiteLimit,
-		})
-		if err != nil {
-			return Dashboard{}, fmt.Errorf("load dashboard site statistics: %w", err)
-		}
-		items := make([]DashboardSite, len(statistics.Items))
-		siteIDs = make([]site.ID, len(statistics.Items))
-		for index, item := range statistics.Items {
-			items[index] = DashboardSite{
-				ID:       item.ID,
-				Domain:   item.Domain,
-				IsPublic: item.IsPublic,
+	var sites *DashboardSites
+	var resources *DashboardResources
+	var users *DashboardUsers
+	var groups *DashboardGroups
+	tasks, ctx := errgroup.WithContext(ctx)
+	tasks.SetLimit(3)
+	if canReadSites || canReadResources {
+		tasks.Go(func() error {
+			var siteIDs []site.ID
+			if canReadSites {
+				repository, ok := m.repository.(site.StatisticsRepository)
+				if !ok {
+					return fmt.Errorf("site statistics repository is unavailable")
+				}
+				statistics, err := repository.Statistics(ctx, site.StatisticsQuery{
+					Scope: viewScope,
+					Limit: dashboardSiteLimit,
+				})
+				if err != nil {
+					return fmt.Errorf("load dashboard site statistics: %w", err)
+				}
+				items := make([]DashboardSite, len(statistics.Items))
+				siteIDs = make([]site.ID, len(statistics.Items))
+				for index, item := range statistics.Items {
+					items[index] = DashboardSite{
+						ID:       item.ID,
+						Domain:   item.Domain,
+						IsPublic: item.IsPublic,
+					}
+					siteIDs[index] = item.ID
+				}
+				sites = &DashboardSites{
+					Total:   statistics.Total,
+					Public:  statistics.Public,
+					Private: statistics.Private,
+					Items:   items,
+				}
 			}
-			siteIDs[index] = item.ID
-		}
-		result.Sites = &DashboardSites{
-			Total:   statistics.Total,
-			Public:  statistics.Public,
-			Private: statistics.Private,
-			Items:   items,
-		}
-	}
 
-	if canReadResources {
-		repository, ok := m.resourceRepo.(resource.StatisticsRepository)
-		if !ok {
-			return Dashboard{}, fmt.Errorf("resource statistics repository is unavailable")
-		}
-		statistics, err := repository.Statistics(ctx, resource.StatisticsQuery{
-			Scope:   editScope,
-			SiteIDs: siteIDs,
-		})
-		if err != nil {
-			return Dashboard{}, fmt.Errorf("load dashboard resource statistics: %w", err)
-		}
-		result.Resources = &DashboardResources{Total: statistics.Total}
-		if result.Sites != nil {
-			for index := range result.Sites.Items {
-				count := statistics.BySite[result.Sites.Items[index].ID]
-				result.Sites.Items[index].ResourceCount = &count
+			if canReadResources {
+				repository, ok := m.resourceRepo.(resource.StatisticsRepository)
+				if !ok {
+					return fmt.Errorf("resource statistics repository is unavailable")
+				}
+				statistics, err := repository.Statistics(ctx, resource.StatisticsQuery{
+					Scope:   editScope,
+					SiteIDs: siteIDs,
+				})
+				if err != nil {
+					return fmt.Errorf("load dashboard resource statistics: %w", err)
+				}
+				resources = &DashboardResources{Total: statistics.Total}
+				if sites != nil {
+					for index := range sites.Items {
+						count := statistics.BySite[sites.Items[index].ID]
+						sites.Items[index].ResourceCount = &count
+					}
+				}
 			}
-		}
-	}
 
+			return nil
+		})
+	}
 	if canReadUsers {
-		repository, ok := m.userRepo.(user.StatisticsRepository)
-		if !ok {
-			return Dashboard{}, fmt.Errorf("user statistics repository is unavailable")
-		}
-		statistics, err := repository.Statistics(ctx)
-		if err != nil {
-			return Dashboard{}, fmt.Errorf("load dashboard user statistics: %w", err)
-		}
-		result.Users = &DashboardUsers{
-			Total:   statistics.Total,
-			Active:  statistics.Active,
-			Blocked: statistics.Blocked,
-		}
+		tasks.Go(func() error {
+			repository, ok := m.userRepo.(user.StatisticsRepository)
+			if !ok {
+				return fmt.Errorf("user statistics repository is unavailable")
+			}
+			statistics, err := repository.Statistics(ctx)
+			if err != nil {
+				return fmt.Errorf("load dashboard user statistics: %w", err)
+			}
+			users = &DashboardUsers{
+				Total:   statistics.Total,
+				Active:  statistics.Active,
+				Blocked: statistics.Blocked,
+			}
+			return nil
+		})
 	}
-
 	if canReadGroups {
-		repository, ok := m.groupRepo.(group.StatisticsRepository)
-		if !ok {
-			return Dashboard{}, fmt.Errorf("group statistics repository is unavailable")
-		}
-		total, err := repository.Count(ctx)
-		if err != nil {
-			return Dashboard{}, fmt.Errorf("load dashboard group statistics: %w", err)
-		}
-		result.Groups = &DashboardGroups{Total: total}
+		tasks.Go(func() error {
+			repository, ok := m.groupRepo.(group.StatisticsRepository)
+			if !ok {
+				return fmt.Errorf("group statistics repository is unavailable")
+			}
+			total, err := repository.Count(ctx)
+			if err != nil {
+				return fmt.Errorf("load dashboard group statistics: %w", err)
+			}
+			groups = &DashboardGroups{Total: total}
+			return nil
+		})
 	}
-
-	return result, nil
+	if err := tasks.Wait(); err != nil {
+		return Dashboard{}, err
+	}
+	return Dashboard{Sites: sites, Resources: resources, Users: users, Groups: groups}, nil
 }

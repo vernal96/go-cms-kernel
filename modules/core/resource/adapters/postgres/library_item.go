@@ -516,9 +516,6 @@ func (r *Repository) QueryLibraryItems(ctx context.Context, query resource.Libra
 	if err := r.loadLibraryItemsFields(ctx, r.connector.Pool(), items); err != nil {
 		return resource.LibraryItemPage{}, err
 	}
-	if err := r.loadLibraryItemVersions(ctx, r.connector.Pool(), items); err != nil {
-		return resource.LibraryItemPage{}, err
-	}
 	if hasMore {
 		var err error
 		page.NextCursor, err = resource.EncodeLibraryCursor(query, items[len(items)-1])
@@ -660,14 +657,28 @@ func (r *Repository) queryLibraryItemBranch(ctx context.Context, query resource.
 		))
 	}
 	limit := add(limitValue)
-	rows, err := r.connector.Pool().Query(ctx, `SELECT `+libraryItemColumns+` FROM `+from+` `+strings.Join(joins, " ")+` WHERE `+strings.Join(where, " AND ")+` ORDER BY `+strings.Join(order, ", ")+` LIMIT `+limit+`;`, args...)
+	ordering := strings.Join(order, ", ")
+	// Limit before joining versions: joining the full missing-field tail can
+	// turn a bounded version lookup into work proportional to the collection.
+	// Carry sort keys through the page so its outer order is explicit, while
+	// retaining the inner query's index ordering or top-N sort.
+	pageColumns := libraryItemColumns
+	pageOrder := make([]string, 0, len(expressions)+1)
+	for index, expression := range expressions {
+		alias := "page_sort_" + strconv.Itoa(index)
+		pageColumns += ", " + expression.sql + " AS " + alias
+		pageOrder = append(pageOrder, "page."+alias+" "+sortDirectionSQL(expression.sort.Direction)+" NULLS LAST")
+	}
+	pageOrder = append(pageOrder, "page.id "+sortDirectionSQL(idDirection))
+	page := `SELECT ` + pageColumns + ` FROM ` + from + ` ` + strings.Join(joins, " ") + ` WHERE ` + strings.Join(where, " AND ") + ` ORDER BY ` + ordering + ` LIMIT ` + limit
+	rows, err := r.connector.Pool().Query(ctx, `SELECT `+strings.ReplaceAll(libraryItemColumns, "item.", "page.")+`, entity.version FROM (`+page+`) page LEFT JOIN core.resource_entities entity ON entity.id=page.id ORDER BY `+strings.Join(pageOrder, ", ")+`;`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query library items: %w", err)
 	}
 	defer rows.Close()
 	items := make([]resource.LibraryItem, 0, limitValue)
 	for rows.Next() {
-		item, err := scanLibraryItem(rows)
+		item, err := scanLibraryItemWithVersion(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -975,10 +986,28 @@ func ensureLibraryTarget(ctx context.Context, queryer libraryRowQueryer, siteID 
 }
 
 func scanLibraryItem(scanner rowScanner) (resource.LibraryItem, error) {
+	return scanLibraryItemColumns(scanner)
+}
+
+func scanLibraryItemWithVersion(scanner rowScanner) (resource.LibraryItem, error) {
+	var version *int64
+	item, err := scanLibraryItemColumns(scanner, &version)
+	if err != nil {
+		return resource.LibraryItem{}, err
+	}
+	if version == nil {
+		return resource.LibraryItem{}, fmt.Errorf("library item %d has no resource version", item.ID)
+	}
+	item.Version = *version
+	return item, nil
+}
+
+func scanLibraryItemColumns(scanner rowScanner, extra ...any) (resource.LibraryItem, error) {
 	var item resource.LibraryItem
 	var templateCode, contentType *string
 	var imageMediaID *int64
-	err := scanner.Scan(&item.ID, &item.SiteID, &item.LibraryID, &templateCode, &contentType, &item.Title, &item.Slug, &item.Annotation, &item.Content, &imageMediaID, &item.IsPublic, &item.IsSearchable, &item.PublishedAt, &item.UnpublishedAt, &item.CreatedAt, &item.UpdatedAt, &item.CreatedBy, &item.UpdatedBy, &item.DeletedAt, &item.DeletedBy)
+	columns := []any{&item.ID, &item.SiteID, &item.LibraryID, &templateCode, &contentType, &item.Title, &item.Slug, &item.Annotation, &item.Content, &imageMediaID, &item.IsPublic, &item.IsSearchable, &item.PublishedAt, &item.UnpublishedAt, &item.CreatedAt, &item.UpdatedAt, &item.CreatedBy, &item.UpdatedBy, &item.DeletedAt, &item.DeletedBy}
+	err := scanner.Scan(append(columns, extra...)...)
 	if err != nil {
 		return resource.LibraryItem{}, err
 	}
@@ -1017,44 +1046,6 @@ func (r *Repository) loadLibraryItemsFields(ctx context.Context, queryer rowQuer
 		items[i].Fields = projected[i].Fields
 		items[i].FieldValues = projected[i].FieldValues
 		items[i].Widgets = projected[i].Widgets
-	}
-	return nil
-}
-
-func (r *Repository) loadLibraryItemVersions(ctx context.Context, queryer rowQueryer, items []resource.LibraryItem) error {
-	if len(items) == 0 {
-		return nil
-	}
-	ids := make([]int64, len(items))
-	byID := make(map[resource.ID]int, len(items))
-	for index := range items {
-		ids[index] = int64(items[index].ID)
-		byID[items[index].ID] = index
-	}
-	rows, err := queryer.Query(ctx, `SELECT id, version FROM core.resource_entities WHERE id = ANY($1::bigint[]);`, ids)
-	if err != nil {
-		return fmt.Errorf("query library item versions: %w", err)
-	}
-	defer rows.Close()
-	loaded := 0
-	for rows.Next() {
-		var id resource.ID
-		var version int64
-		if err := rows.Scan(&id, &version); err != nil {
-			return fmt.Errorf("scan library item version: %w", err)
-		}
-		index, exists := byID[id]
-		if !exists {
-			return fmt.Errorf("query library item versions returned unexpected resource %d", id)
-		}
-		items[index].Version = version
-		loaded++
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("query library item versions: %w", err)
-	}
-	if loaded != len(items) {
-		return fmt.Errorf("query library item versions returned %d of %d resources", loaded, len(items))
 	}
 	return nil
 }

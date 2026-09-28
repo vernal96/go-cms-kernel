@@ -755,3 +755,23 @@ func authenticateError(
 
 var _ access.Service = testAccess{}
 var _ Repository = (*memoryRepository)(nil)
+
+func (a testAccess) Allowed(ctx context.Context, actor security.Actor, codes []permission.Code) ([]permission.Code, error) {
+	result := make([]permission.Code, 0, len(codes))
+	seen := make(map[permission.Code]bool, len(codes))
+	for _, code := range codes {
+		if seen[code] {
+			continue
+		}
+		seen[code] = true
+		err := a.Check(ctx, actor, code)
+		if errors.Is(err, security.ErrForbidden) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, code)
+	}
+	return result, nil
+}

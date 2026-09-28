@@ -31,52 +31,70 @@ func NewService(
 	}, nil
 }
 
-func (s *ApplicationService) Check(
-	ctx context.Context,
-	actor security.Actor,
-	code permission.Code,
-) error {
-	if err := validateContext(ctx); err != nil {
+func (s *ApplicationService) Check(ctx context.Context, actor security.Actor, code permission.Code) error {
+	allowed, err := s.Allowed(ctx, actor, []permission.Code{code})
+	if err != nil {
 		return err
 	}
-	if err := s.catalog.Require(code); err != nil {
-		return err
-	}
-	if actor.IsSystem() {
-		return nil
-	}
-
-	if actor.IsGuest() {
-		return s.checkGuest(ctx, code)
-	}
-
-	userID, exists := actor.UserID()
-	if !exists {
-		return security.ErrUnauthenticated
-	}
-
-	subject, err := s.repository.Subject(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("load authorization subject: %w", err)
-	}
-	if !subject.Exists || !subject.Active {
-		return security.ErrUnauthenticated
-	}
-	if subject.IsSuper {
-		return nil
-	}
-	if !subject.HasGroups {
-		return s.checkGuest(ctx, code)
-	}
-
-	allowed, err := s.repository.GroupAllowed(ctx, userID, code)
-	if err != nil {
-		return fmt.Errorf("check group permission %q: %w", code, err)
-	}
-	if !allowed {
+	if len(allowed) == 0 {
 		return security.ErrForbidden
 	}
 	return nil
+}
+
+func (s *ApplicationService) Allowed(ctx context.Context, actor security.Actor, codes []permission.Code) ([]permission.Code, error) {
+	if err := validateContext(ctx); err != nil {
+		return nil, err
+	}
+	unique := make([]permission.Code, 0, len(codes))
+	seen := make(map[permission.Code]bool, len(codes))
+	for _, code := range codes {
+		if err := s.catalog.Require(code); err != nil {
+			return nil, err
+		}
+		if !seen[code] {
+			unique = append(unique, code)
+			seen[code] = true
+		}
+	}
+	if len(unique) == 0 || actor.IsSystem() {
+		return unique, nil
+	}
+	var userID *security.UserID
+	if !actor.IsGuest() {
+		id, exists := actor.UserID()
+		if !exists {
+			return nil, security.ErrUnauthenticated
+		}
+		userID = &id
+	}
+	facts, err := s.repository.Authorization(ctx, userID, unique)
+	if err != nil {
+		return nil, fmt.Errorf("load authorization: %w", err)
+	}
+	grants := facts.GuestPermissions
+	if userID != nil {
+		if !facts.Subject.Exists || !facts.Subject.Active {
+			return nil, security.ErrUnauthenticated
+		}
+		if facts.Subject.IsSuper {
+			return unique, nil
+		}
+		if facts.Subject.HasGroups {
+			grants = facts.GroupPermissions
+		}
+	}
+	granted := make(map[permission.Code]bool, len(grants))
+	for _, code := range grants {
+		granted[code] = true
+	}
+	result := make([]permission.Code, 0, len(unique))
+	for _, code := range unique {
+		if granted[code] {
+			result = append(result, code)
+		}
+	}
+	return result, nil
 }
 
 func (s *ApplicationService) Codes() []permission.Code {
@@ -215,20 +233,6 @@ func (s *ApplicationService) RevokeGuest(
 	}
 	if err := s.repository.RevokeGuest(ctx, code); err != nil {
 		return fmt.Errorf("revoke guest permission %q: %w", code, err)
-	}
-	return nil
-}
-
-func (s *ApplicationService) checkGuest(
-	ctx context.Context,
-	code permission.Code,
-) error {
-	allowed, err := s.repository.GuestAllowed(ctx, code)
-	if err != nil {
-		return fmt.Errorf("check guest permission %q: %w", code, err)
-	}
-	if !allowed {
-		return security.ErrForbidden
 	}
 	return nil
 }

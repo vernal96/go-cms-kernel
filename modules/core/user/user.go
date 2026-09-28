@@ -181,6 +181,7 @@ type ManagementRepository interface {
 	ListPage(context.Context, ListQuery) (Page, error)
 }
 
+// StatisticsRepository supports concurrent calls and must honor context cancellation.
 type StatisticsRepository interface {
 	Statistics(context.Context) (Statistics, error)
 }

@@ -1030,26 +1030,17 @@ func (m *Resources) Resource(
 	if item.SiteID != siteID {
 		return ResourceDetails{}, resource.ErrNotFound
 	}
-	canUpdate, err := m.allowed(ctx, actor, ResourceUpdatePermission)
+	allowed, err := m.allowedPermissions(ctx, actor, []permission.Code{ResourceUpdatePermission, ResourceDeletePermission, resource.HistoryReadPermission, resource.HistoryDeletePermission})
 	if err != nil {
 		return ResourceDetails{}, err
 	}
+	canDelete := allowed[ResourceDeletePermission]
 	result := ResourceDetails{Resource: resourceDTO(item)}
-	result.Permissions.Update = canUpdate
-	canDelete, err := m.allowed(ctx, actor, ResourceDeletePermission)
-	if err != nil {
-		return ResourceDetails{}, err
-	}
+	result.Permissions.Update = allowed[ResourceUpdatePermission]
 	result.Permissions.Delete = canDelete
 	result.Permissions.Restore = canDelete
-	result.Permissions.HistoryRead, err = m.allowed(ctx, actor, resource.HistoryReadPermission)
-	if err != nil {
-		return ResourceDetails{}, err
-	}
-	result.Permissions.HistoryDelete, err = m.allowed(ctx, actor, resource.HistoryDeletePermission)
-	if err != nil {
-		return ResourceDetails{}, err
-	}
+	result.Permissions.HistoryRead = allowed[resource.HistoryReadPermission]
+	result.Permissions.HistoryDelete = allowed[resource.HistoryDeletePermission]
 	if item.ParentID != nil {
 		parent, parentErr := m.resources.Get(ctx, actor, *item.ParentID)
 		if parentErr != nil {
@@ -1381,20 +1372,21 @@ func (m *Resources) libraryItemDetails(ctx context.Context, actor security.Actor
 	if err != nil {
 		return LibraryItemDetails{}, err
 	}
-	result := LibraryItemDetails{Item: libraryItemDTO(library, item)}
-	result.Permissions.Update, err = m.allowed(ctx, actor, ResourceUpdatePermission)
+	codes := []permission.Code{ResourceUpdatePermission, ResourceDeletePermission}
+	if m.revisions.LibraryHistoryEnabled(item.SiteID) {
+		codes = append(codes, resource.HistoryReadPermission, resource.HistoryDeletePermission)
+	}
+	allowed, err := m.allowedPermissions(ctx, actor, codes)
 	if err != nil {
 		return LibraryItemDetails{}, err
 	}
-	result.Permissions.Delete, err = m.allowed(ctx, actor, ResourceDeletePermission)
+	result := LibraryItemDetails{Item: libraryItemDTO(library, item)}
+	result.Permissions.Update = allowed[ResourceUpdatePermission]
+	result.Permissions.Delete = allowed[ResourceDeletePermission]
 	result.Permissions.Restore = result.Permissions.Delete && library.DeletedAt == nil
-	if err == nil && m.revisions.LibraryHistoryEnabled(item.SiteID) {
-		result.Permissions.HistoryRead, err = m.allowed(ctx, actor, resource.HistoryReadPermission)
-		if err == nil {
-			result.Permissions.HistoryDelete, err = m.allowed(ctx, actor, resource.HistoryDeletePermission)
-		}
-	}
-	return result, err
+	result.Permissions.HistoryRead = allowed[resource.HistoryReadPermission]
+	result.Permissions.HistoryDelete = allowed[resource.HistoryDeletePermission]
+	return result, nil
 }
 
 func libraryItemDTO(library resource.Resource, item resource.LibraryItem) LibraryItemDTO {
@@ -1936,15 +1928,11 @@ func (m *Sites) sitePermissions(
 	actor security.Actor,
 ) (PermissionSet, error) {
 	codes := []permission.Code{SiteReadPermission, SiteCreatePermission, SiteUpdatePermission, SiteDeletePermission}
-	values := make([]bool, len(codes))
-	for index, code := range codes {
-		allowed, err := m.allowed(ctx, actor, code)
-		if err != nil {
-			return PermissionSet{}, err
-		}
-		values[index] = allowed
+	allowed, err := m.allowedPermissions(ctx, actor, codes)
+	if err != nil {
+		return PermissionSet{}, err
 	}
-	return PermissionSet{Read: values[0], Create: values[1], Update: values[2], Delete: values[3]}, nil
+	return PermissionSet{Read: allowed[codes[0]], Create: allowed[codes[1]], Update: allowed[codes[2]], Delete: allowed[codes[3]]}, nil
 }
 
 func (m *Sites) siteCapabilities(
@@ -2222,4 +2210,19 @@ func validationError(err error) error {
 		return fmt.Errorf("%w: request data is invalid", ErrValidation)
 	}
 	return err
+}
+
+func (m authorization) allowedPermissions(ctx context.Context, actor security.Actor, codes []permission.Code) (map[permission.Code]bool, error) {
+	allowed, err := m.authorizer.Allowed(ctx, actor, codes)
+	if errors.Is(err, security.ErrForbidden) || errors.Is(err, security.ErrUnauthenticated) {
+		return map[permission.Code]bool{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[permission.Code]bool, len(allowed))
+	for _, code := range allowed {
+		result[code] = true
+	}
+	return result, nil
 }

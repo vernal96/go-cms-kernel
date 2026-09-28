@@ -76,4 +76,7 @@ func (a Actor) AuditUserID() *UserID {
 
 type Authorizer interface {
 	Check(context.Context, Actor, permission.Code) error
+	// Allowed returns the allowed subset in input order, without duplicates.
+	// Denied permissions are omitted; authentication and operational errors are returned.
+	Allowed(context.Context, Actor, []permission.Code) ([]permission.Code, error)
 }

@@ -17,9 +17,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/vernal96/go-cms-kernel/connectors/localstorage"
 	"github.com/vernal96/go-cms-kernel"
 	appkernel "github.com/vernal96/go-cms-kernel/app"
+	"github.com/vernal96/go-cms-kernel/connectors/localstorage"
 	"github.com/vernal96/go-cms-kernel/eventbus"
 	"github.com/vernal96/go-cms-kernel/filesystem"
 	"github.com/vernal96/go-cms-kernel/logging"
@@ -336,27 +336,14 @@ func (accessRepository) Subject(
 	return coreaccess.Subject{}, nil
 }
 
-func (accessRepository) GroupAllowed(
-	context.Context,
-	security.UserID,
-	permission.Code,
-) (bool, error) {
-	return false, nil
-}
-
-func (accessRepository) GuestAllowed(
-	_ context.Context,
-	code permission.Code,
-) (bool, error) {
-	return code == permission.MustCode(
-		"core",
-		"site",
-		permission.Read,
-	) || code == permission.MustCode(
-		"core",
-		"resource",
-		permission.Read,
-	), nil
+func (accessRepository) Authorization(_ context.Context, _ *security.UserID, codes []permission.Code) (coreaccess.Authorization, error) {
+	result := coreaccess.Authorization{}
+	for _, code := range codes {
+		if code == permission.MustCode("core", "site", permission.Read) || code == permission.MustCode("core", "resource", permission.Read) {
+			result.GuestPermissions = append(result.GuestPermissions, code)
+		}
+	}
+	return result, nil
 }
 
 func (accessRepository) GuestPermissions(
@@ -384,11 +371,8 @@ type deniedAccessRepository struct {
 	accessRepository
 }
 
-func (deniedAccessRepository) GuestAllowed(
-	context.Context,
-	permission.Code,
-) (bool, error) {
-	return false, nil
+func (deniedAccessRepository) Authorization(context.Context, *security.UserID, []permission.Code) (coreaccess.Authorization, error) {
+	return coreaccess.Authorization{}, nil
 }
 
 type privilegedUserAccessRepository struct {
@@ -434,14 +418,6 @@ func (groupUserAccessRepository) Subject(
 		Active:    true,
 		HasGroups: true,
 	}, nil
-}
-
-func (r groupUserAccessRepository) GroupAllowed(
-	context.Context,
-	security.UserID,
-	permission.Code,
-) (bool, error) {
-	return r.allowed, nil
 }
 
 type staticAccessTokens struct {
@@ -2629,4 +2605,40 @@ func TestPageWidgetBindingsResolveCurrentResourceAndIsolateInvalidValues(t *test
 			t.Fatal("configuration leaked into public envelope")
 		}
 	}
+}
+
+func (r privilegedUserAccessRepository) Authorization(ctx context.Context, id *security.UserID, codes []permission.Code) (coreaccess.Authorization, error) {
+	result, err := r.accessRepository.Authorization(ctx, id, codes)
+	if err != nil {
+		return result, err
+	}
+	if id != nil {
+		result.Subject, err = r.Subject(ctx, *id)
+	}
+	return result, err
+}
+
+func (r knownUserAccessRepository) Authorization(ctx context.Context, id *security.UserID, codes []permission.Code) (coreaccess.Authorization, error) {
+	result, err := r.accessRepository.Authorization(ctx, id, codes)
+	if err != nil {
+		return result, err
+	}
+	if id != nil {
+		result.Subject, err = r.Subject(ctx, *id)
+	}
+	return result, err
+}
+
+func (r groupUserAccessRepository) Authorization(ctx context.Context, id *security.UserID, codes []permission.Code) (coreaccess.Authorization, error) {
+	result, err := r.accessRepository.Authorization(ctx, id, codes)
+	if err != nil {
+		return result, err
+	}
+	if id != nil {
+		result.Subject, err = r.Subject(ctx, *id)
+	}
+	if r.allowed {
+		result.GroupPermissions = append([]permission.Code(nil), codes...)
+	}
+	return result, err
 }

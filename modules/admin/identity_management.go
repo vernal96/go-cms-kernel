@@ -381,28 +381,20 @@ func (m *Management) PermissionCatalog(ctx context.Context, actor security.Actor
 
 func (m *Management) userPermissions(ctx context.Context, actor security.Actor) (UserPermissionSet, error) {
 	codes := []permission.Code{UserReadPermission, UserCreatePermission, UserUpdatePermission, UserBlockPermission}
-	values := make([]bool, len(codes))
-	for index, code := range codes {
-		allowed, err := m.allowed(ctx, actor, code)
-		if err != nil {
-			return UserPermissionSet{}, err
-		}
-		values[index] = allowed
+	allowed, err := m.allowedPermissions(ctx, actor, codes)
+	if err != nil {
+		return UserPermissionSet{}, err
 	}
-	return UserPermissionSet{Read: values[0], Create: values[1], Update: values[2], Block: values[3]}, nil
+	return UserPermissionSet{Read: allowed[codes[0]], Create: allowed[codes[1]], Update: allowed[codes[2]], Block: allowed[codes[3]]}, nil
 }
 
 func (m *Management) groupPermissions(ctx context.Context, actor security.Actor) (PermissionSet, error) {
 	codes := []permission.Code{GroupReadPermission, GroupCreatePermission, GroupUpdatePermission, GroupDeletePermission}
-	values := make([]bool, len(codes))
-	for index, code := range codes {
-		allowed, err := m.allowed(ctx, actor, code)
-		if err != nil {
-			return PermissionSet{}, err
-		}
-		values[index] = allowed
+	allowed, err := m.allowedPermissions(ctx, actor, codes)
+	if err != nil {
+		return PermissionSet{}, err
 	}
-	return PermissionSet{Read: values[0], Create: values[1], Update: values[2], Delete: values[3]}, nil
+	return PermissionSet{Read: allowed[codes[0]], Create: allowed[codes[1]], Update: allowed[codes[2]], Delete: allowed[codes[3]]}, nil
 }
 
 func userDTO(item user.User, actor security.Actor, permissions UserPermissionSet, editGroups bool) UserDTO {

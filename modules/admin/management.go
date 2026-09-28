@@ -226,3 +226,18 @@ func fileValidationError(err error) error {
 		return fmt.Errorf("%w: request data is invalid", ErrValidation)
 	}
 }
+
+func (m *Management) allowedPermissions(ctx context.Context, actor security.Actor, codes []permission.Code) (map[permission.Code]bool, error) {
+	allowed, err := m.authorizer.Allowed(ctx, actor, codes)
+	if errors.Is(err, security.ErrForbidden) || errors.Is(err, security.ErrUnauthenticated) {
+		return map[permission.Code]bool{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[permission.Code]bool, len(allowed))
+	for _, code := range allowed {
+		result[code] = true
+	}
+	return result, nil
+}

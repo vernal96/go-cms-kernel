@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync/atomic"
 	"testing"
 
@@ -11,11 +12,12 @@ import (
 )
 
 type memoryRepository struct {
-	subjects       map[security.UserID]Subject
-	group          map[security.UserID]map[permission.Code]bool
-	guest          map[permission.Code]Grant
-	administrators map[security.UserID]bool
-	subjectCall    atomic.Int32
+	authorizationErr error
+	subjects         map[security.UserID]Subject
+	group            map[security.UserID]map[permission.Code]bool
+	guest            map[permission.Code]Grant
+	administrators   map[security.UserID]bool
+	subjectCall      atomic.Int32
 }
 
 func (r *memoryRepository) IsAdministrator(_ context.Context, id security.UserID) (bool, error) {
@@ -30,20 +32,24 @@ func (r *memoryRepository) Subject(
 	return r.subjects[id], nil
 }
 
-func (r *memoryRepository) GroupAllowed(
-	_ context.Context,
-	id security.UserID,
-	code permission.Code,
-) (bool, error) {
-	return r.group[id][code], nil
-}
-
-func (r *memoryRepository) GuestAllowed(
-	_ context.Context,
-	code permission.Code,
-) (bool, error) {
-	_, exists := r.guest[code]
-	return exists, nil
+func (r *memoryRepository) Authorization(_ context.Context, id *security.UserID, codes []permission.Code) (Authorization, error) {
+	if r.authorizationErr != nil {
+		return Authorization{}, r.authorizationErr
+	}
+	r.subjectCall.Add(1)
+	var result Authorization
+	if id != nil {
+		result.Subject = r.subjects[*id]
+	}
+	for _, code := range codes {
+		if id != nil && r.group[*id][code] {
+			result.GroupPermissions = append(result.GroupPermissions, code)
+		}
+		if _, ok := r.guest[code]; ok {
+			result.GuestPermissions = append(result.GuestPermissions, code)
+		}
+	}
+	return result, nil
 }
 
 func (r *memoryRepository) GuestPermissions(
@@ -258,3 +264,96 @@ func TestGuestGrantManagementRequiresPrivilege(t *testing.T) {
 }
 
 var _ Repository = (*memoryRepository)(nil)
+
+func TestAllowedMatchesChecksAndReadsOnce(t *testing.T) {
+	repository := &memoryRepository{
+		subjects: map[security.UserID]Subject{
+			1: {Exists: true, Active: true},
+			2: {Exists: true, Active: true, HasGroups: true},
+			3: {Exists: true, Active: true, HasGroups: true, IsSuper: true},
+			4: {Exists: true, Active: false, IsSuper: true},
+		},
+		group: map[security.UserID]map[permission.Code]bool{},
+		guest: map[permission.Code]Grant{},
+	}
+	service, read := newTestService(t, repository)
+	update := permission.MustCode("core", "site", permission.Update)
+	remove := permission.MustCode("core", "site", permission.Delete)
+	repository.group[2] = map[permission.Code]bool{read: true, update: true}
+	repository.guest[remove] = Grant{Permission: remove}
+	codes := []permission.Code{update, read, update, remove}
+	for _, test := range []struct {
+		name    string
+		actor   security.Actor
+		want    []permission.Code
+		wantErr error
+		calls   int32
+	}{
+		{"system", security.System(), []permission.Code{update, read, remove}, nil, 0},
+		{"guest", security.Guest(), []permission.Code{remove}, nil, 1},
+		{"ungrouped", security.User(1), []permission.Code{remove}, nil, 1},
+		{"grouped", security.User(2), []permission.Code{update, read}, nil, 1},
+		{"super", security.User(3), []permission.Code{update, read, remove}, nil, 1},
+		{"blocked super", security.User(4), nil, security.ErrUnauthenticated, 1},
+		{"missing", security.User(99), nil, security.ErrUnauthenticated, 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			before := repository.subjectCall.Load()
+			got, err := service.Allowed(context.Background(), test.actor, codes)
+			if !errors.Is(err, test.wantErr) || !slices.Equal(got, test.want) {
+				t.Fatalf("Allowed=%v, %v; want %v, %v", got, err, test.want, test.wantErr)
+			}
+			if calls := repository.subjectCall.Load() - before; calls != test.calls {
+				t.Fatalf("reads=%d, want %d", calls, test.calls)
+			}
+			for _, code := range codes {
+				err := service.Check(context.Background(), test.actor, code)
+				wantErr := test.wantErr
+				if wantErr == nil && !slices.Contains(test.want, code) {
+					wantErr = security.ErrForbidden
+				}
+				if !errors.Is(err, wantErr) {
+					t.Fatalf("Check(%s)=%v, want %v", code, err, wantErr)
+				}
+			}
+		})
+	}
+	// Each operation observes the latest grants and user state.
+	delete(repository.group[2], read)
+	if got, err := service.Allowed(context.Background(), security.User(2), []permission.Code{read}); err != nil || len(got) != 0 {
+		t.Fatalf("revoked=%v, %v", got, err)
+	}
+	repository.subjects[2] = Subject{Exists: true, Active: false, HasGroups: true}
+	if _, err := service.Allowed(context.Background(), security.User(2), []permission.Code{update}); !errors.Is(err, security.ErrUnauthenticated) {
+		t.Fatal(err)
+	}
+	before := repository.subjectCall.Load()
+	for _, actor := range []security.Actor{security.System(), security.User(3), security.Guest()} {
+		if _, err := service.Allowed(context.Background(), actor, []permission.Code{read, "missing.permission.code"}); !errors.Is(err, permission.ErrUnknown) {
+			t.Fatal(err)
+		}
+	}
+	if got, err := service.Allowed(context.Background(), security.Guest(), nil); err != nil || len(got) != 0 {
+		t.Fatalf("empty=%v, %v", got, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := service.Allowed(ctx, security.System(), []permission.Code{read}); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	if _, err := service.Allowed(nil, security.System(), []permission.Code{read}); err == nil {
+		t.Fatal("nil context accepted")
+	}
+	if repository.subjectCall.Load() != before {
+		t.Fatal("invalid or empty request reached repository")
+	}
+}
+
+func TestAllowedDoesNotHideRepositoryErrors(t *testing.T) {
+	boom := errors.New("authorization unavailable")
+	service, code := newTestService(t, &memoryRepository{authorizationErr: boom})
+	got, err := service.Allowed(context.Background(), security.User(1), []permission.Code{code})
+	if got != nil || !errors.Is(err, boom) {
+		t.Fatalf("allowed=%v, %v", got, err)
+	}
+}

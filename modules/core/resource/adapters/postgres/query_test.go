@@ -147,3 +147,28 @@ func TestLibraryKeysetUsesMissingLastAndStableID(t *testing.T) {
 		t.Fatalf("present custom keyset SQL = %s", presentCustom)
 	}
 }
+
+type libraryScannerFunc func(...any) error
+
+func (f libraryScannerFunc) Scan(dest ...any) error { return f(dest...) }
+
+func TestLibraryItemListRequiresVersion(t *testing.T) {
+	for _, version := range []*int64{nil, new(int64(9))} {
+		item, err := scanLibraryItemWithVersion(libraryScannerFunc(func(dest ...any) error {
+			*dest[0].(*resource.ID) = 17
+			*dest[len(dest)-1].(**int64) = version
+			return nil
+		}))
+		if version == nil {
+			if err == nil || !strings.Contains(err.Error(), "17 has no resource version") {
+				t.Fatalf("missing version error=%v", err)
+			}
+		} else if err != nil || item.Version != *version {
+			t.Fatalf("item=%+v, %v", item, err)
+		}
+	}
+	boom := errors.New("scan failed")
+	if _, err := scanLibraryItemWithVersion(libraryScannerFunc(func(...any) error { return boom })); !errors.Is(err, boom) {
+		t.Fatalf("scan error=%v", err)
+	}
+}

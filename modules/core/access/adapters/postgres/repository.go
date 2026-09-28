@@ -84,49 +84,45 @@ WHERE id = $1;
 	return subject, nil
 }
 
-func (r *Repository) GroupAllowed(
-	ctx context.Context,
-	userID security.UserID,
-	code permission.Code,
-) (bool, error) {
+func (r *Repository) Authorization(ctx context.Context, userID *security.UserID, codes []permission.Code) (access.Authorization, error) {
 	if ctx == nil {
-		return false, errors.New("group permission context is nil")
+		return access.Authorization{}, errors.New("authorization context is nil")
 	}
-	var allowed bool
+	requested := make([]string, len(codes))
+	for i, code := range codes {
+		requested[i] = string(code)
+	}
+	var facts access.Authorization
+	var groupCodes, guestCodes []string
 	err := r.connector.Pool().QueryRow(ctx, `
-SELECT EXISTS (
-    SELECT 1
-    FROM core.user_groups ug
-    JOIN core.group_permissions gp ON gp.group_id = ug.group_id
-    WHERE ug.user_id = $1
-      AND gp.permission_code = $2
-);
-`, userID, code).Scan(&allowed)
+WITH subject AS (
+ SELECT id, blocked_at IS NULL AS active FROM core.users WHERE id=$1
+), memberships AS (
+ SELECT ug.group_id, g.is_super FROM core.user_groups ug
+ JOIN core.groups g ON g.id=ug.group_id WHERE ug.user_id=$1
+)
+SELECT
+ EXISTS (SELECT 1 FROM subject),
+ COALESCE((SELECT active FROM subject), false),
+ EXISTS (SELECT 1 FROM memberships),
+ EXISTS (SELECT 1 FROM memberships WHERE is_super),
+ ARRAY(SELECT DISTINCT gp.permission_code FROM core.group_permissions gp
+       JOIN memberships m ON m.group_id=gp.group_id
+       WHERE gp.permission_code=ANY($2::text[])),
+ ARRAY(SELECT permission_code FROM core.guest_permissions
+       WHERE permission_code=ANY($2::text[]));`, userID, requested).Scan(
+		&facts.Subject.Exists, &facts.Subject.Active, &facts.Subject.HasGroups, &facts.Subject.IsSuper,
+		&groupCodes, &guestCodes)
 	if err != nil {
-		return false, err
+		return access.Authorization{}, fmt.Errorf("query authorization: %w", err)
 	}
-	return allowed, nil
-}
-
-func (r *Repository) GuestAllowed(
-	ctx context.Context,
-	code permission.Code,
-) (bool, error) {
-	if ctx == nil {
-		return false, errors.New("guest permission context is nil")
+	for _, code := range groupCodes {
+		facts.GroupPermissions = append(facts.GroupPermissions, permission.Code(code))
 	}
-	var allowed bool
-	err := r.connector.Pool().QueryRow(ctx, `
-SELECT EXISTS (
-    SELECT 1
-    FROM core.guest_permissions
-    WHERE permission_code = $1
-);
-`, code).Scan(&allowed)
-	if err != nil {
-		return false, err
+	for _, code := range guestCodes {
+		facts.GuestPermissions = append(facts.GuestPermissions, permission.Code(code))
 	}
-	return allowed, nil
+	return facts, nil
 }
 
 func (r *Repository) GuestPermissions(

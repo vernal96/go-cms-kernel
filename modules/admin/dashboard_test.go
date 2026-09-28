@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/vernal96/go-cms-kernel/modules/core/group"
@@ -19,6 +20,7 @@ import (
 )
 
 type dashboardSiteRepository struct {
+	run func(context.Context) error
 	site.ManagementRepository
 	query      site.StatisticsQuery
 	statistics site.Statistics
@@ -27,15 +29,21 @@ type dashboardSiteRepository struct {
 }
 
 func (r *dashboardSiteRepository) Statistics(
-	_ context.Context,
+	ctx context.Context,
 	query site.StatisticsQuery,
 ) (site.Statistics, error) {
+	if r.run != nil {
+		if err := r.run(ctx); err != nil {
+			return site.Statistics{}, err
+		}
+	}
 	r.calls++
 	r.query = query
 	return r.statistics, r.err
 }
 
 type dashboardResourceRepository struct {
+	run func(context.Context) error
 	resource.ManagementRepository
 	query      resource.StatisticsQuery
 	statistics resource.Statistics
@@ -44,34 +52,51 @@ type dashboardResourceRepository struct {
 }
 
 func (r *dashboardResourceRepository) Statistics(
-	_ context.Context,
+	ctx context.Context,
 	query resource.StatisticsQuery,
 ) (resource.Statistics, error) {
+	if r.run != nil {
+		if err := r.run(ctx); err != nil {
+			return resource.Statistics{}, err
+		}
+	}
 	r.calls++
 	r.query = query
 	return r.statistics, r.err
 }
 
 type dashboardUserRepository struct {
+	run func(context.Context) error
 	user.ManagementRepository
 	statistics user.Statistics
 	err        error
 	calls      int
 }
 
-func (r *dashboardUserRepository) Statistics(context.Context) (user.Statistics, error) {
+func (r *dashboardUserRepository) Statistics(ctx context.Context) (user.Statistics, error) {
+	if r.run != nil {
+		if err := r.run(ctx); err != nil {
+			return user.Statistics{}, err
+		}
+	}
 	r.calls++
 	return r.statistics, r.err
 }
 
 type dashboardGroupRepository struct {
+	run func(context.Context) error
 	group.ManagementRepository
 	total int
 	err   error
 	calls int
 }
 
-func (r *dashboardGroupRepository) Count(context.Context) (int, error) {
+func (r *dashboardGroupRepository) Count(ctx context.Context) (int, error) {
+	if r.run != nil {
+		if err := r.run(ctx); err != nil {
+			return 0, err
+		}
+	}
 	r.calls++
 	return r.total, r.err
 }
@@ -255,5 +280,100 @@ func TestDashboardRouteRequiresAdminPanelPermission(t *testing.T) {
 	}
 	if authorizer.code != AccessPermission {
 		t.Fatalf("permission = %q", authorizer.code)
+	}
+}
+
+func TestDashboardRunsIndependentBranchesAndPreservesDependency(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	entered := make(chan string, 3)
+	release := make(chan struct{})
+	sitesDone := make(chan struct{})
+	resourcesStarted := make(chan struct{}, 1)
+	wait := func(name string) func(context.Context) error {
+		return func(ctx context.Context) error {
+			entered <- name
+			select {
+			case <-release:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+	sites := &dashboardSiteRepository{statistics: site.Statistics{Items: []site.Site{{ID: 7}}}, run: func(ctx context.Context) error {
+		if err := wait("sites")(ctx); err != nil {
+			return err
+		}
+		close(sitesDone)
+		return nil
+	}}
+	resources := &dashboardResourceRepository{run: func(ctx context.Context) error {
+		select {
+		case <-sitesDone:
+		default:
+			return errors.New("resources started before sites completed")
+		}
+		resourcesStarted <- struct{}{}
+		return nil
+	}}
+	m := &Management{repository: sites, resourceRepo: resources, userRepo: &dashboardUserRepository{run: wait("users")}, groupRepo: &dashboardGroupRepository{run: wait("groups")}, authorizer: managementAuthorizer{}, policy: scopedPolicy{scope: SiteAccessScope{All: true}}}
+	done := make(chan error, 1)
+	go func() { _, err := m.Dashboard(ctx, security.User(1)); done <- err }()
+	seen := map[string]bool{}
+	for len(seen) < 3 {
+		select {
+		case name := <-entered:
+			seen[name] = true
+		case <-ctx.Done():
+			t.Fatal("independent branches did not start concurrently")
+		}
+	}
+	select {
+	case <-resourcesStarted:
+		t.Fatal("resources ran before sites completed")
+	default:
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if len(resources.query.SiteIDs) != 1 || resources.query.SiteIDs[0] != 7 {
+		t.Fatalf("resource query=%+v", resources.query)
+	}
+}
+
+func TestDashboardCancelsSiblingsAndReturnsNoPartialResult(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	entered := make(chan struct{}, 2)
+	canceled := make(chan struct{}, 2)
+	boom := errors.New("statistics unavailable")
+	wait := func(ctx context.Context) error {
+		entered <- struct{}{}
+		<-ctx.Done()
+		canceled <- struct{}{}
+		return ctx.Err()
+	}
+	sites := &dashboardSiteRepository{run: wait}
+	resources := &dashboardResourceRepository{}
+	users := &dashboardUserRepository{run: wait}
+	groups := &dashboardGroupRepository{run: func(ctx context.Context) error {
+		for i := 0; i < 2; i++ {
+			select {
+			case <-entered:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		return boom
+	}}
+	m := &Management{repository: sites, resourceRepo: resources, userRepo: users, groupRepo: groups, authorizer: managementAuthorizer{}, policy: scopedPolicy{scope: SiteAccessScope{All: true}}}
+	got, err := m.Dashboard(ctx, security.User(1))
+	if !errors.Is(err, boom) || got.Sites != nil || got.Resources != nil || got.Users != nil || got.Groups != nil {
+		t.Fatalf("dashboard=%+v, %v", got, err)
+	}
+	if len(canceled) != 2 || resources.calls != 0 {
+		t.Fatalf("canceled=%d, dependent calls=%d", len(canceled), resources.calls)
 	}
 }

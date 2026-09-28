@@ -144,26 +144,13 @@ func (r *Runtime) serveSession(
 	if catalog, ok := r.authorization.(interface{ Codes() []permission.Code }); ok {
 		permissionCodes = catalog.Codes()
 	}
-	permissions := make([]permission.Code, 0, len(permissionCodes))
-	for _, code := range permissionCodes {
-		err := r.authorization.Check(request.Context(), actor, code)
-		if err == nil {
-			permissions = append(permissions, code)
-			continue
-		}
-		if errors.Is(err, security.ErrForbidden) {
-			continue
-		}
+	permissions, err := r.authorization.Allowed(request.Context(), actor, permissionCodes)
+	if err != nil {
 		if errors.Is(err, security.ErrUnauthenticated) {
 			writeUnauthorized(response)
 			return
 		}
-		httptransport.WriteJSONError(
-			response,
-			http.StatusInternalServerError,
-			"internal_error",
-			"permission lookup failed",
-		)
+		httptransport.WriteJSONError(response, http.StatusInternalServerError, "internal_error", "permission lookup failed")
 		return
 	}
 

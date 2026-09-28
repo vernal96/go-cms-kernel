@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vernal96/go-cms-kernel/connectors/localstorage"
 	"github.com/vernal96/go-cms-kernel"
+	"github.com/vernal96/go-cms-kernel/connectors/localstorage"
 	"github.com/vernal96/go-cms-kernel/eventbus"
 	"github.com/vernal96/go-cms-kernel/filesystem"
 	"github.com/vernal96/go-cms-kernel/job"
@@ -607,4 +607,24 @@ func TestUploadSpoolUsesPrivateSitePrefixAndVerifiesSize(t *testing.T) {
 	if _, err := spool.Put(context.Background(), UploadInput{FieldCode: "bad", Filename: "bad.txt", MIMEType: "text/plain", Size: 8, Body: strings.NewReader("short")}, 16); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("size mismatch error = %v", err)
 	}
+}
+
+func (a allowAuthorizer) Allowed(ctx context.Context, actor security.Actor, codes []permission.Code) ([]permission.Code, error) {
+	result := make([]permission.Code, 0, len(codes))
+	seen := make(map[permission.Code]bool, len(codes))
+	for _, code := range codes {
+		if seen[code] {
+			continue
+		}
+		seen[code] = true
+		err := a.Check(ctx, actor, code)
+		if errors.Is(err, security.ErrForbidden) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, code)
+	}
+	return result, nil
 }
