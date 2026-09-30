@@ -605,7 +605,7 @@ func TestProfileRejectsConflictingRoutes(t *testing.T) {
 			code: "first",
 			contribution: routeContribution(
 				http.MethodPost,
-				"/admin/resources",
+				"/custom/resources",
 				http.NotFoundHandler(),
 			),
 		},
@@ -613,7 +613,7 @@ func TestProfileRejectsConflictingRoutes(t *testing.T) {
 			code: "second",
 			contribution: routeContribution(
 				http.MethodPost,
-				"/admin/resources",
+				"/custom/resources",
 				http.NotFoundHandler(),
 			),
 		},
@@ -623,7 +623,7 @@ func TestProfileRejectsConflictingRoutes(t *testing.T) {
 		!strings.Contains(err.Error(), "route-conflict") ||
 		!strings.Contains(err.Error(), "second") ||
 		!strings.Contains(err.Error(), http.MethodPost) ||
-		!strings.Contains(err.Error(), "/admin/resources") {
+		!strings.Contains(err.Error(), "/custom/resources") {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -798,14 +798,14 @@ func TestCompilerValidatesMiddlewareNamesHandlersPatternsAndMounts(
 				contribution: httptransport.Contribution{
 					Routes: func(registrar httptransport.Registrar) error {
 						if err := registrar.Mount(httptransport.Mount{
-							Pattern: "/admin",
+							Pattern: "/custom",
 							Handler: http.NotFoundHandler(),
 						}); err != nil {
 							return err
 						}
 						return registrar.Route(httptransport.Route{
 							Method:  http.MethodGet,
-							Pattern: "/admin/resources",
+							Pattern: "/custom/resources",
 							Handler: http.NotFoundHandler(),
 						})
 					},
@@ -895,7 +895,7 @@ func TestProfileKeepsDistinctRoutes(t *testing.T) {
 
 func TestPlatformNamespacesRejectProfileRoutesAndMounts(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) })
-	for _, pattern := range []string{"/api", "/api/custom", "/_cms", "/_cms/runtime"} {
+	for _, pattern := range []string{"/api", "/api/custom", "/_cms", "/_cms/runtime", "/auth", "/auth/login", "/admin", "/admin/custom", "/sites", "/sites/1/custom", "/site-profiles", "/files", "/media", "/administration"} {
 		for _, mount := range []bool{false, true} {
 			contribution := httptransport.Contribution{Routes: func(r httptransport.Registrar) error {
 				return r.Group("/", nil, func(r httptransport.Registrar) error {
@@ -913,7 +913,7 @@ func TestPlatformNamespacesRejectProfileRoutesAndMounts(t *testing.T) {
 		}
 	}
 	runtime := makeCompilerProfile(t, "allowed", compilerModule{code: "extension", contribution: httptransport.Contribution{Routes: func(r httptransport.Registrar) error {
-		for _, pattern := range []string{"/apiary", "/_cms-other", "/custom/api"} {
+		for _, pattern := range []string{"/apiary", "/_cms-other", "/custom/api", "/administrator", "/sites-other", "/files-other"} {
 			if err := r.Route(httptransport.Route{Method: "GET", Pattern: pattern, Handler: handler}); err != nil {
 				return err
 			}

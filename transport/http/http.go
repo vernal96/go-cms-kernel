@@ -9,6 +9,10 @@ import (
 	"github.com/vernal96/go-cms-kernel/security"
 )
 
+// APIPrefix is the external base path for CMS APIs. Module route declarations
+// are relative to this prefix; content paths and storage URLs are not API paths.
+const APIPrefix = "/api"
+
 type MiddlewareCode string
 type ResourceHandlerCode string
 type Middleware func(http.Handler) http.Handler
@@ -27,6 +31,7 @@ type MiddlewareDefinition struct {
 	Middleware Middleware
 }
 
+// Route.Pattern and Mount.Pattern are relative to APIPrefix.
 type Route struct {
 	Name       string
 	Method     string
@@ -97,7 +102,7 @@ type Provider interface {
 
 // SiteManagementContribution exposes an optional module's site-scoped
 // management API without teaching the application or HTTP server about the
-// concrete module. Path is one normalized URL segment below /sites/{siteID}.
+// concrete module. Path is one normalized URL segment below /api/sites/{siteID}.
 type SiteManagementContribution struct {
 	Path    string
 	Handler http.Handler

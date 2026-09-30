@@ -6,7 +6,7 @@ profile. It contributes a public route to each site's prebuilt HTTP runtime.
 ## HTTP API
 
 ```http
-GET /search?q=electricity&page=1&per_page=20
+GET /api/search?q=electricity&page=1&per_page=20
 Host: example.com
 ```
 

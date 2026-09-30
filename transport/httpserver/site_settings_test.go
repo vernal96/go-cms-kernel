@@ -56,7 +56,7 @@ func TestSiteSettingsHTTPPrivacyAndUpdates(t *testing.T) {
 	}
 	check := func(host, name string) {
 		t.Helper()
-		for _, path := range []string{"/site", "/_cms/runtime"} {
+		for _, path := range []string{"/api/site", "/api/_cms/runtime"} {
 			for _, authenticated := range []bool{false, true} {
 				res := request(host, path, authenticated)
 				if res.Code != 200 || res.Header().Get("Cache-Control") != "no-store" {
@@ -81,12 +81,12 @@ func TestSiteSettingsHTTPPrivacyAndUpdates(t *testing.T) {
 	check("first.test", "First")
 	check("second.test", "Second")
 	check("empty.test", "")
-	for _, path := range []string{"/site?unknown=1", "/site?x=1&x=2", "/site?%zz"} {
+	for _, path := range []string{"/api/site?unknown=1", "/api/site?x=1&x=2", "/api/site?%zz"} {
 		if res := request("first.test", path, false); res.Code != 400 {
 			t.Fatalf("query %s: %d", path, res.Code)
 		}
 	}
-	for _, path := range []string{"/site", "/_cms/runtime"} {
+	for _, path := range []string{"/api/site", "/api/_cms/runtime"} {
 		if res := request("missing.test", path, false); res.Code != 404 {
 			t.Fatalf("unknown site: %d", res.Code)
 		}

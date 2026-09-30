@@ -31,6 +31,31 @@ import (
 Project-specific profiles, configuration, bindings, and executable entrypoints
 remain in the consuming application.
 
+## HTTP API
+
+Current source mounts all CMS APIs below `/api`. Public routes include
+`/api/site`, `/api/menu`, `/api/search`, `/api/forms/{code}` and
+`/api/_cms/runtime`. Management endpoints keep their existing `/api/...` URLs.
+The starter health probe `/healthz` and file delivery `/_cms/files/...` remain
+outside the API prefix, including signed file URLs.
+
+A resource at `/about` is read through `/api/about`; `/api` and `/api/` resolve
+the root resource. Stored resource paths, menu/search URLs and SEO canonical URLs
+remain website paths. Internal ResourceLink redirects point to the target's API
+URL; external Link redirects keep their configured URL. Old unprefixed APIs
+return 404 without aliases or redirects.
+
+Module `Registrar` routes and mounts remain relative to `/api`. The public
+handler receives the path after stripping that prefix once; generated API links
+use `httptransport.APIPrefix`. API-relative namespaces `/auth`, `/admin`,
+`/sites`, `/site-profiles`, `/files`, `/media`, `/administration`, `/_cms` and
+`/api` are reserved by the platform and cannot be claimed by literal module
+routes or mounts. Unknown management URLs never fall through to public resources.
+
+This routing change is not included in the published v0.3.0 dependency shown
+above. It requires a future release; local starter verification can use a
+temporary Go workspace containing both modules, without a permanent `replace`.
+
 ## Development
 
 Use the Go version declared in `go.mod` and run:

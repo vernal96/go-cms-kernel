@@ -17,6 +17,13 @@ type HTTPDependencies struct {
 	UploadTimeout time.Duration
 }
 
+// HTTPRoutePrefixes returns the API-relative namespaces owned by Core management.
+// The server uses these boundaries to separate authenticated management requests
+// from public profile routes, including unknown paths inside these namespaces.
+func HTTPRoutePrefixes() []string {
+	return []string{"/sites", "/site-profiles", "/files", "/media", "/administration"}
+}
+
 // NewHTTPHandler builds the site-independent CMS management API. Authentication
 // is transport-owned; global and site-scoped authorization remains in the
 // domain management services.

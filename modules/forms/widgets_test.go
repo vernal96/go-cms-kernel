@@ -90,7 +90,7 @@ func TestFormWidgetSchemaMatchesPublicHTTPAndFollowsFormIdentity(t *testing.T) {
 		if err := json.Unmarshal(response.Body.Bytes(), &b); err != nil {
 			t.Fatal(err)
 		}
-		if !reflect.DeepEqual(a, b) || output["submit_url"] != "/forms/"+code+"/submit" {
+		if !reflect.DeepEqual(a, b) || output["submit_url"] != "/api/forms/"+code+"/submit" {
 			t.Fatalf("schema mismatch: %s %s", schema, response.Body.String())
 		}
 	}
@@ -127,7 +127,7 @@ func TestResultsWidgetsValidateParamsAndPaginateIndependently(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if result["results_url"] != "/forms/feedback/results" {
+		if result["results_url"] != "/api/forms/feedback/results" {
 			t.Fatal(result)
 		}
 	}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/widget"
+	httptransport "github.com/vernal96/go-cms-kernel/transport/http"
 )
 
 var FormWidget = widget.NewRef("form")
@@ -73,7 +74,7 @@ func (i formWidgetInstance) Render(ctx context.Context, input widget.RenderInput
 	if !form.Enabled {
 		return nil, ErrNotFound
 	}
-	root := "/forms/" + url.PathEscape(form.Code)
+	root := httptransport.APIPrefix + "/forms/" + url.PathEscape(form.Code)
 	if i.widget.results {
 		page, err := s.repository.ListPublicResults(ctx, s.siteID, form.ID, PageQuery{Page: 1, PerPage: i.perPage})
 		if err != nil {

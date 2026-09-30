@@ -535,7 +535,7 @@ func (h resourceLinkHandler) ServeHTTP(
 	http.Redirect(
 		response,
 		request,
-		*target.Path,
+		httptransport.APIPrefix+*target.Path,
 		http.StatusFound,
 	)
 }

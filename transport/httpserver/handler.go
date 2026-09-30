@@ -142,8 +142,6 @@ func NewHandler(
 	if err != nil {
 		return nil, err
 	}
-	root.Method(http.MethodPost, "/api/auth/login", login)
-	root.Method(http.MethodPost, "/api/auth/logout", logoutHandler(config.accessTokens))
 	adminHandler, err := newAdminHandler(application)
 	if err != nil {
 		return nil, err
@@ -153,17 +151,34 @@ func NewHandler(
 		return nil, err
 	}
 	api := chi.NewRouter()
+	api.Route("/auth", func(auth chi.Router) {
+		auth.Method(http.MethodPost, "/login", login)
+		auth.Method(http.MethodPost, "/logout", logoutHandler(config.accessTokens))
+		auth.NotFound(http.NotFound)
+	})
 	api.Mount("/admin", adminHandler)
-	api.Mount("/", cmsHandler)
-	root.Mount("/api", api)
+	api.Route("/_cms", func(runtime chi.Router) {
+		runtime.Get("/runtime", handler.serveRuntime)
+		runtime.NotFound(http.NotFound)
+	})
+	api.Mount("/", http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		path := strings.TrimPrefix(request.URL.Path, httptransport.APIPrefix)
+		for _, prefix := range coremanagement.HTTPRoutePrefixes() {
+			if pathInNamespace(path, prefix) {
+				cmsHandler.ServeHTTP(response, request)
+				return
+			}
+		}
+		handler.dispatchPublicAPI(response, request)
+	}))
+	root.Mount(httptransport.APIPrefix, api)
 
 	platform := chi.NewRouter()
 	platform.HandleFunc("/files/*", handler.serveFile)
-	platform.Get("/runtime", handler.serveRuntime)
 	platform.NotFound(http.NotFound)
 	root.Mount("/_cms", platform)
 
-	root.NotFound(http.HandlerFunc(handler.dispatchProfile))
+	root.NotFound(http.NotFound)
 	handler.root = root
 	if err := application.Sites().AddRuntimePreparer(
 		context.Background(),
@@ -458,6 +473,31 @@ func (h *Handler) serveRuntime(
 		Settings:    settings,
 	}); err != nil {
 		http.Error(response, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// dispatchPublicAPI translates the external API URL into the profile-local path.
+// A fresh chi context prevents the API mount's route path from overriding it.
+func (h *Handler) dispatchPublicAPI(response http.ResponseWriter, request *http.Request) {
+	path := strings.TrimPrefix(request.URL.Path, httptransport.APIPrefix)
+	if path == "" {
+		path = "/"
+	}
+	if err := validatePlatformRoute(path); err != nil {
+		http.NotFound(response, request)
+		return
+	}
+	childRoute := chi.NewRouteContext()
+	ctx := context.WithValue(request.Context(), chi.RouteCtxKey, childRoute)
+	child := request.Clone(ctx)
+	child.URL.Path = path
+	if child.URL.RawPath != "" {
+		child.URL.RawPath = strings.TrimPrefix(child.URL.RawPath, httptransport.APIPrefix)
+	}
+	h.dispatchProfile(response, child)
+	// Keep the original URL and the full matched route in outer access logs.
+	if parentRoute := chi.RouteContext(request.Context()); parentRoute != nil {
+		parentRoute.RoutePatterns = append(parentRoute.RoutePatterns, childRoute.RoutePatterns...)
 	}
 }
 

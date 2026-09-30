@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/vernal96/go-cms-kernel"
+	coremanagement "github.com/vernal96/go-cms-kernel/modules/core/management"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	httptransport "github.com/vernal96/go-cms-kernel/transport/http"
@@ -879,10 +880,14 @@ var _ httptransport.ResourceHandlers = (*compiledResourceHandlers)(nil)
 // Platform namespaces are handled before profile dispatch. Registering a
 // literal route below them would succeed in chi but never reach the module.
 func validatePlatformRoute(pattern string) error {
-	for _, prefix := range []string{"/api", "/_cms"} {
-		if pattern == prefix || strings.HasPrefix(pattern, prefix+"/") {
+	for _, prefix := range append(coremanagement.HTTPRoutePrefixes(), httptransport.APIPrefix, "/_cms", "/auth", "/admin") {
+		if pathInNamespace(pattern, prefix) {
 			return fmt.Errorf("path is reserved by platform mount %q", prefix)
 		}
 	}
 	return nil
+}
+
+func pathInNamespace(path, prefix string) bool {
+	return path == prefix || strings.HasPrefix(path, prefix+"/")
 }

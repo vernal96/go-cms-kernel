@@ -787,7 +787,7 @@ func TestHandlerLooksUpCompiledRuntimeByRequestHost(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	request := httptest.NewRequest(http.MethodGet, "/_cms/runtime", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/_cms/runtime", nil)
 	request.Host = "EXAMPLE.COM.:8080"
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -796,7 +796,7 @@ func TestHandlerLooksUpCompiledRuntimeByRequestHost(t *testing.T) {
 		t.Fatalf("status = %d, body = %q", response.Code, response.Body.String())
 	}
 
-	request = httptest.NewRequest(http.MethodGet, "/_cms/runtime", nil)
+	request = httptest.NewRequest(http.MethodGet, "/api/_cms/runtime", nil)
 	request.Host = "missing.example.com"
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -865,7 +865,7 @@ func TestHandlerHidesRuntimeWithoutGuestPermissionOrPublicFlag(
 			}
 			request := httptest.NewRequest(
 				http.MethodGet,
-				"/_cms/runtime",
+				"/api/_cms/runtime",
 				nil,
 			)
 			request.Host = "example.com"
@@ -1275,7 +1275,7 @@ func stringPointer(value string) *string {
 
 func newTransportTestApp(
 	t *testing.T,
-	module transportModule,
+	module kernel.Module,
 	resources resource.Repository,
 	extraTemplates ...template.Definition,
 ) *appkernel.App {
@@ -1365,7 +1365,7 @@ func TestSiteHTTPPublicationIsAtomicAcrossUpdateCreateAndReload(t *testing.T) {
 	}
 	request := func(host string) *httptest.ResponseRecorder {
 		t.Helper()
-		req := httptest.NewRequest(http.MethodGet, "http://"+host+"/version", nil)
+		req := httptest.NewRequest(http.MethodGet, "http://"+host+"/api/version", nil)
 		req.Host = host
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, req)
@@ -1533,7 +1533,7 @@ func TestHandlerMiddlewareOrderForRoutesAndResources(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	request := httptest.NewRequest(http.MethodGet, "/custom", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/custom", nil)
 	request.Host = "example.com"
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -1544,7 +1544,7 @@ func TestHandlerMiddlewareOrderForRoutesAndResources(t *testing.T) {
 	}
 
 	order = order[:0]
-	request = httptest.NewRequest(http.MethodGet, "/article", nil)
+	request = httptest.NewRequest(http.MethodGet, "/api/article", nil)
 	request.Host = "example.com"
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -1706,7 +1706,7 @@ func TestPageResourceRendersWidgetEnvelopeAndIsolatesErrors(
 		t.Fatal(err)
 	}
 
-	request := httptest.NewRequest(http.MethodGet, "/page", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/page", nil)
 	request.Host = "example.com"
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -1781,7 +1781,7 @@ func TestPageResourceRendersWidgetEnvelopeAndIsolatesErrors(
 		}
 	}
 
-	request = httptest.NewRequest(http.MethodGet, "/empty", nil)
+	request = httptest.NewRequest(http.MethodGet, "/api/empty", nil)
 	request.Host = "example.com"
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -1794,7 +1794,7 @@ func TestPageResourceRendersWidgetEnvelopeAndIsolatesErrors(
 		)
 	}
 
-	request = httptest.NewRequest(http.MethodGet, "/core-content", nil)
+	request = httptest.NewRequest(http.MethodGet, "/api/core-content", nil)
 	request.Host = "example.com"
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -1869,11 +1869,22 @@ func TestResourceRootTrailingSlashAndQueryPolicy(t *testing.T) {
 		path string
 		want int
 	}{
-		{path: "/", want: http.StatusNoContent},
-		{path: "/section", want: http.StatusNoContent},
-		{path: "/section?from=query", want: http.StatusNoContent},
-		{path: "/section/", want: http.StatusNotFound},
+		{path: "/api", want: http.StatusNoContent},
+		{path: "/api/", want: http.StatusNoContent},
+		{path: "/api/section", want: http.StatusNoContent},
+		{path: "/api/section?from=query", want: http.StatusNoContent},
+		{path: "/api/section/", want: http.StatusNotFound},
 		{path: "/_cms/claimed", want: http.StatusNotFound},
+		{path: "/api/_cms/claimed", want: http.StatusNotFound},
+		{path: "/api/api/section", want: http.StatusNotFound},
+		{path: "/", want: http.StatusNotFound},
+		{path: "/section", want: http.StatusNotFound},
+		{path: "/custom", want: http.StatusNotFound},
+		{path: "/site", want: http.StatusNotFound},
+		{path: "/menu", want: http.StatusNotFound},
+		{path: "/search", want: http.StatusNotFound},
+		{path: "/forms/feedback", want: http.StatusNotFound},
+		{path: "/_cms/runtime", want: http.StatusNotFound},
 	}
 	for _, test := range tests {
 		request := httptest.NewRequest(http.MethodGet, test.path, nil)
@@ -1921,7 +1932,7 @@ func TestPlatformRuntimeMethodMismatchKeeps405AndAllow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	request := httptest.NewRequest(http.MethodPost, "/_cms/runtime", nil)
+	request := httptest.NewRequest(http.MethodPost, "/api/_cms/runtime", nil)
 	request.Host = "example.com"
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -1979,7 +1990,7 @@ func TestPublicAndProtectedModuleRoutesUseJWTActor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	request := httptest.NewRequest(http.MethodGet, "/custom", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/custom", nil)
 	request.Host = "example.com"
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -1991,7 +2002,7 @@ func TestPublicAndProtectedModuleRoutesUseJWTActor(t *testing.T) {
 		)
 	}
 
-	request = httptest.NewRequest(http.MethodGet, "/protected", nil)
+	request = httptest.NewRequest(http.MethodGet, "/api/protected", nil)
 	request.Host = "example.com"
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -2005,7 +2016,7 @@ func TestPublicAndProtectedModuleRoutesUseJWTActor(t *testing.T) {
 		)
 	}
 
-	request = httptest.NewRequest(http.MethodGet, "/protected", nil)
+	request = httptest.NewRequest(http.MethodGet, "/api/protected", nil)
 	request.Host = "example.com"
 	request.Header.Set("Authorization", "Bearer signed")
 	response = httptest.NewRecorder()
@@ -2153,7 +2164,7 @@ func TestPlatformMiddlewareCannotBypassJWTAuthentication(
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := httptest.NewRequest(http.MethodGet, "/_cms/runtime", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/_cms/runtime", nil)
 	request.Host = "example.com"
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -2231,7 +2242,7 @@ func TestJWTAuthenticationActorPrecedesPrivateSiteResolution(
 			}
 			request := httptest.NewRequest(
 				http.MethodGet,
-				"/_cms/runtime",
+				"/api/_cms/runtime",
 				nil,
 			)
 			request.Host = "example.com"
@@ -2319,8 +2330,8 @@ func TestStandardLinkResourceHandlersRedirect(t *testing.T) {
 		path     string
 		location string
 	}{
-		{path: externalPath, location: externalURL},
-		{path: shortcutPath, location: targetPath},
+		{path: "/api" + externalPath, location: externalURL},
+		{path: "/api" + shortcutPath, location: "/api" + targetPath},
 	}
 	for _, test := range tests {
 		request := httptest.NewRequest(http.MethodGet, test.path, nil)
@@ -2413,7 +2424,7 @@ func TestHTTPAccessLogsSafeStructuredMetadataAndLevels(t *testing.T) {
 
 	request := httptest.NewRequest(
 		http.MethodGet,
-		"/_cms/runtime?private=query-secret",
+		"/api/_cms/runtime?private=query-secret",
 		strings.NewReader("body-secret"),
 	)
 	request.Host = "example.com"
@@ -2466,7 +2477,7 @@ func TestHTTPAccessLogsSafeStructuredMetadataAndLevels(t *testing.T) {
 		byPath[path] = record
 	}
 
-	success := byPath["/_cms/runtime"]
+	success := byPath["/api/_cms/runtime"]
 	if success["level"] != "INFO" ||
 		success["http.request.method"] != http.MethodGet ||
 		success["http.response.status_code"] != float64(http.StatusOK) ||
@@ -2474,7 +2485,7 @@ func TestHTTPAccessLogsSafeStructuredMetadataAndLevels(t *testing.T) {
 		success["actor.user.id"] != float64(42) ||
 		success["client.address"] == "" ||
 		success["http.request.id"] == "" ||
-		success["http.route"] != "/_cms/runtime" ||
+		success["http.route"] != "/api/_cms/runtime" ||
 		success["http.server.request.duration"] == nil ||
 		success["http.request.body.size"] == nil ||
 		success["http.response.body.size"] == nil {
@@ -2570,7 +2581,7 @@ func TestPageWidgetBindingsResolveCurrentResourceAndIsolateInvalidValues(t *test
 		current.Title = values.title
 		current.Fields["headline"] = values.headline
 		repo.byPath["/bound"] = current
-		request := httptest.NewRequest(http.MethodGet, "/bound", nil)
+		request := httptest.NewRequest(http.MethodGet, "/api/bound", nil)
 		request.Host = "example.com"
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)

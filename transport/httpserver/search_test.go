@@ -83,7 +83,7 @@ func TestSearchHTTPUsesHostScopedRuntime(t *testing.T) {
 		{"FIRST.EXAMPLE.TEST.:8080", 200, 1}, {"second.example.test", 200, 2},
 		{"private.example.test", 403, 0}, {"plain.example.test", 404, 0}, {"missing.example.test", 404, 0},
 	} {
-		request, err := http.NewRequest(http.MethodGet, server.URL+"/search?q=identical&site_id=999&preview=true", nil)
+		request, err := http.NewRequest(http.MethodGet, server.URL+"/api/search?q=identical&site_id=999&preview=true", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,7 +102,7 @@ func TestSearchHTTPUsesHostScopedRuntime(t *testing.T) {
 		if test.status == 200 {
 			var page search.Page
 			err = json.NewDecoder(response.Body).Decode(&page)
-			if err != nil || len(page.Items) != 1 || page.Items[0].ID != test.id || page.Pagination.Total != 1 || page.Pagination.PerPage != 20 {
+			if err != nil || len(page.Items) != 1 || page.Items[0].ID != test.id || page.Items[0].URL != "/same" || page.Pagination.Total != 1 || page.Pagination.PerPage != 20 {
 				_ = response.Body.Close()
 				t.Fatalf("response: %#v %v", page, err)
 			}
