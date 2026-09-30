@@ -28,18 +28,18 @@ type paginationDTO struct {
 }
 
 type fieldPayload struct {
-	Code           string             `json:"code"`
-	Type           field.TypeCode     `json:"type"`
-	Label          string             `json:"label"`
-	Required       bool               `json:"required"`
-	Rules          []string           `json:"rules"`
-	Options        json.RawMessage    `json:"options,omitempty"`
-	Editor         field.EditorCode   `json:"editor,omitempty"`
-	VisibleWhen    *field.VisibleWhen `json:"visible_when,omitempty"`
-	ResultLabel    string             `json:"result_label"`
-	ShowOnSite     bool               `json:"show_on_site"`
-	ShowInResults  bool               `json:"show_in_results"`
-	ResultPosition int                `json:"result_position"`
+	Code           string                      `json:"code"`
+	Type           field.TypeCode              `json:"type"`
+	Label          string                      `json:"label"`
+	Required       bool                        `json:"required"`
+	Validators     []field.ValidatorDefinition `json:"validators"`
+	Options        json.RawMessage             `json:"options,omitempty"`
+	Editor         field.EditorCode            `json:"editor,omitempty"`
+	VisibleWhen    *field.VisibleWhen          `json:"visible_when,omitempty"`
+	ResultLabel    string                      `json:"result_label"`
+	ShowOnSite     bool                        `json:"show_on_site"`
+	ShowInResults  bool                        `json:"show_in_results"`
+	ResultPosition int                         `json:"result_position"`
 }
 
 type fieldResponse struct {
@@ -51,16 +51,17 @@ type fieldResponse struct {
 }
 
 type editorResponse struct {
-	Form           Form                    `json:"form"`
-	Fields         []fieldResponse         `json:"fields"`
-	Elements       []Element               `json:"elements"`
-	Layout         []LayoutNode            `json:"layout"`
-	Statuses       []Status                `json:"statuses"`
-	Actions        []Action                `json:"actions"`
-	FieldTypes     []field.Metadata        `json:"available_field_types"`
-	ElementTypes   []ElementTypeMetadata   `json:"available_element_types"`
-	ContainerTypes []ContainerTypeMetadata `json:"available_container_types"`
-	ActionTypes    []ActionTypeMetadata    `json:"available_action_types"`
+	Form           Form                      `json:"form"`
+	Fields         []fieldResponse           `json:"fields"`
+	Elements       []Element                 `json:"elements"`
+	Layout         []LayoutNode              `json:"layout"`
+	Statuses       []Status                  `json:"statuses"`
+	Actions        []Action                  `json:"actions"`
+	FieldTypes     []field.Metadata          `json:"available_field_types"`
+	ValidatorTypes []field.ValidatorMetadata `json:"available_validator_types"`
+	ElementTypes   []ElementTypeMetadata     `json:"available_element_types"`
+	ContainerTypes []ContainerTypeMetadata   `json:"available_container_types"`
+	ActionTypes    []ActionTypeMetadata      `json:"available_action_types"`
 }
 
 func NewManagementHTTPHandler(service *Service) (http.Handler, error) {
@@ -274,7 +275,7 @@ func (h *formsHTTP) editor(response http.ResponseWriter, request *http.Request) 
 			actionTypes = append(actionTypes, ActionTypeMetadata{Code: action.ActionType, Label: action.ActionType, Available: false})
 		}
 	}
-	writeJSON(response, http.StatusOK, editorResponse{detail.Form, fields, detail.Elements, detail.Layout, detail.Statuses, detail.Actions, h.service.AvailableFieldMetadata(), h.service.AvailableElementTypes(), AvailableContainerTypes(), actionTypes})
+	writeJSON(response, http.StatusOK, editorResponse{Form: detail.Form, Fields: fields, Elements: detail.Elements, Layout: detail.Layout, Statuses: detail.Statuses, Actions: detail.Actions, FieldTypes: h.service.AvailableFieldMetadata(), ValidatorTypes: h.service.AvailableValidatorMetadata(), ElementTypes: h.service.AvailableElementTypes(), ContainerTypes: AvailableContainerTypes(), ActionTypes: actionTypes})
 }
 
 func (h *formsHTTP) createField(response http.ResponseWriter, request *http.Request) {
@@ -710,7 +711,7 @@ func (p fieldPayload) field() (FormField, error) {
 	if err != nil {
 		return FormField{}, err
 	}
-	return FormField{Code: p.Code, Type: p.Type, Label: p.Label, Required: p.Required, Rules: append([]string(nil), p.Rules...), Options: options, Editor: p.Editor, VisibleWhen: cloneVisibleWhen(p.VisibleWhen), ResultLabel: p.ResultLabel, ShowInResults: p.ShowInResults, ShowOnSite: p.ShowOnSite, ResultPosition: p.ResultPosition}, nil
+	return FormField{Code: p.Code, Type: p.Type, Label: p.Label, Required: p.Required, Validators: field.CloneValidatorDefinitions(p.Validators), Options: options, Editor: p.Editor, VisibleWhen: cloneVisibleWhen(p.VisibleWhen), ResultLabel: p.ResultLabel, ShowInResults: p.ShowInResults, ShowOnSite: p.ShowOnSite, ResultPosition: p.ResultPosition}, nil
 }
 
 func toFieldResponse(item FormField) (fieldResponse, error) {
@@ -718,7 +719,7 @@ func toFieldResponse(item FormField) (fieldResponse, error) {
 	if err != nil {
 		return fieldResponse{}, err
 	}
-	return fieldResponse{ID: item.ID, FormID: item.FormID, fieldPayload: fieldPayload{Code: item.Code, Type: item.Type, Label: item.Label, Required: item.Required, Rules: append([]string(nil), item.Rules...), Options: options, Editor: item.Editor, VisibleWhen: cloneVisibleWhen(item.VisibleWhen), ResultLabel: item.ResultLabel, ShowInResults: item.ShowInResults, ShowOnSite: item.ShowOnSite, ResultPosition: item.ResultPosition}, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt}, nil
+	return fieldResponse{ID: item.ID, FormID: item.FormID, fieldPayload: fieldPayload{Code: item.Code, Type: item.Type, Label: item.Label, Required: item.Required, Validators: field.CloneValidatorDefinitions(item.Validators), Options: options, Editor: item.Editor, VisibleWhen: cloneVisibleWhen(item.VisibleWhen), ResultLabel: item.ResultLabel, ShowInResults: item.ShowInResults, ShowOnSite: item.ShowOnSite, ResultPosition: item.ResultPosition}, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt}, nil
 }
 
 func pageQuery(request *http.Request) (PageQuery, error) {
@@ -952,7 +953,14 @@ func clientAddress(request *http.Request) string {
 
 func writePublicError(response http.ResponseWriter, err error) {
 	var fields FieldValidationErrors
+	var validators field.ValidationErrors
 	switch {
+	case errors.As(err, &validators):
+		grouped := make(map[string][]field.ValidationError)
+		for _, item := range validators {
+			grouped[item.Key] = append(grouped[item.Key], item)
+		}
+		writeJSON(response, http.StatusUnprocessableEntity, map[string]any{"error": "validation_failed", "fields": grouped})
 	case errors.As(err, &fields):
 		writeJSON(response, http.StatusUnprocessableEntity, map[string]any{"error": "validation_failed", "fields": fields})
 	case errors.Is(err, ErrNotFound):

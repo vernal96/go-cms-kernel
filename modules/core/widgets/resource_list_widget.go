@@ -12,6 +12,7 @@ import (
 
 	"github.com/vernal96/go-cms-kernel/cache"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
+	"github.com/vernal96/go-cms-kernel/modules/core/field/validation"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
@@ -75,9 +76,9 @@ func (w resourceListWidget) Definition() widget.Definition {
 			{Key: "resources", Type: field.TypeJSON, Label: "Ресурсы", Editor: "resource-multi-picker"},
 			{Key: "exclude", Type: field.TypeJSON, Label: "Исключить ресурсы", Editor: "resource-multi-picker"},
 			{Key: "resource_types", Type: field.TypeSelect, Label: "Типы ресурсов", Options: field.SelectOptions{Choices: w.types, Multiple: true}, Editor: "resource-type-picker"},
-			{Key: "limit", Type: field.TypeInteger, Label: "Лимит", Required: &trueValue, Rules: []string{"min=1", "max=100"}},
+			{Key: "limit", Type: field.TypeInteger, Label: "Лимит", Required: &trueValue, Validators: []field.ValidatorDefinition{validation.Min(1), validation.Max(100)}},
 			{Key: "pagination_enabled", Type: field.TypeCheckbox, Label: "Пагинация"},
-			{Key: "per_page", Type: field.TypeInteger, Label: "На странице", Rules: []string{"min=1", "max=100"}, VisibleWhen: &field.VisibleWhen{Field: "pagination_enabled", Value: true}},
+			{Key: "per_page", Type: field.TypeInteger, Label: "На странице", Validators: []field.ValidatorDefinition{validation.Min(1), validation.Max(100)}, VisibleWhen: &field.VisibleWhen{Field: "pagination_enabled", Value: true}},
 			{Key: "fields", Type: field.TypeSelect, Label: "Поля", Options: field.SelectOptions{Choices: w.fields, Multiple: true}, Editor: "resource-field-picker"},
 			{Key: "exclude_current", Type: field.TypeCheckbox, Label: "Исключить текущий ресурс"},
 			{Key: "filters", Type: field.TypeJSON, Label: "Фильтры", Editor: "filter-builder"},

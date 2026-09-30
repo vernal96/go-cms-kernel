@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Replace string field rules with typed, module-contributed validators compiled with site schemas. Add core validators, structured errors and admin metadata.
+- Move list cardinality and phone pattern constraints from field options to validators. Forms development migrations and clients using `rules` must be updated; no compatibility alias is retained.
+
 ## 0.3.0
 
 - Add `security.Authorizer.Allowed` for ordered, deduplicated batch permission checks. The PostgreSQL access adapter reads authorization facts in one statement; the access service retains permission policy and validates the catalog. Admin session and capability sets use batch checks.

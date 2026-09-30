@@ -57,6 +57,23 @@ type EditorConfig struct {
 	UploadPath    string
 }
 
+func (s *Service) AvailableValidatorMetadata() []field.ValidatorMetadata {
+	catalog, ok := s.renderer.fields.(interface {
+		field.ValidatorResolver
+		ValidatorTypes() []field.ValidatorCode
+	})
+	if !ok {
+		return []field.ValidatorMetadata{}
+	}
+	result := make([]field.ValidatorMetadata, 0)
+	for _, code := range catalog.ValidatorTypes() {
+		if item, exists := catalog.ValidatorType(code); exists {
+			result = append(result, field.DescribeValidatorType(item))
+		}
+	}
+	return result
+}
+
 func (s *Service) EditorConfig() EditorConfig {
 	return EditorConfig{UploadStorage: s.uploadStorage, UploadPath: s.uploadPath}
 }

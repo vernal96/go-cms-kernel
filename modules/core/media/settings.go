@@ -118,7 +118,7 @@ func (s *SettingsService) state(item Media, code string) (SettingsState, error) 
 	descriptors := append([]field.Descriptor{}, schema.fields...)
 	for i := range descriptors {
 		descriptors[i].Options = append([]byte(nil), descriptors[i].Options...)
-		descriptors[i].Rules = append([]string{}, descriptors[i].Rules...)
+		descriptors[i].Validators = field.CloneValidatorDefinitions(descriptors[i].Validators)
 		if descriptors[i].VisibleWhen != nil {
 			v := *descriptors[i].VisibleWhen
 			v.Value = cloneValue(v.Value)
@@ -159,7 +159,7 @@ func (s *SettingsService) Save(ctx context.Context, actor security.Actor, id ID,
 			return SettingsState{}, err
 		}
 		if !field.FileMatches(ref.Options, item.Storage, item.MIMEType) {
-			return SettingsState{}, field.ValidationErrors{{Key: ref.Key, Rule: "file"}}
+			return SettingsState{}, field.ValidationErrors{{Key: ref.Key, Code: "file"}}
 		}
 	}
 	item, err := s.writer.UpdateSettings(ctx, actor.AuditUserID(), id, normalized, expected)

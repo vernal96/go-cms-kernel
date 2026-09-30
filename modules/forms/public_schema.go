@@ -25,7 +25,7 @@ func (s *Service) publicSchema(ctx context.Context, detail FormDetail) (PublicFo
 		if optionErr != nil {
 			return PublicFormSchema{}, optionErr
 		}
-		fields[index] = publicField{Code: item.Code, Type: item.Type, Label: item.Label, Required: item.Required, Rules: append([]string(nil), item.Rules...), Options: options, Editor: item.Editor, VisibleWhen: cloneVisibleWhen(item.VisibleWhen)}
+		fields[index] = publicField{Code: item.Code, Type: item.Type, Label: item.Label, Required: item.Required, Validators: field.CloneValidatorDefinitions(item.Validators), Options: options, Editor: item.Editor, VisibleWhen: cloneVisibleWhen(item.VisibleWhen)}
 		if item.Type == FieldTypeCaptcha {
 			fields[index].Captcha, err = s.CaptchaPublicConfig(ctx, item)
 			if err != nil {
@@ -81,15 +81,15 @@ func (s *Service) publicSchema(ctx context.Context, detail FormDetail) (PublicFo
 }
 
 type publicField struct {
-	Code        string             `json:"code"`
-	Type        field.TypeCode     `json:"type"`
-	Label       string             `json:"label"`
-	Required    bool               `json:"required"`
-	Rules       []string           `json:"rules"`
-	Options     json.RawMessage    `json:"options,omitempty"`
-	Editor      field.EditorCode   `json:"editor,omitempty"`
-	VisibleWhen *field.VisibleWhen `json:"visible_when,omitempty"`
-	Captcha     map[string]any     `json:"captcha,omitempty"`
+	Code        string                      `json:"code"`
+	Type        field.TypeCode              `json:"type"`
+	Label       string                      `json:"label"`
+	Required    bool                        `json:"required"`
+	Validators  []field.ValidatorDefinition `json:"validators"`
+	Options     json.RawMessage             `json:"options,omitempty"`
+	Editor      field.EditorCode            `json:"editor,omitempty"`
+	VisibleWhen *field.VisibleWhen          `json:"visible_when,omitempty"`
+	Captcha     map[string]any              `json:"captcha,omitempty"`
 }
 type publicElement struct {
 	Code   string          `json:"code"`

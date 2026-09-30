@@ -72,7 +72,7 @@ func TestElementRegistrationIsScopedSealedAndExposedByHTTP(t *testing.T) {
 	}
 	for _, item := range metadata.FieldTypes {
 		if item.Code == field.TypeInteger {
-			if item.Editor != "int" || len(item.Options) != 4 || item.Options[0].Key != "step" {
+			if item.Editor != "int" || len(item.Options) != 2 || item.Options[0].Key != "step" {
 				t.Fatalf("integer metadata=%+v", item)
 			}
 			return

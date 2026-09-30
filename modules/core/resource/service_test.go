@@ -57,7 +57,8 @@ func (testModule) Code() kernel.ModuleCode {
 
 func (testModule) Registry() kernel.ModuleRegistry {
 	return kernel.ModuleRegistry{
-		FieldTypes: field.StandardTypes(),
+		FieldTypes:     field.StandardTypes(),
+		ValidatorTypes: field.StandardValidatorTypes(),
 		ResourceTypes: append(
 			resourcetype.StandardTypes(),
 			noPathType{},
@@ -971,11 +972,11 @@ func newTestService(
 						Sidebar: []template.Item{template.ResourceWidgets{}},
 					},
 					Fields: []field.Definition{{
-						Key:      "headline",
-						Type:     field.TypeString,
-						Label:    "Headline",
-						Required: &required,
-						Rules:    []string{"min=2"},
+						Key:        "headline",
+						Type:       field.TypeString,
+						Label:      "Headline",
+						Required:   &required,
+						Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 2}}},
 					}, {
 						Key: "tags", Type: field.TypeSelect, Label: "Tags",
 						Options: field.SelectOptions{Multiple: true, Choices: []field.Choice{{Value: "red", Label: "Red"}}},

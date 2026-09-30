@@ -614,3 +614,20 @@ func (s *Service) AvailableFieldMetadata() []field.Metadata {
 	}
 	return result
 }
+
+func (s *Service) AvailableValidatorMetadata() []field.ValidatorMetadata {
+	catalog, ok := s.fieldTypes.(interface {
+		field.ValidatorResolver
+		ValidatorTypes() []field.ValidatorCode
+	})
+	if !ok {
+		return []field.ValidatorMetadata{}
+	}
+	result := make([]field.ValidatorMetadata, 0)
+	for _, code := range catalog.ValidatorTypes() {
+		if item, exists := catalog.ValidatorType(code); exists {
+			result = append(result, field.DescribeValidatorType(item))
+		}
+	}
+	return result
+}

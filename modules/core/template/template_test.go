@@ -23,7 +23,6 @@ type transientValue struct{}
 func (transientValue) Normalize(value any) (any, error) { return value, nil }
 func (transientValue) Empty(value any) bool             { return value == nil }
 func (transientValue) Validate(any) error               { return nil }
-func (transientValue) Rules() []string                  { return nil }
 func (transientValue) Example() any                     { return "temporary" }
 
 func (r testResolver) FieldType(code field.TypeCode) (field.Type, bool) {

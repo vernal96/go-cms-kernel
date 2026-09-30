@@ -178,4 +178,13 @@ func TestPublicAndManagementErrorsUseSafeDistinctMappings(t *testing.T) {
 	if json.Unmarshal(response.Body.Bytes(), &validation) != nil || response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("validation response = %d %s", response.Code, response.Body.String())
 	}
+	response = httptest.NewRecorder()
+	writePublicError(response, field.ValidationErrors{{Key: "items[2].title", Code: "max_length", Params: map[string]any{"value": 100}}})
+	var structured struct {
+		Fields map[string][]field.ValidationError `json:"fields"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &structured); err != nil || response.Code != http.StatusUnprocessableEntity || len(structured.Fields["items[2].title"]) != 1 || structured.Fields["items[2].title"][0].Params["value"] != float64(100) {
+		t.Fatalf("structured validation response = %d %s: %v", response.Code, response.Body.String(), err)
+	}
+
 }

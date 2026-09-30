@@ -19,12 +19,12 @@ import (
 )
 
 type variableDTO struct {
-	Key      string          `json:"key"`
-	Type     field.TypeCode  `json:"type"`
-	Label    string          `json:"label"`
-	Required bool            `json:"required"`
-	Rules    []string        `json:"rules"`
-	Options  json.RawMessage `json:"options,omitempty"`
+	Key        string                      `json:"key"`
+	Type       field.TypeCode              `json:"type"`
+	Label      string                      `json:"label"`
+	Required   bool                        `json:"required"`
+	Validators []field.ValidatorDefinition `json:"validators"`
+	Options    json.RawMessage             `json:"options,omitempty"`
 }
 
 type templatePayload struct {
@@ -63,6 +63,7 @@ func NewHTTPHandler(service *Service) (http.Handler, error) {
 	router := chi.NewRouter()
 	router.Get("/templates", handler.listTemplates)
 	router.Get("/variables", handler.siteVariables)
+	router.Get("/validator-types", handler.validatorTypes)
 	router.Post("/templates", handler.createTemplate)
 	router.Get("/templates/{templateID}", handler.getTemplate)
 	router.Patch("/templates/{templateID}", handler.updateTemplate)
@@ -75,6 +76,22 @@ func NewHTTPHandler(service *Service) (http.Handler, error) {
 	router.Get("/messages/{messageID}", handler.getMessage)
 	router.Delete("/messages/{messageID}", handler.deleteMessage)
 	return httptransport.RequireAuthenticated(router), nil
+}
+
+func (h *mailHTTP) validatorTypes(response http.ResponseWriter, request *http.Request) {
+	actor, service, ok := h.request(response, request)
+	if !ok {
+		return
+	}
+	if err := service.authorizer.Check(request.Context(), actor, TemplateReadPermission); err != nil {
+		if createErr := service.authorizer.Check(request.Context(), actor, TemplateCreatePermission); createErr != nil {
+			writeMailError(response, err)
+			return
+		}
+	}
+	writeJSON(response, http.StatusOK, struct {
+		Items []field.ValidatorMetadata `json:"items"`
+	}{service.AvailableValidatorMetadata()})
 }
 
 func (h *mailHTTP) setTemplateEnabled(response http.ResponseWriter, request *http.Request) {
@@ -425,7 +442,7 @@ func (v variableDTO) definition() (field.Definition, error) {
 		return field.Definition{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	required := v.Required
-	return field.Definition{Key: v.Key, Type: v.Type, Label: v.Label, Required: &required, Rules: append([]string{}, v.Rules...), Options: options}, nil
+	return field.Definition{Key: v.Key, Type: v.Type, Label: v.Label, Required: &required, Validators: field.CloneValidatorDefinitions(v.Validators), Options: options}, nil
 }
 
 func toTemplateResponse(item Template) (templateResponse, error) {
@@ -445,7 +462,7 @@ func toVariableDTO(definition field.Definition) (variableDTO, error) {
 	if err != nil {
 		return variableDTO{}, err
 	}
-	return variableDTO{Key: definition.Key, Type: definition.Type, Label: definition.Label, Required: definition.Required != nil && *definition.Required, Rules: append([]string{}, definition.Rules...), Options: options}, nil
+	return variableDTO{Key: definition.Key, Type: definition.Type, Label: definition.Label, Required: definition.Required != nil && *definition.Required, Validators: field.CloneValidatorDefinitions(definition.Validators), Options: options}, nil
 }
 
 func pageQuery(request *http.Request) (PageQuery, error) {

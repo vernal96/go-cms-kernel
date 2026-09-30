@@ -1,9 +1,9 @@
 package admin
 
 type FieldValidationError struct {
-	Key   string `json:"key"`
-	Rule  string `json:"rule"`
-	Param string `json:"param"`
+	Key    string         `json:"key"`
+	Code   string         `json:"code"`
+	Params map[string]any `json:"params,omitempty"`
 }
 
 type ValidationError struct {

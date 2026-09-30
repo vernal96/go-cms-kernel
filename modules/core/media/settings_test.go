@@ -41,7 +41,7 @@ func (a settingsAuthorizer) Check(_ context.Context, _ security.Actor, code perm
 func TestSettingsValidationPermissionsAndIsolation(t *testing.T) {
 	optional := false
 	definitions := []SettingsDefinition{{Code: "image", Fields: []field.Definition{
-		{Key: "alt", Type: field.TypeString, Label: "Alt", Rules: []string{"max=10"}},
+		{Key: "alt", Type: field.TypeString, Label: "Alt", Validators: []field.ValidatorDefinition{{Type: "max_length", Options: map[string]any{"value": 10}}}},
 		{Key: "count", Type: field.TypeInteger, Label: "Count"},
 		{Key: "decorative", Type: field.TypeCheckbox, Label: "Decorative", Required: &optional},
 		{Key: "attachment", Type: field.TypeFile, Label: "Attachment", Required: &optional, Options: field.FileOptions{MIMETypes: []string{"image/*"}}},

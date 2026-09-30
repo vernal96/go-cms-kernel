@@ -7,23 +7,18 @@ import (
 )
 
 type RepeaterOptions struct {
-	Fields   []Definition `json:"fields"`
-	MinItems int          `json:"min_items,omitempty"`
-	MaxItems int          `json:"max_items,omitempty"`
+	Fields []Definition `json:"fields"`
 }
 
 // JSON configuration restores ordinary typed nested options through the same
 // decoder used by all field definition transports. Go declarations stay typed.
 func (o *RepeaterOptions) UnmarshalJSON(raw []byte) error {
 	decoded, err := DecodeOptions[struct {
-		Fields   []Descriptor `json:"fields"`
-		MinItems int          `json:"min_items,omitempty"`
-		MaxItems int          `json:"max_items,omitempty"`
+		Fields []Descriptor `json:"fields"`
 	}](json.RawMessage(raw))
 	if err != nil {
 		return err
 	}
-	o.MinItems, o.MaxItems = decoded.MinItems, decoded.MaxItems
 	o.Fields = make([]Definition, len(decoded.Fields))
 	for i, desc := range decoded.Fields {
 		options, err := DecodeOptionsJSON(desc.Type, desc.Options)
@@ -31,7 +26,7 @@ func (o *RepeaterOptions) UnmarshalJSON(raw []byte) error {
 			return fmt.Errorf("field %q options: %w", desc.Key, err)
 		}
 		required := desc.Required
-		o.Fields[i] = Definition{Key: desc.Key, Type: desc.Type, Label: desc.Label, Required: &required, Rules: desc.Rules, Options: options, Editor: desc.Editor, VisibleWhen: desc.VisibleWhen}
+		o.Fields[i] = Definition{Key: desc.Key, Type: desc.Type, Label: desc.Label, Required: &required, Validators: desc.Validators, Options: options, Editor: desc.Editor, VisibleWhen: desc.VisibleWhen}
 	}
 	return nil
 }
@@ -47,7 +42,7 @@ func (o RepeaterOptions) MarshalJSON() ([]byte, error) {
 		}
 		fields[i] = definitionDescriptor(def, raw, def.Editor)
 	}
-	return json.Marshal(repeaterPresentation{fields, o.MinItems, o.MaxItems})
+	return json.Marshal(repeaterPresentation{Fields: fields})
 }
 
 type repeaterType struct{}
@@ -73,9 +68,6 @@ func (repeaterType) Compile(ctx CompileContext, options any) (ValueType, error) 
 			return nil, err
 		}
 	}
-	if config.MinItems < 0 || config.MaxItems < 0 || (config.MaxItems > 0 && config.MaxItems < config.MinItems) {
-		return nil, fmt.Errorf("invalid repeater item limits")
-	}
 	if len(config.Fields) == 0 {
 		return nil, fmt.Errorf("repeater fields are empty")
 	}
@@ -83,19 +75,17 @@ func (repeaterType) Compile(ctx CompileContext, options any) (ValueType, error) 
 	if err != nil {
 		return nil, err
 	}
-	return repeaterValue{schema: schema, types: ctx.Types, min: config.MinItems, max: config.MaxItems}, nil
+	return repeaterValue{schema: schema, types: ctx.Types}, nil
 }
 
 type repeaterValue struct {
-	schema   *Schema
-	types    TypeResolver
-	min, max int
+	schema *Schema
+	types  TypeResolver
 }
 
 func (repeaterValue) StorageKind() StorageKind { return StorageJSON }
 func (repeaterValue) Multiple() bool           { return false }
 func (repeaterValue) DefaultValue() any        { return []any{} }
-func (repeaterValue) Rules() []string          { return nil }
 func (repeaterValue) Example() any             { return []any{} }
 func (repeaterValue) Empty(value any) bool     { return len(value.([]any)) == 0 }
 func (repeaterValue) Validate(any) error       { return nil }
@@ -112,19 +102,13 @@ func (v repeaterValue) Normalize(value any) (any, error) {
 	default:
 		return nil, fmt.Errorf("expected array of objects, got %T", value)
 	}
-	if len(rows) < v.min {
-		return nil, RuleError{Rule: "min", Param: strconv.Itoa(v.min)}
-	}
-	if v.max > 0 && len(rows) > v.max {
-		return nil, RuleError{Rule: "max", Param: strconv.Itoa(v.max)}
-	}
 	result := make([]any, len(rows))
 	failures := ValidationErrors{}
 	for i, value := range rows {
 		prefix := fmt.Sprintf("[%d]", i)
 		row, ok := value.(map[string]any)
 		if !ok || row == nil {
-			failures = append(failures, ValidationError{Key: prefix, Rule: "type"})
+			failures = append(failures, ValidationError{Key: prefix, Code: "type"})
 			continue
 		}
 		normalized, err := v.schema.Validate(row)
@@ -160,9 +144,7 @@ func (v repeaterValue) References(value any) ([]Reference, error) {
 }
 
 type repeaterPresentation struct {
-	Fields   []Descriptor `json:"fields"`
-	MinItems int          `json:"min_items,omitempty"`
-	MaxItems int          `json:"max_items,omitempty"`
+	Fields []Descriptor `json:"fields"`
 }
 
 func (v repeaterValue) DescribeOptions() (any, error) {
@@ -170,5 +152,5 @@ func (v repeaterValue) DescribeOptions() (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return repeaterPresentation{fields, v.min, v.max}, nil
+	return repeaterPresentation{Fields: fields}, nil
 }

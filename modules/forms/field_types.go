@@ -43,7 +43,6 @@ func (captchaValue) Normalize(value any) (any, error) {
 }
 func (captchaValue) Empty(value any) bool { valueString, _ := value.(string); return valueString == "" }
 func (captchaValue) Validate(any) error   { return nil }
-func (captchaValue) Rules() []string      { return nil }
 func (captchaValue) Example() any         { return "token" }
 
 type consentFieldType struct{}
@@ -69,7 +68,6 @@ func (consentValue) Normalize(value any) (any, error) {
 }
 func (consentValue) Empty(value any) bool { result, _ := value.(bool); return !result }
 func (consentValue) Validate(any) error   { return nil }
-func (consentValue) Rules() []string      { return nil }
 func (consentValue) Example() any         { return true }
 
 type uploadFieldType struct{}
@@ -89,7 +87,6 @@ func (uploadValue) Normalize(any) (any, error) {
 }
 func (uploadValue) Empty(any) bool     { return true }
 func (uploadValue) Validate(any) error { return nil }
-func (uploadValue) Rules() []string    { return nil }
 func (uploadValue) Example() any       { return "upload" }
 
 func captchaOptions(value any) (CaptchaOptions, error) {

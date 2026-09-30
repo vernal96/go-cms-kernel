@@ -12,6 +12,10 @@ import (
 
 type typeResolver map[field.TypeCode]field.Type
 
+func (r typeResolver) ValidatorType(code field.ValidatorCode) (field.ValidatorType, bool) {
+	return field.StandardValidatorTypes().ValidatorType(code)
+}
+
 func (r typeResolver) FieldType(
 	code field.TypeCode,
 ) (field.Type, bool) {
@@ -39,11 +43,11 @@ func TestSchemaNormalizesStandardTypes(t *testing.T) {
 	schema, err := field.Compile(
 		[]field.Definition{
 			{
-				Key:      "title",
-				Type:     field.TypeString,
-				Label:    "Title",
-				Required: boolPointer(true),
-				Rules:    []string{"min=2"},
+				Key:        "title",
+				Type:       field.TypeString,
+				Label:      "Title",
+				Required:   boolPointer(true),
+				Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 2}}},
 			},
 			{
 				Key:   "count",
@@ -328,7 +332,7 @@ func TestSchemaRequiredAndStrictValidation(t *testing.T) {
 			}
 
 			for _, item := range validationErrors {
-				if item.Key == testCase.key && item.Rule == testCase.rule {
+				if item.Key == testCase.key && string(item.Code) == testCase.rule {
 					return
 				}
 			}
@@ -395,7 +399,7 @@ func assertValidationError(t *testing.T, err error, key, rule string) {
 		t.Fatalf("validation error = %T %v", err, err)
 	}
 	for _, item := range validationErrors {
-		if item.Key == key && item.Rule == rule {
+		if item.Key == key && string(item.Code) == rule {
 			return
 		}
 	}
@@ -415,12 +419,10 @@ func TestSchemaPhonePatternAndStepMetadata(t *testing.T) {
 				},
 			},
 			{
-				Key:   "phone",
-				Type:  field.TypePhone,
-				Label: "Phone",
-				Options: field.PhoneOptions{
-					Pattern: `^07\d{9}$`,
-				},
+				Key:        "phone",
+				Type:       field.TypePhone,
+				Label:      "Phone",
+				Validators: []field.ValidatorDefinition{{Type: "regex", Options: map[string]any{"value": `^\+7\d{10}$`}}},
 			},
 		},
 		standardResolver(),
@@ -431,16 +433,16 @@ func TestSchemaPhonePatternAndStepMetadata(t *testing.T) {
 
 	if _, err := schema.Validate(map[string]any{
 		"amount": 0.3,
-		"phone":  "07123456789",
+		"phone":  "+71234567890",
 	}); err != nil {
 		t.Fatalf("step was used for value validation: %v", err)
 	}
 
-	_, err = schema.Validate(map[string]any{"phone": "+79991234567"})
+	_, err = schema.Validate(map[string]any{"phone": "+15551234567"})
 	var validationErrors field.ValidationErrors
 	if !errors.As(err, &validationErrors) ||
 		len(validationErrors) != 1 ||
-		validationErrors[0].Rule != "pattern" {
+		validationErrors[0].Code != "regex" {
 		t.Fatalf("custom phone pattern error = %#v, %v", validationErrors, err)
 	}
 }
@@ -462,17 +464,17 @@ func TestCompileRejectsInvalidDefinitions(t *testing.T) {
 			name: "required rule",
 			definition: field.Definition{
 				Key: "value", Type: field.TypeString, Label: "Value",
-				Rules: []string{"required"},
+				Validators: []field.ValidatorDefinition{{Type: "required"}},
 			},
-			contains: "managed by Required",
+			contains: "belongs to the field schema",
 		},
 		{
 			name: "unknown rule",
 			definition: field.Definition{
 				Key: "value", Type: field.TypeString, Label: "Value",
-				Rules: []string{"not_registered"},
+				Validators: []field.ValidatorDefinition{{Type: "not_registered"}},
 			},
-			contains: "invalid validation rules",
+			contains: "unknown validator",
 		},
 		{
 			name: "invalid step",
@@ -488,9 +490,9 @@ func TestCompileRejectsInvalidDefinitions(t *testing.T) {
 			name: "invalid pattern",
 			definition: field.Definition{
 				Key: "value", Type: field.TypePhone, Label: "Value",
-				Options: field.PhoneOptions{Pattern: `(`},
+				Validators: []field.ValidatorDefinition{{Type: "regex", Options: map[string]any{"value": `(`}}},
 			},
-			contains: "compile phone pattern",
+			contains: "error parsing regexp",
 		},
 		{
 			name: "duplicate choice",
@@ -536,11 +538,11 @@ func TestSchemaDefinitionsAreCloned(t *testing.T) {
 	choices := []field.Choice{{Value: "one", Label: "One"}}
 	definitions := []field.Definition{
 		{
-			Key:      "value",
-			Type:     field.TypeSelect,
-			Label:    "Value",
-			Required: &required,
-			Rules:    []string{"min=1"},
+			Key:        "value",
+			Type:       field.TypeSelect,
+			Label:      "Value",
+			Required:   &required,
+			Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 1}}},
 			Options: field.SelectOptions{
 				Choices: choices,
 			},
@@ -552,18 +554,18 @@ func TestSchemaDefinitionsAreCloned(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	definitions[0].Rules[0] = "max=0"
+	definitions[0].Validators[0].Type = "max_length"
 	definitions[0].Required = boolPointer(false)
 	choices[0].Value = "changed"
 
 	first := schema.Definitions()
-	first[0].Rules[0] = "changed"
+	first[0].Validators[0].Type = "changed"
 	firstOptions := first[0].Options.(field.SelectOptions)
 	firstOptions.Choices[0].Value = "changed"
 
 	second := schema.Definitions()
 	secondOptions := second[0].Options.(field.SelectOptions)
-	if second[0].Rules[0] != "min=1" ||
+	if second[0].Validators[0].Type != "min_length" ||
 		second[0].Required == nil ||
 		!*second[0].Required ||
 		secondOptions.Choices[0].Value != "one" {

@@ -18,26 +18,28 @@ func textDefinition() field.Definition {
 }
 func TestRepeaterCompilation(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		options any
-		valid   bool
+		name       string
+		options    any
+		validators []field.ValidatorDefinition
+		valid      bool
 	}{
-		{"value", field.RepeaterOptions{Fields: []field.Definition{textDefinition()}, MaxItems: 10}, true},
-		{"pointer", &field.RepeaterOptions{Fields: []field.Definition{textDefinition()}, MinItems: 1}, true},
-		{"json", json.RawMessage(`{"fields":[{"key":"n","type":"int","label":"Number","options":{"step":2}}],"max_items":10}`), true},
-		{"negative min", field.RepeaterOptions{Fields: []field.Definition{textDefinition()}, MinItems: -1}, false},
-		{"negative max", field.RepeaterOptions{Fields: []field.Definition{textDefinition()}, MaxItems: -1}, false},
-		{"reversed limits", field.RepeaterOptions{Fields: []field.Definition{textDefinition()}, MinItems: 2, MaxItems: 1}, false},
-		{"empty", field.RepeaterOptions{}, false},
-		{"nil", nil, false},
-		{"duplicate", field.RepeaterOptions{Fields: []field.Definition{textDefinition(), textDefinition()}}, false},
-		{"unknown", field.RepeaterOptions{Fields: []field.Definition{{Key: "x", Type: "missing", Label: "X"}}}, false},
-		{"nested", field.RepeaterOptions{Fields: []field.Definition{repeater(textDefinition())}}, false},
-		{"unknown option", json.RawMessage(`{"fields":[],"surprise":1}`), false},
+		{"value", field.RepeaterOptions{Fields: []field.Definition{textDefinition()}}, nil, true},
+		{"pointer", &field.RepeaterOptions{Fields: []field.Definition{textDefinition()}}, []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": 1}}}, true},
+		{"json", json.RawMessage(`{"fields":[{"key":"n","type":"int","label":"Number","options":{"step":2}}]}`), nil, true},
+		{"negative min", field.RepeaterOptions{Fields: []field.Definition{textDefinition()}}, []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": -1}}}, false},
+		{"negative max", field.RepeaterOptions{Fields: []field.Definition{textDefinition()}}, []field.ValidatorDefinition{{Type: "max_items", Options: map[string]any{"value": -1}}}, false},
+		{"reversed limits", field.RepeaterOptions{Fields: []field.Definition{textDefinition()}}, []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": 2}}, {Type: "max_items", Options: map[string]any{"value": 1}}}, false},
+		{"empty", field.RepeaterOptions{}, nil, false},
+		{"nil", nil, nil, false},
+		{"duplicate", field.RepeaterOptions{Fields: []field.Definition{textDefinition(), textDefinition()}}, nil, false},
+		{"unknown", field.RepeaterOptions{Fields: []field.Definition{{Key: "x", Type: "missing", Label: "X"}}}, nil, false},
+		{"nested", field.RepeaterOptions{Fields: []field.Definition{repeater(textDefinition())}}, nil, false},
+		{"unknown option", json.RawMessage(`{"fields":[],"surprise":1}`), nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			def := repeater()
 			def.Options = tc.options
+			def.Validators = tc.validators
 			_, err := field.CompilePersistent([]field.Definition{def}, field.StandardTypes())
 			if (err == nil) != tc.valid {
 				t.Fatalf("compile: %v", err)
@@ -49,9 +51,9 @@ func TestRepeaterNormalizeValidateAndStorage(t *testing.T) {
 	required := true
 	title := textDefinition()
 	title.Required = &required
-	title.Rules = []string{"min=2"}
+	title.Validators = []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 2}}}
 	def := repeater(title, field.Definition{Key: "count", Type: field.TypeInteger, Label: "Count"})
-	def.Options = field.RepeaterOptions{Fields: def.Options.(field.RepeaterOptions).Fields, MinItems: 1, MaxItems: 2}
+	def.Validators = []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": 1}}, {Type: "max_items", Options: map[string]any{"value": 2}}}
 	schema, err := field.CompilePersistent([]field.Definition{def}, field.StandardTypes())
 	if err != nil {
 		t.Fatal(err)
@@ -88,15 +90,15 @@ func TestRepeaterNormalizeValidateAndStorage(t *testing.T) {
 		{"null row", []any{nil}, "slides[0]", "type"},
 		{"required", []any{map[string]any{}}, "slides[0].title", "required"},
 		{"scalar", []any{map[string]any{"title": "OK", "count": "bad"}}, "slides[0].count", "type"},
-		{"rule", []any{map[string]any{"title": "x"}}, "slides[0].title", "min"},
+		{"rule", []any{map[string]any{"title": "x"}}, "slides[0].title", "min_length"},
 		{"unknown key", []any{map[string]any{"title": "OK", "x": 1}}, "slides[0].x", "defined"},
-		{"minimum", []any{}, "slides", "min"},
-		{"maximum", []any{1, 2, 3}, "slides", "max"},
+		{"minimum", []any{}, "slides", "min_items"},
+		{"maximum", []any{map[string]any{"title": "one"}, map[string]any{"title": "two"}, map[string]any{"title": "three"}}, "slides", "max_items"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := schema.Validate(map[string]any{"slides": tc.value})
 			var failures field.ValidationErrors
-			if !errors.As(err, &failures) || len(failures) == 0 || failures[0].Key != tc.key || failures[0].Rule != tc.rule {
+			if !errors.As(err, &failures) || len(failures) == 0 || failures[0].Key != tc.key || string(failures[0].Code) != tc.rule {
 				t.Fatalf("errors=%#v (%v)", failures, err)
 			}
 		})

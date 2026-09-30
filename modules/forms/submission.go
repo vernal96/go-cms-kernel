@@ -134,9 +134,6 @@ func (s *Service) Submit(ctx context.Context, actor security.Actor, input Submit
 	}
 	normalized, err := schema.Validate(ordinaryValues)
 	if err != nil {
-		if validation := fieldValidationErrors(err); validation != nil {
-			return ResultDetail{}, validation
-		}
 		return ResultDetail{}, err
 	}
 

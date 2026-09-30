@@ -244,6 +244,7 @@ func (emptyDatabaseResolver) ModuleDatabase(
 type registryModule struct {
 	code               kernel.ModuleCode
 	fieldTypes         []field.Type
+	validatorTypes     []field.ValidatorType
 	resourceTypes      []resourcetype.Type
 	permissionEntities []permission.Entity
 	expectType         field.TypeCode
@@ -257,7 +258,8 @@ func (m registryModule) Code() kernel.ModuleCode {
 
 func (m registryModule) Registry() kernel.ModuleRegistry {
 	return kernel.ModuleRegistry{
-		FieldTypes: append([]field.Type(nil), m.fieldTypes...),
+		FieldTypes:     append([]field.Type(nil), m.fieldTypes...),
+		ValidatorTypes: append([]field.ValidatorType(nil), m.validatorTypes...),
 		ResourceTypes: append(
 			[]resourcetype.Type(nil),
 			m.resourceTypes...,
@@ -1043,8 +1045,8 @@ func TestProfileRuntimeCollectsFieldTypesBeforeModuleBuild(t *testing.T) {
 		t.Fatalf("custom field validation = %#v, %v", values, err)
 	}
 
-	profile.Params[0].Rules = []string{"max=1"}
-	if len(runtime.Profile().Params[0].Rules) != 0 {
+	profile.Params[0].Validators = []field.ValidatorDefinition{{Type: "max_length", Options: map[string]any{"value": 1}}}
+	if len(runtime.Profile().Params[0].Validators) != 0 {
 		t.Fatal("runtime profile params share caller memory")
 	}
 }
@@ -1577,6 +1579,7 @@ func TestProfileRuntimeCompilesAndClonesTemplates(t *testing.T) {
 					field.StandardTypes(),
 					customFieldType{code: "custom"},
 				),
+				validatorTypes: field.StandardValidatorTypes(),
 			},
 		}},
 		Templates: []template.Definition{{
@@ -1584,11 +1587,11 @@ func TestProfileRuntimeCompilesAndClonesTemplates(t *testing.T) {
 			Label: "Article",
 			Fields: []field.Definition{
 				{
-					Key:      "headline",
-					Type:     field.TypeString,
-					Label:    "Headline",
-					Required: &required,
-					Rules:    []string{"min=2"},
+					Key:        "headline",
+					Type:       field.TypeString,
+					Label:      "Headline",
+					Required:   &required,
+					Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 2}}},
 				},
 				{
 					Key:   "custom_value",
@@ -1631,18 +1634,18 @@ func TestProfileRuntimeCompilesAndClonesTemplates(t *testing.T) {
 	}
 
 	profile.Templates[0].Label = "Changed"
-	profile.Templates[0].Fields[0].Rules[0] = "max=1"
+	profile.Templates[0].Fields[0].Validators[0].Type = "max_length"
 	options := profile.Templates[0].Fields[2].Options.(field.SelectOptions)
 	options.Choices[0].Label = "Changed"
 	definition := article.Definition()
 	definitionOptions := definition.Fields[2].Options.(field.SelectOptions)
 	if definition.Label != "Article" ||
-		definition.Fields[0].Rules[0] != "min=2" ||
+		definition.Fields[0].Validators[0].Type != "min_length" ||
 		definitionOptions.Choices[0].Label != "Wide" {
 		t.Fatalf("template shares caller memory: %#v", definition)
 	}
-	definition.Fields[0].Rules[0] = "max=1"
-	if article.Definition().Fields[0].Rules[0] != "min=2" {
+	definition.Fields[0].Validators[0].Type = "max_length"
+	if article.Definition().Fields[0].Validators[0].Type != "min_length" {
 		t.Fatal("template definition result is mutable")
 	}
 }
@@ -1778,4 +1781,76 @@ func (a *markerAuthorizer) Allowed(ctx context.Context, actor security.Actor, co
 		result = append(result, code)
 	}
 	return result, nil
+}
+
+type testPrefixValidatorType struct{ metadata *field.ValidatorMetadata }
+
+func (testPrefixValidatorType) Code() field.ValidatorCode { return "example.prefix" }
+func (t testPrefixValidatorType) ValidatorMetadata() field.ValidatorMetadata {
+	if t.metadata != nil {
+		return *t.metadata
+	}
+	return field.ValidatorMetadata{Label: "Prefix", Options: []field.ConfigField{{Key: "value", Label: "Prefix", Type: field.TypeString, Required: true}}, FieldTypes: []field.TypeCode{field.TypeString}}
+}
+func (testPrefixValidatorType) Compile(ctx field.ValidatorContext, options any) (field.Validator, error) {
+	if ctx.Storage != field.StorageString || ctx.Multiple {
+		return nil, errors.New("string scalar required")
+	}
+	value, err := field.DecodeOptions[struct {
+		Value string `json:"value"`
+	}](options)
+	if err != nil || value.Value == "" {
+		return nil, errors.New("prefix is required")
+	}
+	return testPrefixValidator{prefix: value.Value}, nil
+}
+
+type testPrefixValidator struct{ prefix string }
+
+func (v testPrefixValidator) Validate(value any) error {
+	if !strings.HasPrefix(value.(string), v.prefix) {
+		return errors.New("prefix mismatch")
+	}
+	return nil
+}
+
+func TestProfileScopedValidatorRegistration(t *testing.T) {
+	factory, err := kernel.NewProfileRuntimeFactory(emptyDatabaseResolver{}, testRuntimeServices())
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata := field.ValidatorMetadata{Label: "Prefix", Options: []field.ConfigField{{Key: "value", Label: "Original", Type: field.TypeString, Required: true}}, FieldTypes: []field.TypeCode{field.TypeString}}
+	base := registryModule{code: "fields", fieldTypes: field.StandardTypes(), validatorTypes: field.StandardValidatorTypes()}
+	custom := registryModule{code: "extension", validatorTypes: []field.ValidatorType{testPrefixValidatorType{metadata: &metadata}}}
+	profile := kernel.Profile{Code: "with-validator", Modules: []kernel.ProfileModule{{Module: base}, {Module: custom}}, Params: []field.Definition{{Key: "slug", Type: field.TypeString, Label: "Slug", Validators: []field.ValidatorDefinition{{Type: "example.prefix", Options: map[string]any{"value": "go-"}}}}}}
+	runtime, err := buildProfileRuntime(factory, context.Background(), profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata.Options[0].Label = "Mutated"
+	registered, ok := runtime.Registry().ValidatorType("example.prefix")
+	if !ok || field.DescribeValidatorType(registered).Options[0].Label != "Original" {
+		t.Fatal("validator metadata was not snapshotted")
+	}
+	if _, err = runtime.ParamSchema().Validate(map[string]any{"slug": "go-cms"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = runtime.ParamSchema().Validate(map[string]any{"slug": "bad"})
+	var failures field.ValidationErrors
+	if !errors.As(err, &failures) || len(failures) != 1 || failures[0].Code != "example.prefix" {
+		t.Fatalf("custom validation: %v", err)
+	}
+	profile.Modules = profile.Modules[:1]
+	if _, err = factory.Compile(context.Background(), profile); err == nil || !strings.Contains(err.Error(), "unknown validator") {
+		t.Fatalf("absent module: %v", err)
+	}
+	profile.Modules = append(profile.Modules, kernel.ProfileModule{Module: custom}, kernel.ProfileModule{Module: registryModule{code: "duplicate", validatorTypes: []field.ValidatorType{testPrefixValidatorType{}}}})
+	if _, err = factory.Compile(context.Background(), profile); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("duplicate: %v", err)
+	}
+	profile.Modules = profile.Modules[:2]
+	profile.Modules = append(profile.Modules, kernel.ProfileModule{Module: registryModule{code: "nil", validatorTypes: []field.ValidatorType{nil}}})
+	if _, err = factory.Compile(context.Background(), profile); err == nil || !strings.Contains(err.Error(), "nil") {
+		t.Fatalf("nil: %v", err)
+	}
 }

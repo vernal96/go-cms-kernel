@@ -204,6 +204,8 @@ func cloneRuntimeSettingValue(value any) any {
 type DefinitionRegistry interface {
 	FieldType(field.TypeCode) (field.Type, bool)
 	FieldTypes() []field.TypeCode
+	ValidatorType(field.ValidatorCode) (field.ValidatorType, bool)
+	ValidatorTypes() []field.ValidatorCode
 	ResourceType(resourcetype.Code) (resourcetype.Type, bool)
 	ResourceTypes() []resourcetype.Code
 	Permission(permission.Code) (permission.Definition, bool)
@@ -218,6 +220,7 @@ type Registry interface {
 
 type ModuleRegistry struct {
 	FieldTypes         []field.Type
+	ValidatorTypes     []field.ValidatorType
 	ResourceTypes      []resourcetype.Type
 	PermissionEntities []permission.Entity
 }
@@ -258,6 +261,7 @@ type RuntimeRegistry struct {
 	modules         map[ModuleCode]ModuleRuntime
 	moduleRuntimes  []ModuleRuntime
 	fieldTypes      map[field.TypeCode]field.Type
+	validatorTypes  map[field.ValidatorCode]field.ValidatorType
 	resourceTypes   map[resourcetype.Code]resourcetype.Type
 	permissions     map[permission.Code]permission.Definition
 	permissionCodes []permission.Code
@@ -265,8 +269,9 @@ type RuntimeRegistry struct {
 
 func newRuntimeRegistry() *RuntimeRegistry {
 	return &RuntimeRegistry{
-		modules:    make(map[ModuleCode]ModuleRuntime),
-		fieldTypes: make(map[field.TypeCode]field.Type),
+		modules:        make(map[ModuleCode]ModuleRuntime),
+		fieldTypes:     make(map[field.TypeCode]field.Type),
+		validatorTypes: make(map[field.ValidatorCode]field.ValidatorType),
 		resourceTypes: make(
 			map[resourcetype.Code]resourcetype.Type,
 		),
@@ -297,6 +302,19 @@ func (r *RuntimeRegistry) FieldType(
 func (r *RuntimeRegistry) FieldTypes() []field.TypeCode {
 	result := make([]field.TypeCode, 0, len(r.fieldTypes))
 	for code := range r.fieldTypes {
+		result = append(result, code)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
+	return result
+}
+
+func (r *RuntimeRegistry) ValidatorType(code field.ValidatorCode) (field.ValidatorType, bool) {
+	item, exists := r.validatorTypes[code]
+	return item, exists
+}
+func (r *RuntimeRegistry) ValidatorTypes() []field.ValidatorCode {
+	result := make([]field.ValidatorCode, 0, len(r.validatorTypes))
+	for code := range r.validatorTypes {
 		result = append(result, code)
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
@@ -334,6 +352,9 @@ func (r *RuntimeRegistry) cloneDefinitions() *RuntimeRegistry {
 	result := newRuntimeRegistry()
 	for code, fieldType := range r.fieldTypes {
 		result.fieldTypes[code] = fieldType
+	}
+	for code, validatorType := range r.validatorTypes {
+		result.validatorTypes[code] = validatorType
 	}
 	for code, resourceType := range r.resourceTypes {
 		result.resourceTypes[code] = resourceType
@@ -386,6 +407,21 @@ func (r *RuntimeRegistry) addFieldType(
 	}
 
 	r.fieldTypes[code] = field.SnapshotType(fieldType)
+	return nil
+}
+
+func (r *RuntimeRegistry) addValidatorType(item field.ValidatorType) error {
+	if item == nil || isNilValue(item) {
+		return errors.New("validator type is nil")
+	}
+	code := item.Code()
+	if err := field.ValidateValidatorCode(code); err != nil {
+		return err
+	}
+	if _, exists := r.validatorTypes[code]; exists {
+		return fmt.Errorf("validator type %q already exists", code)
+	}
+	r.validatorTypes[code] = field.SnapshotValidatorType(item)
 	return nil
 }
 
@@ -927,6 +963,11 @@ func (f *ProfileRuntimeFactory) Compile(
 					profileModule.Module.Code(),
 					err,
 				)
+			}
+		}
+		for index, item := range moduleRegistry.ValidatorTypes {
+			if err := registry.addValidatorType(item); err != nil {
+				return nil, fmt.Errorf("register validator type at index %d from module %q: %w", index, profileModule.Module.Code(), err)
 			}
 		}
 		for index, resourceType := range moduleRegistry.ResourceTypes {

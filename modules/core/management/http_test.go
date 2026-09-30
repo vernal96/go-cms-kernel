@@ -133,7 +133,7 @@ func TestManagementHTTPWritesStructuredFieldErrors(t *testing.T) {
 	response := httptest.NewRecorder()
 	writeManagementError(response, ValidationError{
 		Message: "request data is invalid",
-		Fields:  []FieldValidationError{{Key: "page_title", Rule: "required", Param: ""}},
+		Fields:  []FieldValidationError{{Key: "page_title", Code: "required"}},
 	})
 	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d", response.Code)

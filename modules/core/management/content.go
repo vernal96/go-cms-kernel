@@ -848,7 +848,7 @@ func resourceExtensionError(err error) error {
 	fields := make([]FieldValidationError, len(validation.Fields))
 	for index, field := range validation.Fields {
 		fields[index] = FieldValidationError{
-			Key: field.Key, Rule: "extension", Param: field.Message,
+			Key: field.Key, Code: "extension", Params: map[string]any{"message": field.Message},
 		}
 	}
 	return ValidationError{Message: validation.Error(), Fields: fields}
@@ -2197,7 +2197,7 @@ func validationError(err error) error {
 		fields := make([]FieldValidationError, len(fieldErrors))
 		for index, item := range fieldErrors {
 			fields[index] = FieldValidationError{
-				Key: item.Key, Rule: item.Rule, Param: item.Param,
+				Key: item.Key, Code: string(item.Code), Params: item.Params,
 			}
 		}
 		return ValidationError{

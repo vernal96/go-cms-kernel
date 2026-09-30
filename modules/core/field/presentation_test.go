@@ -13,7 +13,7 @@ func TestFieldDefinitionsSerializeAllOptions(t *testing.T) {
 	integerStep := int64(2)
 	floatStep := 0.25
 	definitions := []field.Definition{
-		{Key: "text", Type: field.TypeString, Label: "Text", Required: &required, Rules: []string{"min=2"}},
+		{Key: "text", Type: field.TypeString, Label: "Text", Required: &required, Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 2}}}},
 		{Key: "integer", Type: field.TypeInteger, Label: "Integer", Options: field.IntegerOptions{Step: &integerStep}},
 		{Key: "float", Type: field.TypeFloat, Label: "Float", Options: field.FloatOptions{Step: &floatStep}},
 		{Key: "checkbox", Type: field.TypeCheckbox, Label: "Checkbox"},

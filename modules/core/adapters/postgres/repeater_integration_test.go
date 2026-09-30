@@ -48,7 +48,7 @@ func TestPostgresRepeaterPersistenceAndReferences(t *testing.T) {
 			schema, err := field.CompilePersistent([]field.Definition{{Key: "slides", Type: field.TypeRepeater, Label: "Slides", Options: field.RepeaterOptions{Fields: []field.Definition{
 				{Key: "gallery", Type: field.TypeMedia, Label: "Gallery", Options: field.MediaOptions{Multiple: true}},
 				{Key: "title", Type: field.TypeString, Label: "Title"}, {Key: "image", Type: field.TypeMedia, Label: "Image"}, {Key: "file", Type: field.TypeFile, Label: "File"},
-			}, MaxItems: 10}}}, field.StandardTypes())
+			}}, Validators: []field.ValidatorDefinition{{Type: "max_items", Options: map[string]any{"value": 10}}}}}, field.StandardTypes())
 			if err != nil {
 				t.Fatal(err)
 			}

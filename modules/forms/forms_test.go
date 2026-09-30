@@ -27,6 +27,10 @@ import (
 
 type testFieldResolver map[field.TypeCode]field.Type
 
+func (r testFieldResolver) ValidatorType(code field.ValidatorCode) (field.ValidatorType, bool) {
+	return field.StandardValidatorTypes().ValidatorType(code)
+}
+
 func (r testFieldResolver) FieldTypes() []field.TypeCode {
 	result := make([]field.TypeCode, 0, len(r))
 	for code := range r {
@@ -155,7 +159,7 @@ func (formsTestEventBus) Consume(context.Context, eventbus.Subscription, eventbu
 type actionRegistryModule struct{ runtime *Runtime }
 
 func (actionRegistryModule) Registry() kernel.ModuleRegistry {
-	return kernel.ModuleRegistry{FieldTypes: field.StandardTypes()}
+	return kernel.ModuleRegistry{FieldTypes: field.StandardTypes(), ValidatorTypes: field.StandardValidatorTypes()}
 }
 
 func (actionRegistryModule) Code() kernel.ModuleCode { return ModuleCode }

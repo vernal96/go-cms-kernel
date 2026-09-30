@@ -60,7 +60,7 @@ func TestMediaSettingsHTTP(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	repo := &settingsHTTPRepository{item: media.Media{ID: 5, Params: map[string]any{}, UpdatedAt: now}}
-	catalog, err := media.CompileSettings([]media.SettingsDefinition{{Code: "image", Fields: []field.Definition{{Key: "alt", Label: "Alt", Type: field.TypeString, Rules: []string{"max=5"}}}}}, field.StandardTypes())
+	catalog, err := media.CompileSettings([]media.SettingsDefinition{{Code: "image", Fields: []field.Definition{{Key: "alt", Label: "Alt", Type: field.TypeString, Validators: []field.ValidatorDefinition{{Type: "max_length", Options: map[string]any{"value": 5}}}}}}}, field.StandardTypes())
 	if err != nil {
 		t.Fatal(err)
 	}

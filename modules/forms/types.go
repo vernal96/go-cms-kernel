@@ -83,29 +83,29 @@ type Form struct {
 }
 
 type FormField struct {
-	ID             FieldID            `json:"id"`
-	FormID         FormID             `json:"form_id"`
-	Code           string             `json:"code"`
-	Type           field.TypeCode     `json:"type"`
-	Label          string             `json:"label"`
-	Required       bool               `json:"required"`
-	Rules          []string           `json:"rules"`
-	Options        any                `json:"options,omitempty"`
-	Editor         field.EditorCode   `json:"editor,omitempty"`
-	VisibleWhen    *field.VisibleWhen `json:"visible_when,omitempty"`
-	ResultLabel    string             `json:"result_label"`
-	ShowOnSite     bool               `json:"show_on_site"`
-	ShowInResults  bool               `json:"show_in_results"`
-	ResultPosition int                `json:"result_position"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      time.Time          `json:"updated_at"`
+	ID             FieldID                     `json:"id"`
+	FormID         FormID                      `json:"form_id"`
+	Code           string                      `json:"code"`
+	Type           field.TypeCode              `json:"type"`
+	Label          string                      `json:"label"`
+	Required       bool                        `json:"required"`
+	Validators     []field.ValidatorDefinition `json:"validators"`
+	Options        any                         `json:"options,omitempty"`
+	Editor         field.EditorCode            `json:"editor,omitempty"`
+	VisibleWhen    *field.VisibleWhen          `json:"visible_when,omitempty"`
+	ResultLabel    string                      `json:"result_label"`
+	ShowOnSite     bool                        `json:"show_on_site"`
+	ShowInResults  bool                        `json:"show_in_results"`
+	ResultPosition int                         `json:"result_position"`
+	CreatedAt      time.Time                   `json:"created_at"`
+	UpdatedAt      time.Time                   `json:"updated_at"`
 }
 
 func (f FormField) Definition() field.Definition {
 	required := f.Required
 	return field.Definition{
 		Key: f.Code, Type: f.Type, Label: f.Label, Required: &required,
-		Rules: append([]string(nil), f.Rules...), Options: f.Options,
+		Validators: field.CloneValidatorDefinitions(f.Validators), Options: f.Options,
 		Editor: f.Editor, VisibleWhen: cloneVisibleWhen(f.VisibleWhen),
 	}
 }

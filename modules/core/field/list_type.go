@@ -7,26 +7,21 @@ import (
 )
 
 // listValue reuses the scalar type for normalization, validation and references.
-// Schema applies configured rules to each scalar, not to the list length.
+// Schema applies scalar validators to each item and list validators to the whole value.
 type listValue struct {
-	item     StorageValueType
-	min, max int
-	unique   bool
+	item   StorageValueType
+	unique bool
 }
 
-func withList(item StorageValueType, multiple bool, min, max int, unique bool) (ValueType, error) {
-	if min < 0 || max < 0 || (max > 0 && min > max) || (!multiple && (min != 0 || max != 0)) {
-		return nil, fmt.Errorf("invalid list bounds: multiple=%t min_items=%d max_items=%d", multiple, min, max)
-	}
+func withList(item StorageValueType, multiple, unique bool) (ValueType, error) {
 	if !multiple {
 		return item, nil
 	}
-	return listValue{item: item, min: min, max: max, unique: unique}, nil
+	return listValue{item: item, unique: unique}, nil
 }
 
 func (v listValue) StorageKind() StorageKind { return v.item.StorageKind() }
 func (listValue) Multiple() bool             { return true }
-func (v listValue) Rules() []string          { return v.item.Rules() }
 func (v listValue) Example() any             { return []any{v.item.Example()} }
 func (listValue) Empty(value any) bool       { return reflect.ValueOf(value).Len() == 0 }
 func (listValue) Validate(any) error         { return nil }
@@ -36,12 +31,6 @@ func (v listValue) Normalize(value any) (any, error) {
 	if !items.IsValid() || (items.Kind() != reflect.Slice && items.Kind() != reflect.Array) {
 		return nil, fmt.Errorf("expected array, got %T", value)
 	}
-	if items.Len() < v.min {
-		return nil, RuleError{Rule: "min_items", Param: strconv.Itoa(v.min)}
-	}
-	if v.max > 0 && items.Len() > v.max {
-		return nil, RuleError{Rule: "max_items", Param: strconv.Itoa(v.max)}
-	}
 	result := make([]any, items.Len())
 	failures := ValidationErrors{}
 	seen := map[string]bool{}
@@ -49,7 +38,7 @@ func (v listValue) Normalize(value any) (any, error) {
 		key := fmt.Sprintf("[%d]", i)
 		item := items.Index(i).Interface()
 		if inputEmpty(item) {
-			failures = append(failures, ValidationError{Key: key, Rule: "required"})
+			failures = append(failures, ValidationError{Key: key, Code: "required"})
 			continue
 		}
 		normalized, err := v.item.Normalize(item)
@@ -58,7 +47,7 @@ func (v listValue) Normalize(value any) (any, error) {
 			continue
 		}
 		if v.item.Empty(normalized) {
-			failures = append(failures, ValidationError{Key: key, Rule: "required"})
+			failures = append(failures, ValidationError{Key: key, Code: "required"})
 			continue
 		}
 		if err := v.item.Validate(normalized); err != nil {
@@ -68,7 +57,7 @@ func (v listValue) Normalize(value any) (any, error) {
 		if v.unique {
 			text := normalized.(string)
 			if seen[text] {
-				failures = append(failures, ValidationError{Key: key, Rule: "unique"})
+				failures = append(failures, ValidationError{Key: key, Code: "unique"})
 				continue
 			}
 			seen[text] = true

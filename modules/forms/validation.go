@@ -481,15 +481,3 @@ func normalizePage(query PageQuery) (PageQuery, error) {
 	}
 	return query, nil
 }
-
-func fieldValidationErrors(err error) FieldValidationErrors {
-	var items field.ValidationErrors
-	if !errors.As(err, &items) {
-		return nil
-	}
-	result := make(FieldValidationErrors)
-	for _, item := range items {
-		result[item.Key] = append(result[item.Key], item.Rule)
-	}
-	return result
-}

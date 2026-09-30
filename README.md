@@ -56,6 +56,8 @@ This routing change is not included in the published v0.3.0 dependency shown
 above. It requires a future release; local starter verification can use a
 temporary Go workspace containing both modules, without a permanent `replace`.
 
+Field validator definitions, built-ins, module contributions and admin metadata are documented in [Field validation](docs/field-validation.md).
+
 ## Development
 
 Use the Go version declared in `go.mod` and run:

@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
+	"github.com/vernal96/go-cms-kernel/modules/core/field/validation"
 	"github.com/vernal96/go-cms-kernel/security"
 )
 
@@ -36,7 +37,7 @@ type elementCatalog struct {
 func newElementCatalog() (*elementCatalog, error) {
 	items := []ElementType{
 		ElementDefinition{Description: ElementTypeMetadata{Code: ElementText, Label: "Текст", Fields: []field.ConfigField{{Key: "content", Label: "Текст", Type: field.TypeTextarea, Required: true}}}},
-		ElementDefinition{Description: ElementTypeMetadata{Code: ElementHeading, Label: "Заголовок", Fields: []field.ConfigField{{Key: "text", Label: "Заголовок", Type: field.TypeString, Required: true}, {Key: "level", Label: "Уровень", Type: field.TypeInteger, Required: true, Default: 2, Rules: []string{"min=1", "max=6"}}}}},
+		ElementDefinition{Description: ElementTypeMetadata{Code: ElementHeading, Label: "Заголовок", Fields: []field.ConfigField{{Key: "text", Label: "Заголовок", Type: field.TypeString, Required: true}, {Key: "level", Label: "Уровень", Type: field.TypeInteger, Required: true, Default: 2, Validators: []field.ValidatorDefinition{validation.Min(1), validation.Max(6)}}}}},
 		ElementDefinition{Description: ElementTypeMetadata{Code: ElementImage, Label: "Изображение", Fields: []field.ConfigField{{Key: "file_id", Label: "Публичное изображение", Type: field.TypeFile, Required: true, Options: map[string]any{"storages": []string{"public"}}}, {Key: "alt", Label: "Alt", Type: field.TypeString}}}},
 		ElementDefinition{Description: ElementTypeMetadata{Code: ElementSubmitButton, Label: "Кнопка отправки", Fields: []field.ConfigField{{Key: "label", Label: "Текст кнопки", Type: field.TypeString, Required: true, Default: "Отправить"}}}},
 	}

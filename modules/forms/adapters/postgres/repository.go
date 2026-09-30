@@ -35,7 +35,7 @@ type querier interface {
 }
 
 const formColumns = `id,site_id,code,name,description,enabled,created_at,updated_at,created_by,updated_by`
-const fieldColumns = `id,form_id,code,type,label,required,rules,options,editor,visible_when,result_label,show_in_results,show_on_site,result_position,created_at,updated_at`
+const fieldColumns = `id,form_id,code,type,label,required,validators,options,editor,visible_when,result_label,show_in_results,show_on_site,result_position,created_at,updated_at`
 const elementColumns = `id,form_id,code,type,config,created_at,updated_at`
 const layoutColumns = `id,form_id,parent_id,kind,field_id,element_id,container_type,position,config`
 const statusColumns = `id,form_id,code,name,color,position,is_default,created_at,updated_at`
@@ -124,12 +124,12 @@ func formDetail(ctx context.Context, q querier, siteID site.ID, id forms.FormID,
 
 func scanField(row rowScanner) (forms.FormField, error) {
 	var item forms.FormField
-	var rules, options, visible []byte
-	err := row.Scan(&item.ID, &item.FormID, &item.Code, &item.Type, &item.Label, &item.Required, &rules, &options, &item.Editor, &visible, &item.ResultLabel, &item.ShowInResults, &item.ShowOnSite, &item.ResultPosition, &item.CreatedAt, &item.UpdatedAt)
+	var validators, options, visible []byte
+	err := row.Scan(&item.ID, &item.FormID, &item.Code, &item.Type, &item.Label, &item.Required, &validators, &options, &item.Editor, &visible, &item.ResultLabel, &item.ShowInResults, &item.ShowOnSite, &item.ResultPosition, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return forms.FormField{}, err
 	}
-	if err := json.Unmarshal(rules, &item.Rules); err != nil {
+	if err := json.Unmarshal(validators, &item.Validators); err != nil {
 		return forms.FormField{}, err
 	}
 	item.Options, err = decodeFieldOptions(item.Type, options)
@@ -291,7 +291,10 @@ func (r *Repository) CreateForm(ctx context.Context, input forms.CreateFormInput
 }
 
 func insertField(ctx context.Context, tx pgx.Tx, item forms.FormField) (forms.FormField, error) {
-	rules, _ := json.Marshal(item.Rules)
+	validators, err := json.Marshal(item.Validators)
+	if err != nil {
+		return forms.FormField{}, err
+	}
 	options, err := encodeFieldOptions(item)
 	if err != nil {
 		return forms.FormField{}, err
@@ -300,7 +303,7 @@ func insertField(ctx context.Context, tx pgx.Tx, item forms.FormField) (forms.Fo
 	if err != nil {
 		return forms.FormField{}, err
 	}
-	created, err := scanField(tx.QueryRow(ctx, `INSERT INTO forms.fields(form_id,code,type,label,required,rules,options,editor,visible_when,result_label,show_in_results,show_on_site,result_position) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING `+fieldColumns+`;`, item.FormID, item.Code, item.Type, item.Label, item.Required, rules, options, item.Editor, visible, item.ResultLabel, item.ShowInResults, item.ShowOnSite, item.ResultPosition))
+	created, err := scanField(tx.QueryRow(ctx, `INSERT INTO forms.fields(form_id,code,type,label,required,validators,options,editor,visible_when,result_label,show_in_results,show_on_site,result_position) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING `+fieldColumns+`;`, item.FormID, item.Code, item.Type, item.Label, item.Required, validators, options, item.Editor, visible, item.ResultLabel, item.ShowInResults, item.ShowOnSite, item.ResultPosition))
 	return created, mapWriteError(err)
 }
 func insertElement(ctx context.Context, tx pgx.Tx, item forms.Element) (forms.Element, error) {
@@ -464,7 +467,10 @@ func (r *Repository) CreateField(ctx context.Context, siteID site.ID, formID for
 }
 
 func (r *Repository) UpdateField(ctx context.Context, siteID site.ID, item forms.FormField) (forms.FormField, error) {
-	rules, _ := json.Marshal(item.Rules)
+	validators, err := json.Marshal(item.Validators)
+	if err != nil {
+		return forms.FormField{}, err
+	}
 	options, err := encodeFieldOptions(item)
 	if err != nil {
 		return forms.FormField{}, err
@@ -473,7 +479,7 @@ func (r *Repository) UpdateField(ctx context.Context, siteID site.ID, item forms
 	if err != nil {
 		return forms.FormField{}, err
 	}
-	updated, err := scanField(r.connector.Pool().QueryRow(ctx, `UPDATE forms.fields SET code=$4,type=$5,label=$6,required=$7,rules=$8,options=$9,editor=$10,visible_when=$11,result_label=$12,show_in_results=$13,show_on_site=$14,result_position=$15,updated_at=clock_timestamp() WHERE id=$2 AND form_id=$3 AND EXISTS(SELECT 1 FROM forms.forms WHERE id=$3 AND site_id=$1) RETURNING `+fieldColumns+`;`, siteID, item.ID, item.FormID, item.Code, item.Type, item.Label, item.Required, rules, options, item.Editor, visible, item.ResultLabel, item.ShowInResults, item.ShowOnSite, item.ResultPosition))
+	updated, err := scanField(r.connector.Pool().QueryRow(ctx, `UPDATE forms.fields SET code=$4,type=$5,label=$6,required=$7,validators=$8,options=$9,editor=$10,visible_when=$11,result_label=$12,show_in_results=$13,show_on_site=$14,result_position=$15,updated_at=clock_timestamp() WHERE id=$2 AND form_id=$3 AND EXISTS(SELECT 1 FROM forms.forms WHERE id=$3 AND site_id=$1) RETURNING `+fieldColumns+`;`, siteID, item.ID, item.FormID, item.Code, item.Type, item.Label, item.Required, validators, options, item.Editor, visible, item.ResultLabel, item.ShowInResults, item.ShowOnSite, item.ResultPosition))
 	return updated, mapWriteError(err)
 }
 

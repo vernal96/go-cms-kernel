@@ -27,7 +27,7 @@ CREATE TABLE forms.fields
     type            TEXT        NOT NULL CHECK (type = btrim(type) AND type <> ''),
     label           TEXT        NOT NULL CHECK (label = btrim(label) AND label <> ''),
     required        BOOLEAN     NOT NULL DEFAULT FALSE,
-    rules           JSONB       NOT NULL DEFAULT '[]'::jsonb,
+    validators      JSONB       NOT NULL DEFAULT '[]'::jsonb,
     options         JSONB       NULL,
     editor          TEXT        NOT NULL DEFAULT '',
     visible_when    JSONB       NULL,

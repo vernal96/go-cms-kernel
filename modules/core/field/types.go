@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/mail"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -23,8 +24,8 @@ func StandardTypes() Types {
 		DescribedType{Type: choiceType{code: TypeRadio}, Presentation: Metadata{Label: "Один вариант", Editor: "radio", Options: []ConfigField{{Key: "choices", Label: "Варианты", Type: TypeJSON, Editor: "core.choices", Required: true}}}},
 		DescribedType{Type: choiceType{code: TypeSelect}, Presentation: Metadata{Label: "Список", Editor: "select", Options: []ConfigField{{Key: "choices", Label: "Варианты", Type: TypeJSON, Editor: "core.choices", Required: true}}}},
 		DescribedType{Type: stringType{code: TypeTextarea}, Presentation: Metadata{Label: "Многострочный текст", Editor: "textarea"}},
-		DescribedType{Type: stringType{code: TypeEmail, rules: []string{"email"}}, Presentation: Metadata{Label: "Email", Editor: "email"}},
-		DescribedType{Type: phoneType{}, Presentation: Metadata{Label: "Телефон", Editor: "phone", Options: []ConfigField{{Key: "pattern", Label: "Шаблон", Type: TypeString}}}},
+		DescribedType{Type: stringType{code: TypeEmail}, Presentation: Metadata{Label: "Email", Editor: "email"}},
+		DescribedType{Type: phoneType{}, Presentation: Metadata{Label: "Телефон", Editor: "phone"}},
 		DescribedType{Type: fileType{}, Presentation: Metadata{Label: "Файл из библиотеки", Editor: "file", Options: []ConfigField{{Key: "storages", Label: "Хранилища", Type: TypeJSON, Editor: "core.string-list"}, {Key: "mime_types", Label: "MIME-типы", Type: TypeJSON, Editor: "core.string-list"}}}},
 		DescribedType{Type: mediaType{}, Presentation: Metadata{Label: "Медиа (изображение)", Editor: "media"}},
 		DescribedType{Type: jsonType{}, Presentation: Metadata{Label: "JSON", Editor: "json"}},
@@ -34,9 +35,7 @@ func StandardTypes() Types {
 		case TypeString, TypeTextarea, TypeEmail, TypeInteger, TypeFloat, TypePhone, TypeFile, TypeMedia, TypeSelect:
 			described := item.(DescribedType)
 			described.Presentation.Options = append(described.Presentation.Options,
-				ConfigField{Key: "multiple", Label: "Несколько значений", Type: TypeCheckbox},
-				ConfigField{Key: "min_items", Label: "Минимум значений", Type: TypeInteger},
-				ConfigField{Key: "max_items", Label: "Максимум значений (0 — без ограничения)", Type: TypeInteger})
+				ConfigField{Key: "multiple", Label: "Несколько значений", Type: TypeCheckbox})
 			types[i] = described
 		}
 	}
@@ -79,7 +78,6 @@ func (jsonValue) Empty(value any) bool {
 	}
 }
 func (jsonValue) Validate(any) error { return nil }
-func (jsonValue) Rules() []string    { return nil }
 func (jsonValue) Example() any       { return []any{} }
 
 func cloneJSONValue(value any) any {
@@ -131,7 +129,7 @@ func (fileType) Compile(ctx CompileContext, options any) (ValueType, error) {
 		}
 		seenMIME[mimeType] = struct{}{}
 	}
-	return withList(fileValue{options: config}, config.Multiple, config.MinItems, config.MaxItems, false)
+	return withList(fileValue{options: config}, config.Multiple, false)
 }
 
 type fileValue struct{ options FileOptions }
@@ -149,7 +147,6 @@ func (fileValue) Normalize(value any) (any, error) {
 
 func (fileValue) Empty(any) bool     { return false }
 func (fileValue) Validate(any) error { return nil }
-func (fileValue) Rules() []string    { return nil }
 func (fileValue) Example() any       { return int64(1) }
 
 func FileOptionsValue(value any) (FileOptions, error) {
@@ -200,8 +197,7 @@ func validMIMEPattern(value string) bool {
 }
 
 type stringType struct {
-	code  TypeCode
-	rules []string
+	code TypeCode
 }
 
 func (t stringType) Code() TypeCode {
@@ -213,11 +209,11 @@ func (t stringType) Compile(ctx CompileContext, options any) (ValueType, error) 
 	if err != nil {
 		return nil, err
 	}
-	return withList(stringValue{rules: append([]string(nil), t.rules...)}, config.Multiple, config.MinItems, config.MaxItems, false)
+	return withList(stringValue{email: t.code == TypeEmail}, config.Multiple, false)
 }
 
 type stringValue struct {
-	rules []string
+	email bool
 }
 
 func (stringValue) StorageKind() StorageKind { return StorageString }
@@ -237,12 +233,14 @@ func (stringValue) Empty(value any) bool {
 	return ok && result == ""
 }
 
-func (stringValue) Validate(any) error {
+func (v stringValue) Validate(value any) error {
+	if v.email {
+		address, err := mail.ParseAddress(value.(string))
+		if err != nil || address.Address != value.(string) || !strings.Contains(address.Address, ".") {
+			return RuleError{Rule: "email"}
+		}
+	}
 	return nil
-}
-
-func (v stringValue) Rules() []string {
-	return append([]string(nil), v.rules...)
 }
 
 func (stringValue) Example() any {
@@ -264,7 +262,7 @@ func (integerType) Compile(ctx CompileContext, options any) (ValueType, error) {
 		return nil, errors.New("integer step must be greater than zero")
 	}
 
-	return withList(integerValue{}, config.Multiple, config.MinItems, config.MaxItems, false)
+	return withList(integerValue{}, config.Multiple, false)
 }
 
 type integerValue struct{}
@@ -289,10 +287,6 @@ func (integerValue) Validate(any) error {
 	return nil
 }
 
-func (integerValue) Rules() []string {
-	return nil
-}
-
 func (integerValue) Example() any {
 	return int64(1)
 }
@@ -313,7 +307,7 @@ func (floatType) Compile(ctx CompileContext, options any) (ValueType, error) {
 		return nil, errors.New("float step must be finite and greater than zero")
 	}
 
-	return withList(floatValue{}, config.Multiple, config.MinItems, config.MaxItems, false)
+	return withList(floatValue{}, config.Multiple, false)
 }
 
 type floatValue struct{}
@@ -335,10 +329,6 @@ func (floatValue) Empty(any) bool {
 }
 
 func (floatValue) Validate(any) error {
-	return nil
-}
-
-func (floatValue) Rules() []string {
 	return nil
 }
 
@@ -382,10 +372,6 @@ func (boolValue) Validate(any) error {
 	return nil
 }
 
-func (boolValue) Rules() []string {
-	return nil
-}
-
 func (boolValue) Example() any {
 	return false
 }
@@ -400,10 +386,9 @@ func (t choiceType) Code() TypeCode {
 
 func (t choiceType) Compile(ctx CompileContext, options any) (ValueType, error) {
 	var (
-		choices            []Choice
-		multiple           bool
-		minItems, maxItems int
-		err                error
+		choices  []Choice
+		multiple bool
+		err      error
 	)
 
 	switch t.code {
@@ -422,7 +407,6 @@ func (t choiceType) Compile(ctx CompileContext, options any) (ValueType, error) 
 		} else {
 			choices = config.Choices
 			multiple = config.Multiple
-			minItems, maxItems = config.MinItems, config.MaxItems
 		}
 
 	default:
@@ -437,7 +421,7 @@ func (t choiceType) Compile(ctx CompileContext, options any) (ValueType, error) 
 		return nil, err
 	}
 
-	return withList(choiceValue{allowed: allowed}, multiple, minItems, maxItems, true)
+	return withList(choiceValue{allowed: allowed}, multiple, true)
 }
 
 type choiceValue struct{ allowed map[string]struct{} }
@@ -458,8 +442,7 @@ func (v choiceValue) Validate(value any) error {
 	}
 	return nil
 }
-func (choiceValue) Rules() []string { return nil }
-func (choiceValue) Example() any    { return "example" }
+func (choiceValue) Example() any { return "example" }
 
 type phoneType struct{}
 
@@ -473,24 +456,10 @@ func (phoneType) Compile(ctx CompileContext, options any) (ValueType, error) {
 		return nil, err
 	}
 
-	result := phoneValue{}
-	if config.Pattern == "" {
-		result.rules = []string{"e164"}
-		return withList(result, config.Multiple, config.MinItems, config.MaxItems, false)
-	}
-
-	pattern, err := regexp.Compile(config.Pattern)
-	if err != nil {
-		return nil, fmt.Errorf("compile phone pattern: %w", err)
-	}
-	result.pattern = pattern
-	return withList(result, config.Multiple, config.MinItems, config.MaxItems, false)
+	return withList(phoneValue{}, config.Multiple, false)
 }
 
-type phoneValue struct {
-	pattern *regexp.Regexp
-	rules   []string
-}
+type phoneValue struct{}
 
 func (phoneValue) StorageKind() StorageKind { return StorageString }
 func (phoneValue) Multiple() bool           { return false }
@@ -510,19 +479,13 @@ func (phoneValue) Empty(value any) bool {
 }
 
 func (v phoneValue) Validate(value any) error {
-	if v.pattern == nil {
-		return nil
+	if !e164Pattern.MatchString(value.(string)) {
+		return RuleError{Rule: "e164"}
 	}
-	if !v.pattern.MatchString(value.(string)) {
-		return RuleError{Rule: "pattern", Param: v.pattern.String()}
-	}
-
 	return nil
 }
 
-func (v phoneValue) Rules() []string {
-	return append([]string(nil), v.rules...)
-}
+var e164Pattern = regexp.MustCompile(`^\+[1-9][0-9]{1,14}$`)
 
 func (phoneValue) Example() any {
 	return "+79991234567"

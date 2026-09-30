@@ -13,6 +13,10 @@ import (
 
 type testResolver map[field.TypeCode]field.Type
 
+func (r testResolver) ValidatorType(code field.ValidatorCode) (field.ValidatorType, bool) {
+	return field.StandardValidatorTypes().ValidatorType(code)
+}
+
 func (r testResolver) FieldType(
 	code field.TypeCode,
 ) (field.Type, bool) {

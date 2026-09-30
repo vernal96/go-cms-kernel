@@ -103,9 +103,13 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 		t.Fatalf("cross-site form read error = %v", err)
 	}
 
-	email, _, err := repository.CreateField(ctx, siteIDs[0], first.Form.ID, forms.FormField{Code: "email", Type: field.TypeEmail, Label: "Email", ResultLabel: "Контакт", ShowInResults: true, ResultPosition: 2}, forms.LayoutPlacement{Position: 1})
+	email, _, err := repository.CreateField(ctx, siteIDs[0], first.Form.ID, forms.FormField{Code: "email", Type: field.TypeEmail, Label: "Email", Validators: []field.ValidatorDefinition{{Type: "max_length", Options: map[string]any{"value": 100}}}, ResultLabel: "Контакт", ShowInResults: true, ResultPosition: 2}, forms.LayoutPlacement{Position: 1})
 	if err != nil {
 		t.Fatal(err)
+	}
+	stored, err := repository.FormDetail(ctx, siteIDs[0], first.Form.ID)
+	if err != nil || len(stored.Fields) != 3 || len(stored.Fields[2].Validators) != 1 || stored.Fields[2].Validators[0].Type != "max_length" || stored.Fields[2].Validators[0].Options.(map[string]any)["value"] != float64(100) {
+		t.Fatalf("persisted validators: %#v %v", stored.Fields, err)
 	}
 
 	t.Run("atomic layout placement and container unwrapping", func(t *testing.T) {
@@ -365,7 +369,7 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 
 	t.Run("historical multiple values remain arrays", func(t *testing.T) {
 		sid, fid := siteIDs[0], first.Form.ID
-		item, _, err := repository.CreateField(ctx, sid, fid, forms.FormField{Code: "numbers", Type: field.TypeInteger, Label: "Numbers", ShowInResults: true, ShowOnSite: true, Options: field.IntegerOptions{Multiple: true, MaxItems: 3}}, forms.LayoutPlacement{Position: 0})
+		item, _, err := repository.CreateField(ctx, sid, fid, forms.FormField{Code: "numbers", Type: field.TypeInteger, Label: "Numbers", ShowInResults: true, ShowOnSite: true, Options: field.IntegerOptions{Multiple: true}, Validators: []field.ValidatorDefinition{{Type: "max_items", Options: map[string]any{"value": 3}}}}, forms.LayoutPlacement{Position: 0})
 		if err != nil {
 			t.Fatal(err)
 		}

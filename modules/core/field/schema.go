@@ -3,24 +3,26 @@ package field
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
-
-	"github.com/go-playground/validator/v10"
 )
 
 type compiledField struct {
 	definition Definition
 	valueType  ValueType
 	required   bool
-	rules      string
+	validators []compiledValidator
+}
+
+type compiledValidator struct {
+	code  ValidatorCode
+	value Validator
+	items bool
 }
 
 type Schema struct {
 	definitions []Definition
 	fields      map[string]compiledField
-	validator   *validator.Validate
 }
 
 // ValueShape describes binding compatibility, independently of value constraints.
@@ -71,10 +73,14 @@ func compile(
 	}
 
 	definitions = CloneDefinitions(definitions)
+	if ctx.Validators == nil {
+		if resolver, ok := ctx.Types.(ValidatorResolver); ok {
+			ctx.Validators = resolver
+		}
+	}
 	schema := &Schema{
 		definitions: definitions,
 		fields:      make(map[string]compiledField, len(definitions)),
-		validator:   validator.New(),
 	}
 
 	for index, definition := range definitions {
@@ -163,33 +169,9 @@ func compile(
 			}
 		}
 
-		rules, err := compileRules(valueType.Rules(), definition.Rules)
+		validators, err := compileValidators(definition, valueType, ctx.Validators)
 		if err != nil {
-			return nil, fmt.Errorf(
-				"compile field %q rules: %w",
-				definition.Key,
-				err,
-			)
-		}
-		if rules != "" {
-			example := valueType.Example()
-			if list, ok := valueType.(listValue); ok {
-				example = list.item.Example()
-			}
-			err := safeValidate(
-				schema.validator,
-				definition.Key,
-				example,
-				rules,
-			)
-			var validationErrors validator.ValidationErrors
-			if err != nil && !errors.As(err, &validationErrors) {
-				return nil, fmt.Errorf(
-					"compile field %q rules: %w",
-					definition.Key,
-					err,
-				)
-			}
+			return nil, fmt.Errorf("compile field %q validators: %w", definition.Key, err)
 		}
 
 		schema.fields[definition.Key] = compiledField{
@@ -197,7 +179,7 @@ func compile(
 			valueType:  valueType,
 			required: definition.Required != nil &&
 				*definition.Required,
-			rules: rules,
+			validators: validators,
 		}
 	}
 
@@ -372,7 +354,7 @@ func (s *Schema) validateDeferred(values map[string]any, requireAll bool, deferr
 	for _, key := range unknownKeys {
 		validationErrors = append(validationErrors, ValidationError{
 			Key:  key,
-			Rule: "defined",
+			Code: "defined",
 		})
 	}
 
@@ -382,15 +364,12 @@ func (s *Schema) validateDeferred(values map[string]any, requireAll bool, deferr
 		}
 		compiled := s.fields[definition.Key]
 		value, exists := values[definition.Key]
-		list, isList := compiled.valueType.(listValue)
-		if isList && ((!exists && requireAll) || (exists && value == nil)) {
-			if list.min > 0 {
-				validationErrors = append(validationErrors, ValidationError{Key: definition.Key, Rule: "min_items", Param: fmt.Sprint(list.min)})
-				continue
-			}
-			if exists {
-				value = []any{}
-			}
+		_, isList := compiled.valueType.(listValue)
+		if isList && exists && value == nil {
+			value = []any{}
+		}
+		if isList && !exists && requireAll && hasMinItems(compiled.validators) {
+			value, exists = []any{}, true
 		}
 
 		defaults, hasDefault := compiled.valueType.(DefaultValueType)
@@ -403,7 +382,7 @@ func (s *Schema) validateDeferred(values map[string]any, requireAll bool, deferr
 					validationErrors,
 					ValidationError{
 						Key:  definition.Key,
-						Rule: "required",
+						Code: "required",
 					},
 				)
 			}
@@ -415,7 +394,7 @@ func (s *Schema) validateDeferred(values map[string]any, requireAll bool, deferr
 					validationErrors,
 					ValidationError{
 						Key:  definition.Key,
-						Rule: "required",
+						Code: "required",
 					},
 				)
 			}
@@ -429,19 +408,22 @@ func (s *Schema) validateDeferred(values map[string]any, requireAll bool, deferr
 		}
 
 		if compiled.valueType.Empty(normalized) {
-			if hasDefault && !compiled.required {
-				result[definition.Key] = normalized
-			}
 			if compiled.required {
 				validationErrors = append(
 					validationErrors,
 					ValidationError{
 						Key:  definition.Key,
-						Rule: "required",
+						Code: "required",
 					},
 				)
+				continue
 			}
-			continue
+			if !isList && definition.Type != TypeRepeater {
+				if hasDefault {
+					result[definition.Key] = normalized
+				}
+				continue
+			}
 		}
 
 		if err := compiled.valueType.Validate(normalized); err != nil {
@@ -449,12 +431,15 @@ func (s *Schema) validateDeferred(values map[string]any, requireAll bool, deferr
 			continue
 		}
 
-		if compiled.rules != "" {
-			failures := validateValueRules(s.validator, definition.Key, normalized, compiled.rules, compiled.valueType)
+		if len(compiled.validators) != 0 {
+			failures := validateCompiledValidators(definition.Key, normalized, compiled.validators)
 			if len(failures) > 0 {
 				validationErrors = append(validationErrors, failures...)
 				continue
 			}
+		}
+		if compiled.valueType.Empty(normalized) && !hasDefault {
+			continue
 		}
 
 		result[definition.Key] = normalized
@@ -481,64 +466,6 @@ func ruleErrorFrom(err error) (RuleError, bool) {
 	return RuleError{}, false
 }
 
-func compileRules(defaults, configured []string) (string, error) {
-	rules := make([]string, 0, len(defaults)+len(configured))
-	seen := make(map[string]struct{}, len(defaults)+len(configured))
-
-	for _, source := range [][]string{defaults, configured} {
-		for _, rule := range source {
-			rule = strings.TrimSpace(rule)
-			if rule == "" {
-				return "", errors.New("validation rule is empty")
-			}
-			if strings.Contains(rule, ",") {
-				return "", fmt.Errorf(
-					"validation rule %q must be a single tag",
-					rule,
-				)
-			}
-
-			name := rule
-			if separator := strings.IndexByte(name, '='); separator >= 0 {
-				name = name[:separator]
-			}
-			if name == "required" || name == "omitempty" {
-				return "", fmt.Errorf(
-					"validation rule %q is managed by Required",
-					name,
-				)
-			}
-			if _, exists := seen[rule]; exists {
-				continue
-			}
-
-			seen[rule] = struct{}{}
-			rules = append(rules, rule)
-		}
-	}
-
-	return strings.Join(rules, ","), nil
-}
-
-func safeValidate(
-	validate *validator.Validate,
-	key string,
-	value any,
-	rules string,
-) (resultErr error) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			resultErr = fmt.Errorf(
-				"invalid validation rules %q: %v",
-				rules,
-				recovered,
-			)
-		}
-	}()
-
-	return validate.VarWithKey(key, value, rules)
-}
-
 func prefixedValidationErrors(prefix string, err error, fallback string) ValidationErrors {
 	var nested ValidationErrors
 	if errors.As(err, &nested) {
@@ -554,31 +481,7 @@ func prefixedValidationErrors(prefix string, err error, fallback string) Validat
 		return result
 	}
 	if rule, ok := ruleErrorFrom(err); ok {
-		return ValidationErrors{{Key: prefix, Rule: rule.Rule, Param: rule.Param}}
+		return ValidationErrors{{Key: prefix, Code: ValidatorCode(rule.Rule), Params: ruleParams(rule)}}
 	}
-	return ValidationErrors{{Key: prefix, Rule: fallback}}
-}
-
-func validateValueRules(validate *validator.Validate, key string, value any, rules string, valueType ValueType) ValidationErrors {
-	if list, ok := valueType.(listValue); ok {
-		result := ValidationErrors{}
-		items := reflect.ValueOf(value)
-		for i := 0; i < items.Len(); i++ {
-			result = append(result, validateValueRules(validate, fmt.Sprintf("%s[%d]", key, i), items.Index(i).Interface(), rules, list.item)...)
-		}
-		return result
-	}
-	err := safeValidate(validate, key, value, rules)
-	if err == nil {
-		return nil
-	}
-	var fields validator.ValidationErrors
-	if !errors.As(err, &fields) {
-		return ValidationErrors{{Key: key, Rule: "validation"}}
-	}
-	result := make(ValidationErrors, 0, len(fields))
-	for _, failure := range fields {
-		result = append(result, ValidationError{Key: key, Rule: failure.Tag(), Param: failure.Param()})
-	}
-	return result
+	return ValidationErrors{{Key: prefix, Code: ValidatorCode(fallback)}}
 }

@@ -100,7 +100,7 @@ func TestParamBindingsRejectInvalidConfiguration(t *testing.T) {
 }
 
 func TestParamBindingsDeferConstraintsAndReadCurrentResource(t *testing.T) {
-	runtime := bindingRuntime(t, []field.Definition{{Key: "title", Label: "Title", Type: field.TypeString, Required: boolPointer(true), Rules: []string{"min=3"}}})
+	runtime := bindingRuntime(t, []field.Definition{{Key: "title", Label: "Title", Type: field.TypeString, Required: boolPointer(true), Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 3}}}}})
 	bindings := ParamBindings{"title": ResourceProperty("title")}
 	if _, err := runtime.NormalizeConfiguration(nil, bindings, nil); err != nil {
 		t.Fatal(err)

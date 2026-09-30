@@ -29,11 +29,11 @@ func TestStandardMultipleFields(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.code), func(t *testing.T) {
-			options, err := field.DecodeOptionsJSON(tc.code, json.RawMessage(`{"multiple":true,"min_items":1,"max_items":2`+tc.extra+`}`))
+			options, err := field.DecodeOptionsJSON(tc.code, json.RawMessage(`{"multiple":true`+tc.extra+`}`))
 			if err != nil {
 				t.Fatal(err)
 			}
-			def := field.Definition{Key: "values", Label: "Values", Type: tc.code, Options: options}
+			def := field.Definition{Key: "values", Label: "Values", Type: tc.code, Options: options, Validators: []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": 1}}, {Type: "max_items", Options: map[string]any{"value": 2}}}}
 			schema, err := field.CompilePersistent([]field.Definition{def}, field.StandardTypes())
 			if err != nil {
 				t.Fatal(err)
@@ -43,7 +43,7 @@ func TestStandardMultipleFields(t *testing.T) {
 				t.Fatal(err)
 			}
 			var config map[string]any
-			if err := json.Unmarshal(descriptor.Options, &config); err != nil || config["multiple"] != true || config["max_items"] != float64(2) {
+			if err := json.Unmarshal(descriptor.Options, &config); err != nil || config["multiple"] != true || config["max_items"] != nil || len(descriptor.Validators) != 2 {
 				t.Fatalf("metadata %s: %v", descriptor.Options, err)
 			}
 			normalized, err := schema.Validate(map[string]any{"values": []any{tc.value}})
@@ -88,15 +88,20 @@ func TestStandardMultipleFields(t *testing.T) {
 	}
 }
 
-func TestListRulesBoundsAndOrdering(t *testing.T) {
-	for _, options := range []field.StringOptions{{MinItems: 1}, {Multiple: true, MinItems: -1}, {Multiple: true, MaxItems: -1}, {Multiple: true, MinItems: 3, MaxItems: 2}} {
-		if _, err := field.Compile([]field.Definition{{Key: "v", Label: "V", Type: field.TypeString, Options: options}}, field.StandardTypes()); err == nil {
-			t.Fatalf("accepted %#v", options)
+func TestListValidatorsBoundsAndOrdering(t *testing.T) {
+	for _, def := range []field.Definition{
+		{Key: "v", Label: "V", Type: field.TypeString, Validators: []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": 1}}}},
+		{Key: "v", Label: "V", Type: field.TypeString, Options: field.StringOptions{Multiple: true}, Validators: []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": -1}}}},
+		{Key: "v", Label: "V", Type: field.TypeString, Options: field.StringOptions{Multiple: true}, Validators: []field.ValidatorDefinition{{Type: "max_items", Options: map[string]any{"value": -1}}}},
+		{Key: "v", Label: "V", Type: field.TypeString, Options: field.StringOptions{Multiple: true}, Validators: []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": 3}}, {Type: "max_items", Options: map[string]any{"value": 2}}}},
+	} {
+		if _, err := field.Compile([]field.Definition{def}, field.StandardTypes()); err == nil {
+			t.Fatalf("accepted %#v", def)
 		}
 	}
 	for _, def := range []field.Definition{
-		{Key: "v", Label: "V", Type: field.TypeString, Options: field.StringOptions{Multiple: true}, Rules: []string{"min=2", "max=5"}},
-		{Key: "v", Label: "V", Type: field.TypeInteger, Options: field.IntegerOptions{Multiple: true}, Rules: []string{"min=2", "max=5"}},
+		{Key: "v", Label: "V", Type: field.TypeString, Options: field.StringOptions{Multiple: true}, Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 2}}, {Type: "max_length", Options: map[string]any{"value": 5}}}},
+		{Key: "v", Label: "V", Type: field.TypeInteger, Options: field.IntegerOptions{Multiple: true}, Validators: []field.ValidatorDefinition{{Type: "min", Options: map[string]any{"value": 2}}, {Type: "max", Options: map[string]any{"value": 5}}}},
 	} {
 		schema, err := field.CompilePersistent([]field.Definition{def}, field.StandardTypes())
 		if err != nil {
@@ -108,8 +113,12 @@ func TestListRulesBoundsAndOrdering(t *testing.T) {
 		}
 		_, err = schema.Validate(map[string]any{"v": []any{good, bad}})
 		var failures field.ValidationErrors
-		if !errors.As(err, &failures) || failures[0].Key != "v[1]" || failures[0].Rule != "min" {
-			t.Fatalf("rules: %v", err)
+		expected := field.ValidatorCode("min")
+		if def.Type == field.TypeString {
+			expected = "min_length"
+		}
+		if !errors.As(err, &failures) || failures[0].Key != "v[1]" || failures[0].Code != expected {
+			t.Fatalf("validators: %v", err)
 		}
 		values, err := schema.Validate(map[string]any{"v": []any{good, good}})
 		if err != nil {

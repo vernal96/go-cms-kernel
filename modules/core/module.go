@@ -95,6 +95,7 @@ func (Module) ModuleDescriptor() kernel.ModuleDescriptor {
 func (Module) Registry() kernel.ModuleRegistry {
 	return kernel.ModuleRegistry{
 		FieldTypes:    field.StandardTypes(),
+		ValidatorTypes: field.StandardValidatorTypes(),
 		ResourceTypes: resourcetype.StandardTypes(),
 		PermissionEntities: []permission.Entity{
 			{Code: "site"},

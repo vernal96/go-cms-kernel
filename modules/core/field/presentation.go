@@ -10,14 +10,14 @@ import (
 // ConfigField describes a configuration editor. Validation remains owned by
 // the contributed type, action or element, not by the frontend.
 type ConfigField struct {
-	Default  any            `json:"default,omitempty"`
-	Key      string         `json:"key"`
-	Label    string         `json:"label"`
-	Type     TypeCode       `json:"type"`
-	Required bool           `json:"required"`
-	Editor   EditorCode     `json:"editor,omitempty"`
-	Rules    []string       `json:"rules,omitempty"`
-	Options  map[string]any `json:"options,omitempty"`
+	Default    any                   `json:"default,omitempty"`
+	Key        string                `json:"key"`
+	Label      string                `json:"label"`
+	Type       TypeCode              `json:"type"`
+	Required   bool                  `json:"required"`
+	Editor     EditorCode            `json:"editor,omitempty"`
+	Validators []ValidatorDefinition `json:"validators,omitempty"`
+	Options    map[string]any        `json:"options,omitempty"`
 }
 
 type Metadata struct {
@@ -62,7 +62,7 @@ func CloneConfigFields(fields []ConfigField) []ConfigField {
 	result := append([]ConfigField{}, fields...)
 	for i := range result {
 		result[i].Default = cloneEditorValue(fields[i].Default)
-		result[i].Rules = append([]string{}, fields[i].Rules...)
+		result[i].Validators = CloneValidatorDefinitions(fields[i].Validators)
 		if fields[i].Options != nil {
 			result[i].Options = cloneEditorValue(fields[i].Options).(map[string]any)
 		}
@@ -80,15 +80,15 @@ func DescribeType(t Type) Metadata {
 }
 
 type Descriptor struct {
-	Public      *bool           `json:"public,omitempty"`
-	Key         string          `json:"key"`
-	Type        TypeCode        `json:"type"`
-	Label       string          `json:"label"`
-	Required    bool            `json:"required"`
-	Rules       []string        `json:"rules"`
-	Options     json.RawMessage `json:"options,omitempty"`
-	Editor      EditorCode      `json:"editor,omitempty"`
-	VisibleWhen *VisibleWhen    `json:"visible_when,omitempty"`
+	Public      *bool                 `json:"public,omitempty"`
+	Key         string                `json:"key"`
+	Type        TypeCode              `json:"type"`
+	Label       string                `json:"label"`
+	Required    bool                  `json:"required"`
+	Validators  []ValidatorDefinition `json:"validators"`
+	Options     json.RawMessage       `json:"options,omitempty"`
+	Editor      EditorCode            `json:"editor,omitempty"`
+	VisibleWhen *VisibleWhen          `json:"visible_when,omitempty"`
 }
 
 // Describe uses the same registered type as schema compilation. Custom types
@@ -103,6 +103,10 @@ func Describe(definition Definition, resolver TypeResolver) (Descriptor, error) 
 	}
 	valueType, err := t.Compile(CompileContext{Types: resolver}, definition.Options)
 	if err != nil {
+		return Descriptor{}, fmt.Errorf("field %q: %w", definition.Key, err)
+	}
+	validatorResolver, _ := resolver.(ValidatorResolver)
+	if _, err := compileValidators(definition, valueType, validatorResolver); err != nil {
 		return Descriptor{}, fmt.Errorf("field %q: %w", definition.Key, err)
 	}
 	definition = CloneDefinitions([]Definition{definition})[0]
@@ -171,7 +175,7 @@ type OptionsPresenter interface{ DescribeOptions() (any, error) }
 // Resolver-dependent editor selection remains in Describe.
 func definitionDescriptor(definition Definition, options json.RawMessage, editor EditorCode) Descriptor {
 	return Descriptor{Key: definition.Key, Type: definition.Type, Label: definition.Label,
-		Required: definition.Required != nil && *definition.Required,
-		Rules:    append([]string{}, definition.Rules...), Options: options,
+		Required:   definition.Required != nil && *definition.Required,
+		Validators: CloneValidatorDefinitions(definition.Validators), Options: options,
 		Editor: editor, VisibleWhen: definition.VisibleWhen}
 }

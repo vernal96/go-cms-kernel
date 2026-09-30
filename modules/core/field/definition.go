@@ -56,7 +56,7 @@ type Definition struct {
 	Type        TypeCode
 	Label       string
 	Required    *bool
-	Rules       []string
+	Validators  []ValidatorDefinition
 	Options     any
 	Editor      EditorCode
 	VisibleWhen *VisibleWhen
@@ -73,33 +73,25 @@ type VisibleWhen struct {
 	Value any    `json:"value"`
 }
 
-// ListOptions configures an ordered list of scalar values. Zero MaxItems is unbounded.
+// ListOptions configures an ordered list of scalar values.
 type ListOptions struct {
 	Multiple bool `json:"multiple,omitempty"`
-	MinItems int  `json:"min_items,omitempty"`
-	MaxItems int  `json:"max_items,omitempty"`
 }
 
 type StringOptions = ListOptions
 type MediaOptions struct {
 	Multiple     bool   `json:"multiple,omitempty"`
-	MinItems     int    `json:"min_items,omitempty"`
-	MaxItems     int    `json:"max_items,omitempty"`
 	SettingsCode string `json:"settings_code,omitempty"`
 }
 
 type IntegerOptions struct {
 	Multiple bool `json:"multiple,omitempty"`
-	MinItems int  `json:"min_items,omitempty"`
-	MaxItems int  `json:"max_items,omitempty"`
 
 	Step *int64 `json:"step,omitempty"`
 }
 
 type FloatOptions struct {
 	Multiple bool `json:"multiple,omitempty"`
-	MinItems int  `json:"min_items,omitempty"`
-	MaxItems int  `json:"max_items,omitempty"`
 
 	Step *float64 `json:"step,omitempty"`
 }
@@ -116,22 +108,14 @@ type RadioOptions struct {
 type SelectOptions struct {
 	Choices  []Choice `json:"choices"`
 	Multiple bool     `json:"multiple"`
-	MinItems int      `json:"min_items,omitempty"`
-	MaxItems int      `json:"max_items,omitempty"`
 }
 
 type PhoneOptions struct {
 	Multiple bool `json:"multiple,omitempty"`
-	MinItems int  `json:"min_items,omitempty"`
-	MaxItems int  `json:"max_items,omitempty"`
-
-	Pattern string `json:"pattern,omitempty"`
 }
 
 type FileOptions struct {
 	Multiple bool `json:"multiple,omitempty"`
-	MinItems int  `json:"min_items,omitempty"`
-	MaxItems int  `json:"max_items,omitempty"`
 
 	Storages  []filesystem.Code `json:"storages,omitempty"`
 	MIMETypes []string          `json:"mime_types,omitempty"`
@@ -141,6 +125,7 @@ type FileOptions struct {
 // nested compilation. Composite types must reuse Compile for their children.
 type CompileContext struct {
 	Types      TypeResolver
+	Validators ValidatorResolver
 	composites []TypeCode
 }
 
@@ -173,7 +158,6 @@ type ValueType interface {
 	Normalize(any) (any, error)
 	Empty(any) bool
 	Validate(any) error
-	Rules() []string
 	Example() any
 }
 
@@ -222,9 +206,9 @@ func (e RuleError) Error() string {
 }
 
 type ValidationError struct {
-	Key   string
-	Rule  string
-	Param string
+	Key    string         `json:"key"`
+	Code   ValidatorCode  `json:"code"`
+	Params map[string]any `json:"params,omitempty"`
 }
 
 type ValidationErrors []ValidationError
@@ -235,20 +219,7 @@ func (e ValidationErrors) Error() string {
 	}
 
 	first := e[0]
-	if first.Param == "" {
-		return fmt.Sprintf(
-			"field %q failed validation rule %q",
-			first.Key,
-			first.Rule,
-		)
-	}
-
-	return fmt.Sprintf(
-		"field %q failed validation rule %q with parameter %q",
-		first.Key,
-		first.Rule,
-		first.Param,
-	)
+	return fmt.Sprintf("field %q failed validation %q", first.Key, first.Code)
 }
 
 func CloneDefinitions(source []Definition) []Definition {
@@ -259,7 +230,7 @@ func CloneDefinitions(source []Definition) []Definition {
 	result := make([]Definition, len(source))
 	for index, definition := range source {
 		result[index] = definition
-		result[index].Rules = append([]string(nil), definition.Rules...)
+		result[index].Validators = CloneValidatorDefinitions(definition.Validators)
 		result[index].Options = cloneOptions(definition.Options)
 		if definition.VisibleWhen != nil {
 			condition := *definition.VisibleWhen

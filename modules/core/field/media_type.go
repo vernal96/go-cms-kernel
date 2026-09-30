@@ -41,7 +41,7 @@ func (t mediaType) Compile(ctx CompileContext, options any) (ValueType, error) {
 			return nil, err
 		}
 	}
-	return withList(mediaValue{options: config, fields: descriptors}, config.Multiple, config.MinItems, config.MaxItems, false)
+	return withList(mediaValue{options: config, fields: descriptors}, config.Multiple, false)
 }
 
 type mediaValue struct {
@@ -68,5 +68,4 @@ func (mediaValue) Normalize(value any) (any, error) {
 }
 func (mediaValue) Empty(any) bool     { return false }
 func (mediaValue) Validate(any) error { return nil }
-func (mediaValue) Rules() []string    { return nil }
 func (mediaValue) Example() any       { return int64(1) }

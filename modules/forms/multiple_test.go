@@ -33,7 +33,8 @@ func TestMultiplePublicSubmission(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			detail := publicHTTPFormDetail()
-			detail.Fields[2].Options = field.StringOptions{Multiple: true, MinItems: 1, MaxItems: 2}
+			detail.Fields[2].Options = field.StringOptions{Multiple: true}
+			detail.Fields[2].Validators = []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": 1}}, {Type: "max_items", Options: map[string]any{"value": 2}}}
 			detail.Fields[3].Required = false
 			repository := &repositoryStub{detail: detail}
 			service, _ := publicHTTPService(t, repository)
@@ -106,7 +107,7 @@ func TestResultFieldValueAndMailPreserveHistoricalMultiplicity(t *testing.T) {
 }
 
 func TestInvalidListBoundsAreConfigurationErrors(t *testing.T) {
-	err := validateFormField(FormField{FormID: 1, Code: "emails", Label: "Emails", Type: field.TypeEmail, Options: field.StringOptions{Multiple: true, MinItems: 3, MaxItems: 2}}, formsFieldResolver())
+	err := validateFormField(FormField{FormID: 1, Code: "emails", Label: "Emails", Type: field.TypeEmail, Options: field.StringOptions{Multiple: true}, Validators: []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": 3}}, {Type: "max_items", Options: map[string]any{"value": 2}}}}, formsFieldResolver())
 	if !errors.Is(err, ErrInvalid) {
 		t.Fatalf("configuration error: %v", err)
 	}

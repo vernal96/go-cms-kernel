@@ -2561,7 +2561,7 @@ func accessLogRecords(
 func TestPageWidgetBindingsResolveCurrentResourceAndIsolateInvalidValues(t *testing.T) {
 	ref := widget.NewRef("bound")
 	required := true
-	echo := widget.Functional{Description: widget.Definition{Reference: ref, Label: "Bound", Description: "Bound values", Fields: []field.Definition{{Key: "text", Label: "Text", Type: field.TypeString, Required: &required, Rules: []string{"min=3"}}}}, Render: func(_ context.Context, _ widget.RenderInput, params map[string]any) (map[string]any, error) {
+	echo := widget.Functional{Description: widget.Definition{Reference: ref, Label: "Bound", Description: "Bound values", Fields: []field.Definition{{Key: "text", Label: "Text", Type: field.TypeString, Required: &required, Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 3}}}}}}, Render: func(_ context.Context, _ widget.RenderInput, params map[string]any) (map[string]any, error) {
 		return params, nil
 	}}
 	order := []string{}
