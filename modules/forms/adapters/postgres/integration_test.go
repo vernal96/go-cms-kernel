@@ -16,6 +16,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/migrations"
 	corepostgres "github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
+	"github.com/vernal96/go-cms-kernel/modules/core/field/validation"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/forms"
 )
@@ -108,7 +109,7 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 		t.Fatal(err)
 	}
 	stored, err := repository.FormDetail(ctx, siteIDs[0], first.Form.ID)
-	if err != nil || len(stored.Fields) != 3 || len(stored.Fields[2].Validators) != 1 || stored.Fields[2].Validators[0].Type != "max_length" || stored.Fields[2].Validators[0].Options.(map[string]any)["value"] != float64(100) {
+	if err != nil || len(stored.Fields) != 3 || len(stored.Fields[2].Validators) != 1 || stored.Fields[2].Validators[0].Type != "max_length" || stored.Fields[2].Validators[0].Options.(map[string]any)["value"] != json.Number("100") {
 		t.Fatalf("persisted validators: %#v %v", stored.Fields, err)
 	}
 
@@ -415,6 +416,46 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 		}
 		if !found {
 			t.Fatal("missing summary value")
+		}
+	})
+
+	t.Run("integer validator precision survives create update and reload", func(t *testing.T) {
+		const initial int64 = 9007199254740993
+		item, _, err := repository.CreateField(ctx, siteIDs[0], first.Form.ID, forms.FormField{Code: "precise", Type: field.TypeInteger, Label: "Precise", Validators: []field.ValidatorDefinition{validation.In(initial)}}, forms.LayoutPlacement{Position: 0})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, allowed := range []int64{initial, initial + 2} {
+			if allowed != initial {
+				item.Validators = []field.ValidatorDefinition{validation.In(allowed)}
+				if _, err := repository.UpdateField(ctx, siteIDs[0], item); err != nil {
+					t.Fatal(err)
+				}
+			}
+			detail, err := repository.FormDetail(ctx, siteIDs[0], first.Form.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var saved *forms.FormField
+			for i := range detail.Fields {
+				if detail.Fields[i].ID == item.ID {
+					saved = &detail.Fields[i]
+					break
+				}
+			}
+			if saved == nil {
+				t.Fatal("saved field missing")
+			}
+			schema, err := field.Compile([]field.Definition{saved.Definition()}, field.StandardTypes())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := schema.Validate(map[string]any{"precise": allowed}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := schema.Validate(map[string]any{"precise": allowed - 1}); err == nil {
+				t.Fatal("rounded integer accepted")
+			}
 		}
 	})
 

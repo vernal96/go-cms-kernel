@@ -10,13 +10,14 @@ import (
 	"testing"
 	"time"
 
-	connectorpostgres "github.com/vernal96/go-cms-kernel/connectors/postgres"
 	"github.com/vernal96/go-cms-kernel"
+	connectorpostgres "github.com/vernal96/go-cms-kernel/connectors/postgres"
 	"github.com/vernal96/go-cms-kernel/eventbus"
 	"github.com/vernal96/go-cms-kernel/job"
 	"github.com/vernal96/go-cms-kernel/migrations"
 	corepostgres "github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
+	"github.com/vernal96/go-cms-kernel/modules/core/field/validation"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/mail"
 )
@@ -76,6 +77,45 @@ func TestPostgresMailCRUDOutboxAttemptsRetentionAndSiteIsolation(t *testing.T) {
 	})
 
 	repository := database.Mail()
+	t.Run("integer validator precision survives create update and reload", func(t *testing.T) {
+		const initial int64 = 9007199254740993
+		item, err := repository.CreateTemplate(ctx, mail.Template{
+			SiteID: siteIDs[0], Code: "precise", Name: "Precise", Enabled: true,
+			From: mail.AddressTemplate{Email: "noreply@example.test"}, To: []mail.AddressTemplate{{Email: "recipient@example.test"}},
+			Subject: "Precise", ContentType: mail.ContentText, TextBody: "Ready",
+			Variables: []field.Definition{{Key: "number", Type: field.TypeInteger, Label: "Number", Validators: []field.ValidatorDefinition{validation.In(initial)}}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err := repository.DeleteTemplate(ctx, siteIDs[0], item.ID); err != nil {
+				t.Error(err)
+			}
+		}()
+		for _, allowed := range []int64{initial, initial + 2} {
+			if allowed != initial {
+				item.Variables[0].Validators = []field.ValidatorDefinition{validation.In(allowed)}
+				if _, err := repository.UpdateTemplate(ctx, item); err != nil {
+					t.Fatal(err)
+				}
+			}
+			saved, err := repository.TemplateByID(ctx, siteIDs[0], item.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			schema, err := field.Compile(saved.Variables, field.StandardTypes())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := schema.Validate(map[string]any{"number": allowed}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := schema.Validate(map[string]any{"number": allowed - 1}); err == nil {
+				t.Fatal("rounded integer accepted")
+			}
+		}
+	})
 	template, err := repository.CreateTemplate(ctx, mail.Template{
 		SiteID: siteIDs[0], Code: "invoice", Name: "Invoice", Enabled: true,
 		From: mail.AddressTemplate{Email: "noreply@example.test"}, To: []mail.AddressTemplate{{Email: "{{data.email}}"}},

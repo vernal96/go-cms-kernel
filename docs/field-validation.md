@@ -18,7 +18,7 @@ var slug = field.Definition{
 }
 ```
 
-`field.Schema.Compile` resolves each validator from the site runtime registry, decodes its options, checks compatibility and compiles it once. Unknown codes, duplicate codes, invalid options and nil compiled validators fail schema compilation. At validation time the schema checks presence/`Required`, normalizes, checks emptiness and intrinsic type constraints, then runs configured validators in declaration order. Applicable failures accumulate as `{key, code, params}`; repeater and list paths include indices such as `items[2].title`. The backend is authoritative.
+`field.Schema.Compile` resolves each validator from the site runtime registry, decodes its options, checks compatibility and compiles it once. Unknown codes, duplicate codes, invalid options, invalid scopes and nil compiled validators fail schema compilation. Required validator options reject both missing keys and `null`; an explicit numeric zero remains valid where the validator permits it. At validation time the schema checks presence/`Required`, normalizes, checks emptiness and intrinsic type constraints, then runs configured validators in declaration order. Applicable failures accumulate as `{key, code, params}`; repeater and list paths include indices such as `items[2].title`. The backend is authoritative.
 
 ## Core catalog
 
@@ -41,7 +41,15 @@ var slug = field.Definition{
 
 ## Module contribution and admin
 
-A module returns its validator types in `kernel.ModuleRegistry.ValidatorTypes`. The runtime registers them only for profiles enabling that module. It rejects nil and duplicate codes, snapshots presentation metadata, and exposes `ValidatorType(code)` and `ValidatorTypes()`. A custom type implements `Code()` and `Compile(field.ValidatorContext, any) (field.Validator, error)`; the compiled validator implements `Validate(any) error`. Check the context storage kind, field type and multiplicity during compilation. Return `field.ValidationErrors` with stable codes and structured params when a value fails.
+A module returns its validator types in `kernel.ModuleRegistry.ValidatorTypes`. The runtime registers them only for profiles enabling that module. It rejects nil and duplicate codes, snapshots presentation metadata, and exposes `ValidatorType(code)` and `ValidatorTypes()`. A custom type implements `Code()` and `Compile(field.ValidatorContext, any) (field.Validator, error)`; the compiled validator implements `Scope() field.ValidatorScope` and `Validate(any) error`. Check the context storage kind, field type and multiplicity during compilation. Return `field.ValidationErrors` with stable codes and structured params when a value fails.
+
+`ValidatorScopeValue` passes the entire normalized field value, including a whole list or repeater. `ValidatorScopeItems` passes each normalized list element and prefixes failures with its index; it requires `ValidatorContext.Multiple == true`. Compilation always receives the context of the complete field. A validator supporting both scalar values and individual list elements returns `ValidatorScopeItems` for multiple fields and `ValidatorScopeValue` otherwise. Scope is explicit for every validator, including module contributions; it is not inferred from its code or presentation metadata.
+
+```go
+func (v distinctDomainValidator) Scope() field.ValidatorScope {
+    return field.ValidatorScopeValue // Validate receives the complete email list.
+}
+```
 
 Implement `field.ValidatorMetadataProvider` to supply the label, `[]field.ConfigField` options, `FieldTypes`/`Multiple` or `Applicability` restrictions, and optional `OptionsEditor`. Admin metadata is exposed in Forms editor data and Mail's validator catalog endpoint. The admin builder uses this metadata to add, configure, reorder and remove validators; custom option editors use the existing editor registry. Validator definitions remain JSON objects such as:
 
@@ -49,6 +57,6 @@ Implement `field.ValidatorMetadataProvider` to supply the label, `[]field.Config
 {"type":"max_length","options":{"value":100}}
 ```
 
-Custom options must remain JSON serializable. `field.CloneValidatorDefinitions` detaches option objects, including nested repeater definitions. Forms persists the JSON configuration and compiles it with the current site's registry on reconstruction.
+Custom options must remain JSON serializable. `field.CloneValidatorDefinitions` detaches option objects, including nested repeater definitions. Generic numeric options are decoded as `json.Number` to preserve integer membership values throughout cloning, HTTP and persistence; custom compilers can use `DecodeRequiredOptions` with typed target fields. Forms persists the JSON configuration and compiles it with the current site's registry on reconstruction.
 
 Business and contextual checks such as persistence `unique`/`exists`, password checks, cross-field comparisons, conditional presence and network `active_url` belong to later schema or application layers. File and media policies remain with their field types and storage services.

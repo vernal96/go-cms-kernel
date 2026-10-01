@@ -1,6 +1,7 @@
 package field
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,18 +28,14 @@ func DecodeRequiredOptions(value any, target any, keys ...string) error {
 		return errors.New("validator options must be an object")
 	}
 	for _, key := range keys {
-		if _, ok := object[key]; !ok {
+		if raw, ok := object[key]; !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			return fmt.Errorf("option %q is required", key)
 		}
 	}
-	decoded, err := DecodeOptions[map[string]any](value)
-	if err != nil {
-		return err
-	}
-	if len(decoded) != len(keys) {
+	if len(object) != len(keys) {
 		return errors.New("validator options contain unknown fields")
 	}
-	return json.Unmarshal(raw, target)
+	return decodeValidatorJSON(raw, target)
 }
 
 type builtinValidatorType struct {
@@ -48,9 +45,12 @@ type builtinValidatorType struct {
 }
 type builtinValidator struct {
 	code   ValidatorCode
+	scope  ValidatorScope
 	params map[string]any
 	test   func(any) bool
 }
+
+func (v builtinValidator) Scope() ValidatorScope { return v.scope }
 
 func (v builtinValidator) Validate(value any) error {
 	if v.test(value) {
@@ -327,7 +327,11 @@ func (t builtinValidatorType) Compile(ctx ValidatorContext, options any) (Valida
 			test = stringTest(code)
 		}
 	}
-	return builtinValidator{code: code, params: params, test: test}, nil
+	scope := ValidatorScopeValue
+	if ctx.Multiple && !items && !contains {
+		scope = ValidatorScopeItems
+	}
+	return builtinValidator{code: code, scope: scope, params: params, test: test}, nil
 }
 func toFloat(v any) float64 {
 	switch x := v.(type) {

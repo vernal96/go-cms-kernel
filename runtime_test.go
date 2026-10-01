@@ -1807,6 +1807,8 @@ func (testPrefixValidatorType) Compile(ctx field.ValidatorContext, options any) 
 
 type testPrefixValidator struct{ prefix string }
 
+func (testPrefixValidator) Scope() field.ValidatorScope { return field.ValidatorScopeValue }
+
 func (v testPrefixValidator) Validate(value any) error {
 	if !strings.HasPrefix(value.(string), v.prefix) {
 		return errors.New("prefix mismatch")

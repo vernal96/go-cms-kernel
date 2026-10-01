@@ -43,8 +43,17 @@ func compileValidators(def Definition, valueType ValueType, resolver ValidatorRe
 		if nilInterface(compiled) {
 			return nil, fmt.Errorf("validator %q compiled to nil", definition.Type)
 		}
-		perItem := ctx.Multiple && definition.Type != "min_items" && definition.Type != "max_items" && definition.Type != "items_between" && definition.Type != "items_count" && definition.Type != "unique_items" && definition.Type != "contains" && definition.Type != "doesnt_contain"
-		result = append(result, compiledValidator{code: definition.Type, value: compiled, items: perItem})
+		scope := compiled.Scope()
+		switch scope {
+		case ValidatorScopeValue:
+		case ValidatorScopeItems:
+			if !ctx.Multiple {
+				return nil, fmt.Errorf("validator %q item scope requires a multiple field", definition.Type)
+			}
+		default:
+			return nil, fmt.Errorf("validator %q has invalid scope %q", definition.Type, scope)
+		}
+		result = append(result, compiledValidator{code: definition.Type, value: compiled, items: scope == ValidatorScopeItems})
 	}
 	for _, pair := range [][2]ValidatorCode{{"min", "max"}, {"min_length", "max_length"}, {"min_items", "max_items"}, {"min_digits", "max_digits"}} {
 		var min, max *float64

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Make compiled validator scope explicit (`Scope() ValidatorScope`) for whole values and list items, including module contributions. Reject null required options and preserve integer membership precision across JSON round trips.
 - Replace string field rules with typed, module-contributed validators compiled with site schemas. Add core validators, structured errors and admin metadata.
 - Move list cardinality and phone pattern constraints from field options to validators. Forms development migrations and clients using `rules` must be updated; no compatibility alias is retained.
 

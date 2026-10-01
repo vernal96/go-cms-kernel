@@ -1,6 +1,7 @@
 package field
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -16,6 +17,25 @@ type ValidatorDefinition struct {
 	Options any           `json:"options,omitempty"`
 }
 
+// UnmarshalJSON preserves option numbers through HTTP and storage round trips.
+// Decoding Options through float64 would round integer membership values.
+func (v *ValidatorDefinition) UnmarshalJSON(raw []byte) error {
+	type definition ValidatorDefinition
+	var decoded definition
+	if err := decodeValidatorJSON(raw, &decoded); err != nil {
+		return err
+	}
+	*v = ValidatorDefinition(decoded)
+	return nil
+}
+
+func decodeValidatorJSON(raw []byte, target any) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(target)
+}
+
 type ValidatorContext struct {
 	FieldType TypeCode
 	ValueType ValueType
@@ -23,7 +43,21 @@ type ValidatorContext struct {
 	Storage   StorageKind
 }
 
-type Validator interface{ Validate(any) error }
+// ValidatorScope determines which normalized value is passed to Validate.
+type ValidatorScope string
+
+const (
+	// ValidatorScopeValue passes the entire field value, including a whole list.
+	ValidatorScopeValue ValidatorScope = "value"
+	// ValidatorScopeItems passes each list element and reports indexed errors.
+	// It is valid only for fields with Multiple=true.
+	ValidatorScopeItems ValidatorScope = "items"
+)
+
+type Validator interface {
+	Scope() ValidatorScope
+	Validate(any) error
+}
 
 type ValidatorType interface {
 	Code() ValidatorCode
@@ -119,14 +153,14 @@ func reflectClone(original any, raw []byte) any {
 	if reflect.TypeOf(original).Kind() == reflect.Pointer {
 		value = reflect.New(reflect.TypeOf(original).Elem())
 	}
-	if err := json.Unmarshal(raw, value.Interface()); err == nil {
+	if err := decodeValidatorJSON(raw, value.Interface()); err == nil {
 		if reflect.TypeOf(original).Kind() == reflect.Pointer {
 			return value.Interface()
 		}
 		return value.Elem().Interface()
 	}
 	var generic any
-	if err := json.Unmarshal(raw, &generic); err == nil {
+	if err := decodeValidatorJSON(raw, &generic); err == nil {
 		return generic
 	}
 	return cloneEditorValue(original)

@@ -58,6 +58,8 @@ func (evenType) Compile(ctx field.ValidatorContext, options any) (field.Validato
 
 type evenValidator struct{ offset int64 }
 
+func (evenValidator) Scope() field.ValidatorScope { return field.ValidatorScopeValue }
+
 func (v evenValidator) Validate(value any) error {
 	if (value.(int64)+v.offset)%2 != 0 {
 		return errors.New("odd")
