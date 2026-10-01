@@ -341,7 +341,7 @@ func validateSnapshotWidgets(runtime *site.Runtime, candidate *Resource) error {
 		}
 		positions[binding.Area][binding.Position] = true
 		widgetRuntime, exists := runtime.Profile().Widget(binding.Code)
-		if !exists || !templateRuntime.AllowsResourceArea(binding.Area) {
+		if !exists || !widget.ValidArea(binding.Area) {
 			return fmt.Errorf("%w: historical widget %q is unavailable", ErrInvalid, binding.Code)
 		}
 		if err := widgetRuntime.ValidatePresentation(binding.Presentation); err != nil {

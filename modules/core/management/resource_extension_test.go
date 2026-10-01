@@ -437,11 +437,11 @@ func TestResourceMetadataDescribesTemplateSlotsAndProfileWidgets(t *testing.T) {
 			Fields:     []field.Definition{{Key: "title", Type: field.TypeString, Label: "Title"}},
 			EditorTabs: []field.EditorTab{{Code: "content", Label: "Content", Fields: []string{"title"}}},
 			Layout: template.Layout{
-				Body: []template.Item{
+				{Code: "body", Label: "Основная область", Items: []template.Item{
 					template.Widget{Widget: corewidgets.Content},
 					template.ResourceWidgets{},
-				},
-				Sidebar: []template.Item{template.ResourceWidgets{}},
+				}},
+				{Code: "sidebar", Label: "Боковая область", Items: []template.Item{template.ResourceWidgets{}}},
 			},
 		}},
 		WidgetViews: []widget.View{compact},

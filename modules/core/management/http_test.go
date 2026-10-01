@@ -289,7 +289,7 @@ func TestManagementHTTPWidgetLifecycleUsesStableBindingID(t *testing.T) {
 	if err := json.NewDecoder(createdResponse.Body).Decode(&created); err != nil {
 		t.Fatal(err)
 	}
-	if created.ID <= 0 || created.View != widget.DefaultView || created.Area != widget.AreaBody {
+	if created.ID <= 0 || created.View != widget.DefaultView || created.Area != "body" {
 		t.Fatalf("created widget = %#v", created)
 	}
 
@@ -320,7 +320,7 @@ func TestManagementHTTPWidgetLifecycleUsesStableBindingID(t *testing.T) {
 	if err := json.NewDecoder(orderResponse.Body).Decode(&ordered); err != nil {
 		t.Fatal(err)
 	}
-	if len(ordered.Items) != 1 || ordered.Items[0].ID != created.ID || ordered.Items[0].Area != widget.AreaSidebar {
+	if len(ordered.Items) != 1 || ordered.Items[0].ID != created.ID || ordered.Items[0].Area != "sidebar" {
 		t.Fatalf("ordered widgets = %#v", ordered.Items)
 	}
 
@@ -338,8 +338,8 @@ func contentHTTPWidgetFixture(t *testing.T) (*Resources, *extensionTestResources
 		Templates: []template.Definition{{
 			Code: "page", Label: "Page",
 			Layout: template.Layout{
-				Body:    []template.Item{template.ResourceWidgets{}},
-				Sidebar: []template.Item{template.ResourceWidgets{}},
+				{Code: "body", Label: "Основная область", Items: []template.Item{template.ResourceWidgets{}}},
+				{Code: "sidebar", Label: "Боковая область", Items: []template.Item{template.ResourceWidgets{}}},
 			},
 		}},
 	}

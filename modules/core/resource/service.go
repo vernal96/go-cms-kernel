@@ -697,7 +697,14 @@ func (s *Service) validateTransferredLibraries(
 		for _, code := range codes {
 			sourceTemplate, sourceExists := sourceRuntime.Profile().Template(code)
 			targetTemplate, targetExists := targetRuntime.Profile().Template(code)
-			if !sourceExists || !targetExists || !reflect.DeepEqual(sourceTemplate.Definition(), targetTemplate.Definition()) {
+			if !sourceExists || !targetExists {
+				return fmt.Errorf("%w: library template %q is unavailable or incompatible", ErrIncompatibleTargetSite, code)
+			}
+			sourceDefinition, targetDefinition := sourceTemplate.Definition(), targetTemplate.Definition()
+			// Layout is destination presentation. Persisted area codes remain
+			// recoverable through default when its declarations differ.
+			sourceDefinition.Layout, targetDefinition.Layout = nil, nil
+			if !reflect.DeepEqual(sourceDefinition, targetDefinition) {
 				return fmt.Errorf("%w: library template %q is unavailable or incompatible", ErrIncompatibleTargetSite, code)
 			}
 		}
@@ -887,21 +894,22 @@ func (s *Service) ReorderWidgets(
 	if expectedVersion != current.Version {
 		return nil, ErrConflict
 	}
-	known := make(map[widget.BindingID]struct{}, len(current.Widgets))
+	known := make(map[widget.BindingID]widget.AreaCode, len(current.Widgets))
 	for _, binding := range current.Widgets {
-		known[binding.ID] = struct{}{}
+		known[binding.ID] = binding.Area
 	}
-	positions := map[widget.AreaCode]int{widget.AreaBody: 0, widget.AreaSidebar: 0}
+	positions := make(map[widget.AreaCode]int)
 	seen := make(map[widget.BindingID]struct{}, len(order))
 	for _, item := range order {
-		if _, exists := known[item.ID]; !exists {
+		previousArea, exists := known[item.ID]
+		if !exists {
 			return nil, fmt.Errorf("%w: unknown widget binding %d", ErrInvalid, item.ID)
 		}
 		if _, exists := seen[item.ID]; exists {
 			return nil, fmt.Errorf("%w: duplicate widget binding %d", ErrInvalid, item.ID)
 		}
 		seen[item.ID] = struct{}{}
-		if !templateRuntime.AllowsResourceArea(item.Area) {
+		if !widget.ValidArea(item.Area) || (item.Area != previousArea && !templateRuntime.AllowsResourceArea(item.Area)) {
 			return nil, fmt.Errorf("%w: template does not support widget area %q", ErrInvalid, item.Area)
 		}
 		if item.Position != positions[item.Area] {
@@ -1337,7 +1345,6 @@ func normalizeWidgetBindings(
 		Widget(widget.Code) (*widget.Runtime, bool)
 	},
 	templateRuntime interface {
-		AllowsResourceArea(widget.AreaCode) bool
 		FieldSchema() *field.Schema
 	},
 	source []widget.Binding,
@@ -1353,7 +1360,7 @@ func normalizeWidgetBindings(
 	}
 
 	result := make([]widget.Binding, len(source))
-	positions := map[widget.AreaCode]int{widget.AreaBody: 0, widget.AreaSidebar: 0}
+	positions := make(map[widget.AreaCode]int)
 	ids := make(map[widget.BindingID]struct{}, len(source))
 	for index, binding := range source {
 		if binding.ID <= 0 {
@@ -1363,7 +1370,7 @@ func normalizeWidgetBindings(
 			return nil, fmt.Errorf("resource widget id %d is duplicated", binding.ID)
 		}
 		ids[binding.ID] = struct{}{}
-		if !widget.ValidArea(binding.Area) || !templateRuntime.AllowsResourceArea(binding.Area) {
+		if !widget.ValidArea(binding.Area) {
 			return nil, fmt.Errorf("resource widget %d uses unsupported area %q", binding.ID, binding.Area)
 		}
 		if binding.Position != positions[binding.Area] {

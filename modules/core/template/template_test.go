@@ -127,20 +127,20 @@ func compileWidgets(t *testing.T, refs []widget.Ref, views []widget.View) *widge
 func TestCompileUsesTypedResourceWidgetsAndRejectsDuplicateSlot(t *testing.T) {
 	definition := Definition{
 		Code: "page", Label: "Page",
-		Layout: Layout{Body: []Item{ResourceWidgets{}}},
+		Layout: Layout{{Code: "body", Label: "Основная область", Items: []Item{ResourceWidgets{}}}},
 	}
 	catalog, err := Compile([]Definition{definition}, resolver())
 	if err != nil {
 		t.Fatal(err)
 	}
 	runtime, _ := catalog.Template("page")
-	if _, ok := runtime.Definition().Layout.Body[0].(ResourceWidgets); !ok {
-		t.Fatalf("layout item = %T", runtime.Definition().Layout.Body[0])
+	if _, ok := runtime.Definition().Layout[0].Items[0].(ResourceWidgets); !ok {
+		t.Fatalf("layout item = %T", runtime.Definition().Layout[0].Items[0])
 	}
 
 	_, err = Compile([]Definition{{
 		Code: "duplicate", Label: "Duplicate",
-		Layout: Layout{Body: []Item{ResourceWidgets{}, ResourceWidgets{}}},
+		Layout: Layout{{Code: "body", Label: "Основная область", Items: []Item{ResourceWidgets{}, ResourceWidgets{}}}},
 	}}, resolver())
 	if err == nil || !strings.Contains(err.Error(), "duplicate resource widget slots") {
 		t.Fatalf("error = %v", err)
@@ -154,15 +154,15 @@ func TestCompileWidgetsResolvesTypedReferencesDefaultsAndGeneratedKeys(t *testin
 	catalog, err := Compile([]Definition{{
 		Code: "page", Label: "Page",
 		Layout: Layout{
-			Body: []Item{
+			{Code: "body", Label: "Основная область", Items: []Item{
 				Widget{Widget: before},
 				ResourceWidgets{},
 				Widget{Widget: after, Columns: 6, MarginTop: 1, MarginBottom: 2},
-			},
-			Sidebar: []Item{
+			}},
+			{Code: "sidebar", Label: "Боковая область", Items: []Item{
 				Widget{Widget: navigation},
 				ResourceWidgets{},
-			},
+			}},
 		},
 	}}, resolver())
 	if err != nil {
@@ -175,34 +175,34 @@ func TestCompileWidgetsResolvesTypedReferencesDefaultsAndGeneratedKeys(t *testin
 	runtime, _ := compiled.Template("page")
 	presentation := widget.DefaultPresentation()
 	placements, err := Compose(runtime, []widget.Binding{
-		{ID: 22, Code: "core_quote", Area: widget.AreaBody, Position: 0, Presentation: presentation},
-		{ID: 41, Code: "core_contact", Area: widget.AreaSidebar, Position: 0, Presentation: presentation},
+		{ID: 22, Code: "core_quote", Area: "body", Position: 0, Presentation: presentation},
+		{ID: 41, Code: "core_contact", Area: "sidebar", Position: 0, Presentation: presentation},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := placementCodes(placements.Body); got != "core_before,core_quote,core_after" {
+	if got := placementCodes(placements["body"]); got != "core_before,core_quote,core_after" {
 		t.Fatalf("body = %s", got)
 	}
-	if got := placementCodes(placements.Sidebar); got != "core_navigation,core_contact" {
+	if got := placementCodes(placements["sidebar"]); got != "core_navigation,core_contact" {
 		t.Fatalf("sidebar = %s", got)
 	}
-	if placements.Body[0].Key != "template:page:body:0" ||
-		placements.Body[2].Key != "template:page:body:2" ||
-		placements.Sidebar[0].Key != "template:page:sidebar:0" {
-		t.Fatalf("static keys = %#v / %#v", placements.Body, placements.Sidebar)
+	if placements["body"][0].Key != "template:page:body:0" ||
+		placements["body"][2].Key != "template:page:body:2" ||
+		placements["sidebar"][0].Key != "template:page:sidebar:0" {
+		t.Fatalf("static keys = %#v / %#v", placements["body"], placements["sidebar"])
 	}
-	defaults := placements.Body[0].Presentation
+	defaults := placements["body"][0].Presentation
 	if defaults.View != "" || defaults.Columns != 12 || defaults.MarginTop != 0 ||
 		defaults.MarginBottom != 0 || !defaults.Enabled {
 		t.Fatalf("implicit presentation = %#v", defaults)
 	}
-	custom := placements.Body[2].Presentation
+	custom := placements["body"][2].Presentation
 	if custom.Columns != 6 || custom.MarginTop != 1 || custom.MarginBottom != 2 || !custom.Enabled {
 		t.Fatalf("custom presentation = %#v", custom)
 	}
-	if placements.Body[1].Key != "resource-widget-22" || placements.Sidebar[1].Key != "resource-widget-41" {
-		t.Fatalf("resource keys = %#v / %#v", placements.Body, placements.Sidebar)
+	if placements["body"][1].Key != "resource-widget-22" || placements["sidebar"][1].Key != "resource-widget-41" {
+		t.Fatalf("resource keys = %#v / %#v", placements["body"], placements["sidebar"])
 	}
 }
 
@@ -214,7 +214,7 @@ func TestCompileWidgetsUsesTypedViewAndRejectsWrongOwner(t *testing.T) {
 
 	catalog, err := Compile([]Definition{{
 		Code: "page", Label: "Page",
-		Layout: Layout{Body: []Item{Widget{Widget: content, View: article}}},
+		Layout: Layout{{Code: "body", Label: "Основная область", Items: []Item{Widget{Widget: content, View: article}}}},
 	}}, resolver())
 	if err != nil {
 		t.Fatal(err)
@@ -228,13 +228,13 @@ func TestCompileWidgetsUsesTypedViewAndRejectsWrongOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(placements.Body) != 1 || placements.Body[0].Presentation.View != "article" {
-		t.Fatalf("placements = %#v", placements.Body)
+	if len(placements["body"]) != 1 || placements["body"][0].Presentation.View != "article" {
+		t.Fatalf("placements = %#v", placements["body"])
 	}
 
 	invalid, err := Compile([]Definition{{
 		Code: "invalid", Label: "Invalid",
-		Layout: Layout{Body: []Item{Widget{Widget: content, View: slider}}},
+		Layout: Layout{{Code: "body", Label: "Основная область", Items: []Item{Widget{Widget: content, View: slider}}}},
 	}}, resolver())
 	if err != nil {
 		t.Fatal(err)
@@ -250,7 +250,7 @@ func TestCompileWidgetsRejectsUndeclaredCustomView(t *testing.T) {
 	article := widget.NewView(content, "article", "Article")
 	catalog, err := Compile([]Definition{{
 		Code: "page", Label: "Page",
-		Layout: Layout{Body: []Item{Widget{Widget: content, View: article}}},
+		Layout: Layout{{Code: "body", Label: "Основная область", Items: []Item{Widget{Widget: content, View: article}}}},
 	}}, resolver())
 	if err != nil {
 		t.Fatal(err)
@@ -281,7 +281,7 @@ func TestTemplateWidgetBindingsCompileComposeAndResolvePerResource(t *testing.T)
 		t.Fatal(err)
 	}
 	bindings := widget.ParamBindings{"text": widget.ResourceField("headline")}
-	definitions := []Definition{{Code: "bound", Label: "Bound", Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}, Layout: Layout{Body: []Item{Widget{Widget: ref, ParamBindings: bindings}, ResourceWidgets{}}}}}
+	definitions := []Definition{{Code: "bound", Label: "Bound", Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}, Layout: Layout{{Code: "body", Label: "Основная область", Items: []Item{Widget{Widget: ref, ParamBindings: bindings}, ResourceWidgets{}}}}}}
 	templates, err := Compile(definitions, resolver())
 	if err != nil {
 		t.Fatal(err)
@@ -293,11 +293,11 @@ func TestTemplateWidgetBindingsCompileComposeAndResolvePerResource(t *testing.T)
 	}
 	runtime, _ := compiled.Template("bound")
 	for _, value := range []string{"first", "second"} {
-		placements, err := Compose(runtime, []widget.Binding{{ID: 1, Code: "test_bound", Area: widget.AreaBody, Presentation: widget.DefaultPresentation(), ParamBindings: widget.ParamBindings{"text": widget.ResourceField("headline")}}})
+		placements, err := Compose(runtime, []widget.Binding{{ID: 1, Code: "test_bound", Area: "body", Presentation: widget.DefaultPresentation(), ParamBindings: widget.ParamBindings{"text": widget.ResourceField("headline")}}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, placement := range placements.Body {
+		for _, placement := range placements["body"] {
 			widgetRuntime, _ := catalog.Widget(placement.Code)
 			instance, err := widgetRuntime.NewResolved(placement.Params, placement.ParamBindings, runtime.FieldSchema(), widget.ResourceValues{Fields: map[string]any{"headline": value}})
 			if err != nil {
@@ -310,7 +310,7 @@ func TestTemplateWidgetBindingsCompileComposeAndResolvePerResource(t *testing.T)
 			placement.ParamBindings["text"] = widget.ResourceField("broken")
 		}
 	}
-	definitions[0].Layout.Body[0] = Widget{Widget: ref, ParamBindings: widget.ParamBindings{"text": widget.ResourceField("headline")}}
+	definitions[0].Layout[0].Items[0] = Widget{Widget: ref, ParamBindings: widget.ParamBindings{"text": widget.ResourceField("headline")}}
 	definitions[0].Fields[0].Type = field.TypeTextarea
 	templates, err = Compile(definitions, resolver())
 	if err != nil {

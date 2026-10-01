@@ -187,10 +187,7 @@ type pageResourceResponse struct {
 	Extensions map[string]any      `json:"extensions,omitempty"`
 }
 
-type pageWidgetsResponse struct {
-	Body    []pageWidgetResponse `json:"body"`
-	Sidebar []pageWidgetResponse `json:"sidebar"`
-}
+type pageWidgetsResponse map[widget.AreaCode][]pageWidgetResponse
 
 type pageResourcePayload struct {
 	ID          resource.ID       `json:"id"`
@@ -250,9 +247,7 @@ func (h pageResourceHandler) ServeHTTP(
 			Annotation:  item.Annotation,
 			ContentType: item.ContentType,
 		},
-		Widgets: pageWidgetsResponse{
-			Body: []pageWidgetResponse{}, Sidebar: []pageWidgetResponse{},
-		},
+		Widgets: pageWidgetsResponse{},
 	}
 	if item.Template != nil {
 		templateRuntime, exists := siteRuntime.Profile().Template(*item.Template)
@@ -266,11 +261,12 @@ func (h pageResourceHandler) ServeHTTP(
 			http.Error(response, "resource response failed", http.StatusInternalServerError)
 			return
 		}
-		result.Widgets.Body = h.renderWidgets(ctx, siteRuntime, item, placements.Body)
-		if ctx.Err() != nil {
-			return
+		for area, items := range placements {
+			result.Widgets[area] = h.renderWidgets(ctx, siteRuntime, item, items)
+			if ctx.Err() != nil {
+				return
+			}
 		}
-		result.Widgets.Sidebar = h.renderWidgets(ctx, siteRuntime, item, placements.Sidebar)
 	}
 
 	result.Extensions = h.publicExtensions(

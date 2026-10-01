@@ -2125,10 +2125,7 @@ func (r *Repository) ReorderWidgets(
 	if len(known) != len(order) {
 		return nil, errors.New("resource widget order is incomplete")
 	}
-	positions := map[widget.AreaCode]int{
-		widget.AreaBody:    0,
-		widget.AreaSidebar: 0,
-	}
+	positions := make(map[widget.AreaCode]int)
 	seen := make(map[widget.BindingID]struct{}, len(order))
 	for _, item := range order {
 		if _, exists := known[item.ID]; !exists {

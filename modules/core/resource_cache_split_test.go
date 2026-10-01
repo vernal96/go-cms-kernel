@@ -48,8 +48,8 @@ func TestSplitCacheReusesResourceIdentityAndLoadsOnlyMissingWidgets(t *testing.T
 	path := "/page"
 	store := newMemoryCacheStore()
 	base := &splitRepository{resourceRepositoryStub: &resourceRepositoryStub{item: resource.Resource{ID: 7, SiteID: 3, Path: &path, Title: "before", Widgets: []widget.Binding{
-		{ID: 11, Code: "core_html", Area: widget.AreaBody, Position: 0, Params: map[string]any{"html": "one"}},
-		{ID: 12, Code: "core_html", Area: widget.AreaSidebar, Position: 0, Params: map[string]any{"html": "two"}},
+		{ID: 11, Code: "core_html", Area: "body", Position: 0, Params: map[string]any{"html": "one"}},
+		{ID: 12, Code: "core_html", Area: "sidebar", Position: 0, Params: map[string]any{"html": "two"}},
 	}}}}
 	policy := newTestRepositoryCachePolicy(store)
 	repo := &cachedResourceRepository{siteID: 3, base: &invalidatingResourceRepository{base: base, policy: policy}, store: store, ttl: time.Minute, policy: policy}
@@ -105,7 +105,7 @@ func TestSplitCacheReusesResourceIdentityAndLoadsOnlyMissingWidgets(t *testing.T
 func TestSplitCacheRejectsMixedWidgetSnapshots(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryCacheStore()
-	base := &splitRepository{resourceRepositoryStub: &resourceRepositoryStub{item: resource.Resource{ID: 7, SiteID: 3, Title: "old", Widgets: []widget.Binding{{ID: 11, Code: "core_html", Area: widget.AreaBody, Params: map[string]any{"html": "old"}}}}}}
+	base := &splitRepository{resourceRepositoryStub: &resourceRepositoryStub{item: resource.Resource{ID: 7, SiteID: 3, Title: "old", Widgets: []widget.Binding{{ID: 11, Code: "core_html", Area: "body", Params: map[string]any{"html": "old"}}}}}}
 	repo := &cachedResourceRepository{siteID: 3, base: base, store: store, ttl: time.Minute}
 	if _, err := repo.ByID(ctx, 7); err != nil {
 		t.Fatal(err)

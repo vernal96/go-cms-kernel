@@ -323,7 +323,7 @@ func TestZeroFieldWidgetAndImplicitDefaultView(t *testing.T) {
 }
 
 func TestPresentationAndAreasValidate(t *testing.T) {
-	if !ValidArea(AreaBody) || !ValidArea(AreaSidebar) || ValidArea("footer") {
+	if !ValidArea(AreaDefault) || !ValidArea("sidebar") || !ValidArea("footer") || ValidArea("bad code") {
 		t.Fatal("widget area validation is incorrect")
 	}
 	for _, presentation := range []Presentation{

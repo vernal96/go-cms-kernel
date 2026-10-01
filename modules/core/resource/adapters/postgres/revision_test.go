@@ -12,7 +12,7 @@ func TestSnapshotFromResourceIncludesFieldsAndSemanticWidgets(t *testing.T) {
 		ID: 17, Version: 9, Title: "Article",
 		Fields: map[string]any{"headline": "Stored"},
 		Widgets: []widget.Binding{{
-			ID: 99, Code: "content_summary", Area: widget.AreaBody, Position: 2,
+			ID: 99, Code: "content_summary", Area: "body", Position: 2,
 			Presentation: widget.Presentation{View: "compact", Columns: 8, MarginTop: 1, MarginBottom: 2, Enabled: true},
 			Params:       map[string]any{"title": "Summary"},
 		}},

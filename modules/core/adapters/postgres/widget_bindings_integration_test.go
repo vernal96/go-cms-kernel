@@ -31,7 +31,7 @@ func TestPostgresWidgetParamBindingsLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	layout := template.Layout{Body: []template.Item{template.ResourceWidgets{}}, Sidebar: []template.Item{template.ResourceWidgets{}}}
+	layout := template.Layout{{Code: "promo", Label: "Промо", Items: []template.Item{template.ResourceWidgets{}}}, {Code: "sidebar", Label: "Боковая область", Items: []template.Item{template.ResourceWidgets{}}}}
 	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "bindings", Modules: []kernel.ProfileModule{{Module: module}}, Templates: []template.Definition{
 		{Code: "bound", Label: "Bound", Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}, Layout: layout},
 		{Code: "empty", Label: "Empty", Layout: layout},
@@ -100,7 +100,7 @@ func TestPostgresWidgetParamBindingsLifecycle(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			binding, err := service.CreateWidget(ctx, actor, id, resource.CreateWidgetInput{ExpectedVersion: current.Version, Code: "core_hook_widget", Area: widget.AreaBody, Columns: 12, ParamBindings: widget.ParamBindings{"text": widget.ResourceField("headline")}})
+			binding, err := service.CreateWidget(ctx, actor, id, resource.CreateWidgetInput{ExpectedVersion: current.Version, Code: "core_hook_widget", Area: "promo", Columns: 12, ParamBindings: widget.ParamBindings{"text": widget.ResourceField("headline")}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -149,12 +149,30 @@ func TestPostgresWidgetParamBindingsLifecycle(t *testing.T) {
 	if err == nil {
 		t.Fatal("schema switch accepted dangling binding")
 	}
+	// Destination profile no longer declares the source widget area. Transfer
+	// must preserve its stored code and expose it through the recovery container.
+	targetBlueprint, err := factory.Compile(ctx, kernel.Profile{Code: "bindings", Modules: []kernel.ProfileModule{{Module: module}}, Templates: []template.Definition{
+		{Code: "bound", Label: "Bound", Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}},
+		{Code: "empty", Label: "Empty"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sites[siteIDs[1]], err = site.NewRuntimeFromBlueprint(ctx, sites[siteIDs[1]].Site(), targetBlueprint)
+	if err != nil {
+		t.Fatal(err)
+	}
 	moved, err := service.TransferToSite(ctx, actor, tree.ID, siteIDs[1], current.Version, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if moved.Resource.SiteID != siteIDs[1] || moved.Resource.Widgets[0].ParamBindings["text"] != widget.ResourceField("headline") {
 		t.Fatal("transfer lost binding")
+	}
+	targetTemplate, _ := sites[siteIDs[1]].Profile().Template(code)
+	placements, err := template.Compose(targetTemplate, moved.Resource.Widgets)
+	if err != nil || len(placements[widget.AreaDefault]) != 1 || moved.Resource.Widgets[0].Area != "promo" {
+		t.Fatalf("transferred recovery: %#v %v", placements, err)
 	}
 	current, err = service.Get(ctx, actor, library.ID)
 	if err != nil {

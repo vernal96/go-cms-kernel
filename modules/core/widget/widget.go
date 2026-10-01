@@ -46,8 +46,7 @@ func (r Ref) String() string {
 }
 
 const (
-	AreaBody    AreaCode = "body"
-	AreaSidebar AreaCode = "sidebar"
+	AreaDefault AreaCode = "default"
 	DefaultView ViewCode = "default"
 )
 
@@ -187,7 +186,19 @@ func PublicView(code ViewCode) ViewCode {
 }
 
 func ValidArea(code AreaCode) bool {
-	return code == AreaBody || code == AreaSidebar
+	if len(code) == 0 {
+		return false
+	}
+	for i, c := range code {
+		if c >= 'a' && c <= 'z' {
+			continue
+		}
+		if i > 0 && (c >= '0' && c <= '9' || c == '_' || c == '-') {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 type Binding struct {
@@ -217,10 +228,7 @@ type Placement struct {
 	ParamBindings ParamBindings
 }
 
-type Placements struct {
-	Body    []Placement
-	Sidebar []Placement
-}
+type Placements map[AreaCode][]Placement
 
 func CloneBinding(binding Binding) Binding {
 	binding.Params = cloneMap(binding.Params)

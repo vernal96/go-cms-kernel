@@ -559,14 +559,14 @@ func (m *Resources) ResourceChildren(
 }
 
 type ResourceTemplate struct {
-	Code                    template.Code        `json:"code"`
-	Label                   string               `json:"label"`
-	Icon                    string               `json:"icon"`
-	Fields                  []field.Descriptor   `json:"fields"`
-	EditorTabs              []FieldEditorTab     `json:"editor_tabs"`
-	SupportsResourceWidgets bool                 `json:"supports_resource_widgets"`
-	WidgetAreas             []widget.AreaCode    `json:"widget_areas"`
-	WidgetValueSources      []widget.ValueSource `json:"widget_value_sources"`
+	Code                    template.Code             `json:"code"`
+	Label                   string                    `json:"label"`
+	Icon                    string                    `json:"icon"`
+	Fields                  []field.Descriptor        `json:"fields"`
+	EditorTabs              []FieldEditorTab          `json:"editor_tabs"`
+	SupportsResourceWidgets bool                      `json:"supports_resource_widgets"`
+	WidgetAreas             []template.AreaDescriptor `json:"widget_areas"`
+	WidgetValueSources      []widget.ValueSource      `json:"widget_value_sources"`
 }
 
 type FieldEditorTab struct {
@@ -667,7 +667,7 @@ func (m *Resources) ResourceMetadata(
 			Fields:                  fields,
 			EditorTabs:              editorTabs(definition.EditorTabs),
 			SupportsResourceWidgets: templateRuntime.SupportsResourceWidgets(),
-			WidgetAreas:             templateRuntime.ResourceAreas(),
+			WidgetAreas:             templateRuntime.Areas(),
 			WidgetValueSources:      widget.ValueSources(templateRuntime.FieldSchema()),
 		}
 	}

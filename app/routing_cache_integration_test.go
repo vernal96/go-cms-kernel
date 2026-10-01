@@ -50,7 +50,7 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 		Logger: fakeLoggerFactory{}, EventBus: fakeEventBusFactory{}, PasswordHasher: argon2id.Factory{},
 		MainDatabase: appkernel.DatabaseDefinition{Connector: pg.Factory{Config: pg.Config{Code: "main", Host: host, Port: port, Database: os.Getenv("CMS_TEST_POSTGRES_DB"), User: os.Getenv("CMS_TEST_POSTGRES_USER"), Password: os.Getenv("CMS_TEST_POSTGRES_PASSWORD"), SSLMode: "disable", MaxConns: 4, ConnMaxLifetime: time.Minute, ConnectTimeout: 5 * time.Second}}, Adapters: []kernel.ModuleDatabaseFactory{corepg.DatabaseFactory{}}},
 		Caches:       []cache.Factory{rediscache.Factory{Config: rediscache.Config{Code: "test", Addrs: []string{redisAddr}, Prefix: fmt.Sprintf("routing-test:%d", time.Now().UnixNano())}}},
-		Profiles:     []kernel.Profile{{Code: profile, Modules: []kernel.ProfileModule{{Module: core.Module{}, Caches: []cache.Binding{{Alias: core.DurableCacheAlias, Code: "test"}, {Alias: core.HotCacheAlias, Code: "test"}}}, {Module: admin.Module{}}}, Templates: []template.Definition{{Code: code, Label: "Cached", Layout: template.Layout{Body: []template.Item{template.ResourceWidgets{}}, Sidebar: []template.Item{template.ResourceWidgets{}}}}}}},
+		Profiles:     []kernel.Profile{{Code: profile, Modules: []kernel.ProfileModule{{Module: core.Module{}, Caches: []cache.Binding{{Alias: core.DurableCacheAlias, Code: "test"}, {Alias: core.HotCacheAlias, Code: "test"}}}, {Module: admin.Module{}}}, Templates: []template.Definition{{Code: code, Label: "Cached", Layout: template.Layout{{Code: "body", Label: "Основная область", Items: []template.Item{template.ResourceWidgets{}}}, {Code: "sidebar", Label: "Боковая область", Items: []template.Item{template.ResourceWidgets{}}}, {Code: "footer", Label: "Footer"}}}}}},
 	}
 	application, err := appkernel.New(ctx, definition)
 	if err != nil {
@@ -131,7 +131,7 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 	addWidget := func(owner resource.ID, html string) widget.Binding {
 		t.Helper()
 		current := load(owner)
-		binding, err := application.Resources().CreateWidget(ctx, actor, owner, resource.CreateWidgetInput{ExpectedVersion: current.Version, Code: "core_html", Area: widget.AreaBody, Columns: 12, Params: map[string]any{"html": html}})
+		binding, err := application.Resources().CreateWidget(ctx, actor, owner, resource.CreateWidgetInput{ExpectedVersion: current.Version, Code: "core_html", Area: "body", Columns: 12, Params: map[string]any{"html": html}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -179,7 +179,7 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 		t.Fatalf("stale widget: %s", got)
 	}
 	current = load(page.ID)
-	_, err = application.Resources().ReorderWidgets(ctx, actor, page.ID, current.Version, []widget.Order{{ID: w2.ID, Area: widget.AreaBody, Position: 0}, {ID: w1.ID, Area: widget.AreaBody, Position: 1}})
+	_, err = application.Resources().ReorderWidgets(ctx, actor, page.ID, current.Version, []widget.Order{{ID: w2.ID, Area: "body", Position: 0}, {ID: w1.ID, Area: "body", Position: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 	get("/articles/changed", 200)
 	// Publication remains a request-time decision despite a warm route/entity.
 	current = load(root.ID)
-	_, err = application.Resources().CreateWidget(ctx, actor, root.ID, resource.CreateWidgetInput{ExpectedVersion: current.Version, Code: "core_resource_list", Area: widget.AreaBody, Columns: 12, Params: map[string]any{"parent_mode": "current", "limit": int64(100)}})
+	_, err = application.Resources().CreateWidget(ctx, actor, root.ID, resource.CreateWidgetInput{ExpectedVersion: current.Version, Code: "core_resource_list", Area: "body", Columns: 12, Params: map[string]any{"parent_mode": "current", "limit": int64(100)}})
 	if err != nil {
 		t.Fatal(err)
 	}

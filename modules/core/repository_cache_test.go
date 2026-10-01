@@ -168,7 +168,7 @@ func TestCachedResourceRepositoryKeysTagsAndInvalidation(t *testing.T) {
 			Widgets: []widget.Binding{{
 				ID:           1,
 				Code:         widget.Code("content_summary"),
-				Area:         widget.AreaBody,
+				Area:         "body",
 				Position:     0,
 				Presentation: widget.DefaultPresentation(),
 				Params: map[string]any{
@@ -853,7 +853,7 @@ func TestLibraryWidgetMutationsInvalidateItemAndLibraryDependencies(t *testing.T
 	policy := newTestRepositoryCachePolicy(store)
 	base := &widgetLibraryRepository{resourceRepositoryStub: &resourceRepositoryStub{item: resource.Resource{ID: 20, SiteID: 3}}}
 	repository := &cachedResourceRepository{siteID: 3, base: &invalidatingResourceRepository{base: base, policy: policy}, store: store, ttl: time.Minute, policy: policy}
-	binding := widget.Binding{ID: 1, Code: "test", Area: widget.AreaBody, Presentation: widget.DefaultPresentation(), ParamBindings: widget.ParamBindings{"text": widget.ResourceProperty("title")}}
+	binding := widget.Binding{ID: 1, Code: "test", Area: "body", Presentation: widget.DefaultPresentation(), ParamBindings: widget.ParamBindings{"text": widget.ResourceProperty("title")}}
 	operations := []struct {
 		name  string
 		run   func() error
@@ -867,7 +867,7 @@ func TestLibraryWidgetMutationsInvalidateItemAndLibraryDependencies(t *testing.T
 			return err
 		}, 1},
 		{"reorder", func() error {
-			_, err := repository.ReorderWidgets(ctx, nil, 20, 1, []widget.Order{{ID: 1, Area: widget.AreaSidebar}}, true)
+			_, err := repository.ReorderWidgets(ctx, nil, 20, 1, []widget.Order{{ID: 1, Area: "sidebar"}}, true)
 			return err
 		}, 1},
 		{"delete", func() error { return repository.DeleteWidget(ctx, nil, 20, 1, 1, true) }, 0},

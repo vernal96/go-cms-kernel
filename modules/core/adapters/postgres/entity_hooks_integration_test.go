@@ -122,7 +122,7 @@ func TestPostgresEntityHooksResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "hooks", Modules: []kernel.ProfileModule{{Module: module}}, Templates: []template.Definition{{Code: "hook_template", Label: "Hook template", Layout: template.Layout{Body: []template.Item{template.ResourceWidgets{}}, Sidebar: []template.Item{template.ResourceWidgets{}}}, Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}}}})
+	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "hooks", Modules: []kernel.ProfileModule{{Module: module}}, Templates: []template.Definition{{Code: "hook_template", Label: "Hook template", Layout: template.Layout{{Code: "body", Label: "Основная область", Items: []template.Item{template.ResourceWidgets{}}}, {Code: "sidebar", Label: "Боковая область", Items: []template.Item{template.ResourceWidgets{}}}}, Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +288,7 @@ func TestPostgresEntityHooksResources(t *testing.T) {
 	if editable.Fields["headline"] != "two" {
 		t.Fatal("field mutation lost")
 	}
-	binding, err := service.CreateWidget(ctx, actor, editable.ID, resource.CreateWidgetInput{ExpectedVersion: editable.Version, Code: "core_hook_widget", Area: widget.AreaBody, Columns: 12, Params: map[string]any{"text": "input"}})
+	binding, err := service.CreateWidget(ctx, actor, editable.ID, resource.CreateWidgetInput{ExpectedVersion: editable.Version, Code: "core_hook_widget", Area: "body", Columns: 12, Params: map[string]any{"text": "input"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +308,7 @@ func TestPostgresEntityHooksResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ReorderWidgets(ctx, actor, editable.ID, editable.Version, []widget.Order{{ID: binding.ID, Area: widget.AreaSidebar, Position: 0}}); err != nil {
+	if _, err := service.ReorderWidgets(ctx, actor, editable.ID, editable.Version, []widget.Order{{ID: binding.ID, Area: "sidebar", Position: 0}}); err != nil {
 		t.Fatal(err)
 	}
 	editable, err = service.Get(ctx, actor, editable.ID)

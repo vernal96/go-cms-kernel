@@ -1296,8 +1296,8 @@ func newTransportTestApp(
 			Profiles: []kernel.Profile{{
 				Code: "dev",
 				Templates: append([]template.Definition{
-					{Code: "widgets", Label: "Widgets", Layout: template.Layout{Body: []template.Item{template.ResourceWidgets{}}}},
-					{Code: "content", Label: "Content", Layout: template.Layout{Body: []template.Item{template.Widget{Widget: corewidgets.Content}}}},
+					{Code: "widgets", Label: "Widgets", Layout: template.Layout{{Code: "body", Label: "Основная область", Items: []template.Item{template.ResourceWidgets{}}}}},
+					{Code: "content", Label: "Content", Layout: template.Layout{{Code: "body", Label: "Основная область", Items: []template.Item{template.Widget{Widget: corewidgets.Content}}}}},
 					{Code: "empty", Label: "Empty"},
 				}, extraTemplates...),
 				Modules: []kernel.ProfileModule{
@@ -1669,14 +1669,14 @@ func TestPageResourceRendersWidgetEnvelopeAndIsolatesErrors(
 					Content:  "Content",
 					IsPublic: true,
 					Widgets: []widget.Binding{
-						{ID: 1, Code: "widgets_success", Area: widget.AreaBody, Position: 0, Presentation: presentation},
-						{ID: 2, Code: "missing_widget", Area: widget.AreaBody, Position: 1, Presentation: presentation},
-						{ID: 3, Code: "widgets_params", Area: widget.AreaBody, Position: 2, Presentation: presentation},
-						{ID: 4, Code: "widgets_instance", Area: widget.AreaBody, Position: 3, Presentation: presentation},
-						{ID: 5, Code: "widgets_render", Area: widget.AreaBody, Position: 4, Presentation: presentation},
-						{ID: 6, Code: "widgets_result", Area: widget.AreaBody, Position: 5, Presentation: presentation},
-						{ID: 7, Code: "widgets_success", Area: widget.AreaBody, Position: 6, Presentation: presentation},
-						{ID: 8, Code: "widgets_success", Area: widget.AreaBody, Position: 7, Presentation: widget.Presentation{Columns: 12, Enabled: false}},
+						{ID: 1, Code: "widgets_success", Area: "body", Position: 0, Presentation: presentation},
+						{ID: 2, Code: "missing_widget", Area: "body", Position: 1, Presentation: presentation},
+						{ID: 3, Code: "widgets_params", Area: "body", Position: 2, Presentation: presentation},
+						{ID: 4, Code: "widgets_instance", Area: "body", Position: 3, Presentation: presentation},
+						{ID: 5, Code: "widgets_render", Area: "body", Position: 4, Presentation: presentation},
+						{ID: 6, Code: "widgets_result", Area: "body", Position: 5, Presentation: presentation},
+						{ID: 7, Code: "widgets_success", Area: "body", Position: 6, Presentation: presentation},
+						{ID: 8, Code: "widgets_success", Area: "body", Position: 7, Presentation: widget.Presentation{Columns: 12, Enabled: false}},
 					},
 				},
 				"/empty": {
@@ -1786,7 +1786,7 @@ func TestPageResourceRendersWidgetEnvelopeAndIsolatesErrors(
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK ||
-		!strings.Contains(response.Body.String(), `"widgets":{"body":[],"sidebar":[]}`) {
+		!strings.Contains(response.Body.String(), `"widgets":{"default":[]}`) {
 		t.Fatalf(
 			"empty widgets response = %d, %s",
 			response.Code,
@@ -2567,8 +2567,8 @@ func TestPageWidgetBindingsResolveCurrentResourceAndIsolateInvalidValues(t *test
 	order := []string{}
 	module := transportModule{code: "binding", resourceType: transportResourceType{code: "binding_test"}, order: &order, widgets: []widget.Widget{echo}}
 	code := template.Code("bound_page")
-	repo := resourceRepository{byPath: map[string]resource.Resource{"/bound": {ID: 7, SiteID: 1, Type: resourcetype.Page, Template: &code, Title: "First title", Path: stringPointer("/bound"), IsPublic: true, Fields: map[string]any{"headline": "First field"}, Widgets: []widget.Binding{{ID: 1, Code: "binding_bound", Area: widget.AreaBody, Presentation: widget.DefaultPresentation(), ParamBindings: widget.ParamBindings{"text": widget.ResourceField("headline")}}}}}}
-	app := newTransportTestApp(t, module, repo, template.Definition{Code: code, Label: "Bound", Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}, Layout: template.Layout{Body: []template.Item{template.Widget{Widget: ref, ParamBindings: widget.ParamBindings{"text": widget.ResourceProperty("title")}}, template.ResourceWidgets{}}}})
+	repo := resourceRepository{byPath: map[string]resource.Resource{"/bound": {ID: 7, SiteID: 1, Type: resourcetype.Page, Template: &code, Title: "First title", Path: stringPointer("/bound"), IsPublic: true, Fields: map[string]any{"headline": "First field"}, Widgets: []widget.Binding{{ID: 1, Code: "binding_bound", Area: "body", Presentation: widget.DefaultPresentation(), ParamBindings: widget.ParamBindings{"text": widget.ResourceField("headline")}}}}}}
+	app := newTransportTestApp(t, module, repo, template.Definition{Code: code, Label: "Bound", Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}, Layout: template.Layout{{Code: "body", Label: "Основная область", Items: []template.Item{template.Widget{Widget: ref, ParamBindings: widget.ParamBindings{"text": widget.ResourceProperty("title")}}, template.ResourceWidgets{}}}}})
 	handler, err := newTestHandler(app)
 	if err != nil {
 		t.Fatal(err)
@@ -2652,4 +2652,43 @@ func (r groupUserAccessRepository) Authorization(ctx context.Context, id *securi
 		result.GroupPermissions = append([]permission.Code(nil), codes...)
 	}
 	return result, err
+}
+
+func TestPublicDynamicWidgetAreas(t *testing.T) {
+	code := template.Code("dynamic")
+	disabled := widget.DefaultPresentation()
+	disabled.Enabled = false
+	order := []string{}
+	module := transportModule{code: "zones", resourceType: transportResourceType{code: "zone_test"}, order: &order}
+	runtimeApp := newTransportTestApp(t, module, resourceRepository{byPath: map[string]resource.Resource{
+		"/zones": {ID: 71, SiteID: 1, Type: resourcetype.Page, Template: &code, Title: "Zones", Path: stringPointer("/zones"), Content: "Hello", IsPublic: true, Widgets: []widget.Binding{
+			{ID: 1, Code: "core_content", Area: "main", Position: 0, Presentation: widget.DefaultPresentation()},
+			{ID: 2, Code: "core_content", Area: "removed", Position: 0, Presentation: disabled},
+		}},
+	}}, template.Definition{Code: code, Label: "Dynamic", Layout: template.Layout{{Code: "main", Label: "Main label", AdminSpan: 16}, {Code: "aside", Label: "Aside label", AdminSpan: 8}, {Code: "footer", Label: "Footer label"}}})
+	handler, err := newTestHandler(runtimeApp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/zones", nil)
+	request.Host = "example.com"
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("response: %d %s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Widgets map[string][]map[string]any `json:"widgets"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Widgets) != 4 || len(payload.Widgets["main"]) != 1 || payload.Widgets["aside"] == nil || payload.Widgets["footer"] == nil || payload.Widgets["default"] == nil || len(payload.Widgets["default"]) != 0 {
+		t.Fatalf("areas: %#v", payload.Widgets)
+	}
+	for _, secret := range []string{"admin_span", "Main label", "Aside label", "Footer label"} {
+		if strings.Contains(response.Body.String(), secret) {
+			t.Fatalf("leaked area metadata: %s", secret)
+		}
+	}
 }

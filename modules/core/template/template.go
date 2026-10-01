@@ -37,9 +37,34 @@ type ResourceWidgets struct{}
 
 func (ResourceWidgets) isTemplateItem() {}
 
-type Layout struct {
-	Body    []Item
-	Sidebar []Item
+// Area is a named widget container. Nil Items implies a resource-widget slot;
+// an explicit empty slice declares an empty, non-editable container.
+type Area struct {
+	Code      widget.AreaCode
+	Label     string
+	AdminSpan int
+	Items     []Item
+}
+
+type Layout []Area
+
+// AreaDescriptor describes editor layout, never public widget output.
+type AreaDescriptor struct {
+	Code                    widget.AreaCode `json:"code"`
+	Label                   string          `json:"label"`
+	AdminSpan               int             `json:"admin_span"`
+	SupportsResourceWidgets bool            `json:"supports_resource_widgets"`
+}
+
+func areaItems(area Area) []Item {
+	if area.Items == nil {
+		return []Item{ResourceWidgets{}}
+	}
+	return area.Items
+}
+
+func defaultArea() Area {
+	return Area{Code: widget.AreaDefault, Label: "Страница сайта", AdminSpan: 24}
 }
 
 type Definition struct {
@@ -67,10 +92,7 @@ type compiledItem struct {
 	paramBindings widget.ParamBindings
 }
 
-type compiledLayout struct {
-	body    []compiledItem
-	sidebar []compiledItem
-}
+type compiledLayout map[widget.AreaCode][]compiledItem
 
 type Runtime struct {
 	definition Definition
@@ -142,31 +164,36 @@ func Compile(definitions []Definition, resolver field.TypeResolver) (*Catalog, e
 }
 
 func validateLayout(code Code, layout Layout) error {
-	for _, area := range []struct {
-		code  widget.AreaCode
-		items []Item
-	}{
-		{code: widget.AreaBody, items: layout.Body},
-		{code: widget.AreaSidebar, items: layout.Sidebar},
-	} {
+	seen := make(map[widget.AreaCode]bool)
+	for _, area := range layout {
+		if !widget.ValidArea(area.Code) || area.Code == widget.AreaDefault || seen[area.Code] {
+			return fmt.Errorf("template %q has invalid or duplicate area %q", code, area.Code)
+		}
+		seen[area.Code] = true
+		if strings.TrimSpace(area.Label) == "" || area.Label != strings.TrimSpace(area.Label) {
+			return fmt.Errorf("template %q area %q has invalid label", code, area.Code)
+		}
+		if area.AdminSpan < 0 || area.AdminSpan > 24 {
+			return fmt.Errorf("template %q area %q admin span must be between 1 and 24", code, area.Code)
+		}
 		slots := 0
-		for index, item := range area.items {
+		for index, item := range areaItems(area) {
 			switch declaration := item.(type) {
 			case ResourceWidgets:
 				slots++
 			case Widget:
 				if declaration.Widget.IsZero() {
-					return fmt.Errorf("template %q %s widget at index %d has empty reference", code, area.code, index)
+					return fmt.Errorf("template %q %s widget at index %d has empty reference", code, area.Code, index)
 				}
 				if err := effectivePresentation(declaration).Validate(); err != nil {
-					return fmt.Errorf("template %q %s widget at index %d: %w", code, area.code, index, err)
+					return fmt.Errorf("template %q %s widget at index %d: %w", code, area.Code, index, err)
 				}
 			default:
-				return fmt.Errorf("template %q %s item at index %d has unsupported type %T", code, area.code, index, item)
+				return fmt.Errorf("template %q %s item at index %d has unsupported type %T", code, area.Code, index, item)
 			}
 		}
 		if slots > 1 {
-			return fmt.Errorf("template %q %s contains duplicate resource widget slots", code, area.code)
+			return fmt.Errorf("template %q %s contains duplicate resource widget slots", code, area.Code)
 		}
 	}
 	return nil
@@ -186,31 +213,50 @@ func effectivePresentation(declaration Widget) widget.Presentation {
 	}
 }
 
-func (r *Runtime) SupportsResourceWidgets() bool {
-	return len(r.ResourceAreas()) > 0
-}
+// Every template can retain recovered bindings in default, even when its
+// declared containers contain only static widgets.
+func (r *Runtime) SupportsResourceWidgets() bool { return r != nil }
 
-func (r *Runtime) ResourceAreas() []widget.AreaCode {
+func (r *Runtime) Areas() []AreaDescriptor {
 	if r == nil {
 		return nil
 	}
-	result := make([]widget.AreaCode, 0, 2)
-	if hasResourceWidgets(r.definition.Layout.Body) {
-		result = append(result, widget.AreaBody)
+	areas := r.definition.Layout
+	if len(areas) == 0 {
+		areas = Layout{defaultArea()}
 	}
-	if hasResourceWidgets(r.definition.Layout.Sidebar) {
-		result = append(result, widget.AreaSidebar)
+	result := make([]AreaDescriptor, 0, len(areas))
+	for _, area := range areas {
+		span := area.AdminSpan
+		if span == 0 {
+			span = 24
+		}
+		result = append(result, AreaDescriptor{Code: area.Code, Label: area.Label, AdminSpan: span, SupportsResourceWidgets: hasResourceWidgets(areaItems(area))})
 	}
 	return result
 }
 
 func (r *Runtime) AllowsResourceArea(area widget.AreaCode) bool {
-	for _, current := range r.ResourceAreas() {
-		if current == area {
-			return true
+	if r == nil {
+		return false
+	}
+	if area == widget.AreaDefault {
+		return true
+	}
+	for _, current := range r.definition.Layout {
+		if current.Code == area {
+			return hasResourceWidgets(areaItems(current))
 		}
 	}
 	return false
+}
+
+// ResolveArea projects a stored binding without changing its original area.
+func (r *Runtime) ResolveArea(area widget.AreaCode) widget.AreaCode {
+	if r.AllowsResourceArea(area) {
+		return area
+	}
+	return widget.AreaDefault
 }
 
 func hasResourceWidgets(items []Item) bool {
@@ -253,15 +299,16 @@ func (c *Catalog) CompileWidgets(widgets widgetResolver) (*Catalog, error) {
 }
 
 func compileLayout(code Code, layout Layout, widgets widgetResolver, schema *field.Schema) (*compiledLayout, error) {
-	body, err := compileArea(code, widget.AreaBody, layout.Body, widgets, schema)
-	if err != nil {
-		return nil, err
+	result := make(compiledLayout)
+	for _, area := range layout {
+		items, err := compileArea(code, area.Code, areaItems(area), widgets, schema)
+		if err != nil {
+			return nil, err
+		}
+		result[area.Code] = items
 	}
-	sidebar, err := compileArea(code, widget.AreaSidebar, layout.Sidebar, widgets, schema)
-	if err != nil {
-		return nil, err
-	}
-	return &compiledLayout{body: body, sidebar: sidebar}, nil
+	result[widget.AreaDefault] = []compiledItem{{kind: compiledResourceWidgets}}
+	return &result, nil
 }
 
 func compileArea(
@@ -320,37 +367,62 @@ func Compose(runtime *Runtime, bindings []widget.Binding) (widget.Placements, er
 	if runtime.compiled == nil {
 		return widget.Placements{}, errors.New("template widget layout is not compiled")
 	}
-	byArea := map[widget.AreaCode][]widget.Binding{
-		widget.AreaBody: {}, widget.AreaSidebar: {},
-	}
+	byArea := make(map[widget.AreaCode][]widget.Binding)
 	for _, binding := range bindings {
-		if !widget.ValidArea(binding.Area) {
-			return widget.Placements{}, fmt.Errorf("resource widget %d has invalid area %q", binding.ID, binding.Area)
+		if !widget.ValidArea(binding.Area) || binding.Position < 0 {
+			return nil, fmt.Errorf("resource widget %d has invalid area or position", binding.ID)
 		}
-		if !runtime.AllowsResourceArea(binding.Area) {
-			return widget.Placements{}, fmt.Errorf("template %q does not allow resource widgets in %q", runtime.definition.Code, binding.Area)
-		}
-		byArea[binding.Area] = append(byArea[binding.Area], widget.CloneBinding(binding))
+		area := runtime.ResolveArea(binding.Area)
+		byArea[area] = append(byArea[area], widget.CloneBinding(binding))
 	}
-	for area := range byArea {
-		sort.SliceStable(byArea[area], func(left, right int) bool {
-			return byArea[area][left].Position < byArea[area][right].Position
-		})
-		for index, binding := range byArea[area] {
-			if binding.Position != index {
-				return widget.Placements{}, fmt.Errorf("resource widget %d in %q has position %d instead of %d", binding.ID, area, binding.Position, index)
+	// Validate positions in their stored containers before merging recovered areas.
+	storedPositions := make(map[widget.AreaCode][]int)
+	for _, binding := range bindings {
+		storedPositions[binding.Area] = append(storedPositions[binding.Area], binding.Position)
+	}
+	for area, positions := range storedPositions {
+		sort.Ints(positions)
+		for i, position := range positions {
+			if position != i {
+				return nil, fmt.Errorf("resource widgets in %q have non-contiguous positions", area)
 			}
 		}
 	}
-	body, err := composeArea(widget.AreaBody, runtime.compiled.body, byArea[widget.AreaBody])
-	if err != nil {
-		return widget.Placements{}, err
+	result := make(widget.Placements)
+	for _, descriptor := range runtime.Areas() {
+		result[descriptor.Code] = []widget.Placement{}
 	}
-	sidebar, err := composeArea(widget.AreaSidebar, runtime.compiled.sidebar, byArea[widget.AreaSidebar])
-	if err != nil {
-		return widget.Placements{}, err
+	if len(byArea[widget.AreaDefault]) > 0 {
+		result[widget.AreaDefault] = []widget.Placement{}
 	}
-	return widget.Placements{Body: body, Sidebar: sidebar}, nil
+	for area := range result {
+		current := byArea[area]
+		sort.SliceStable(current, func(i, j int) bool {
+			left, right := current[i], current[j]
+			if left.Area != right.Area {
+				if left.Area == widget.AreaDefault {
+					return true
+				}
+				if right.Area == widget.AreaDefault {
+					return false
+				}
+				return left.Area < right.Area
+			}
+			if left.Position != right.Position {
+				return left.Position < right.Position
+			}
+			return left.ID < right.ID
+		})
+		for i := range current {
+			current[i].Position = i
+		}
+		placements, err := composeArea(area, (*runtime.compiled)[area], current)
+		if err != nil {
+			return nil, err
+		}
+		result[area] = placements
+	}
+	return result, nil
 }
 
 func composeArea(area widget.AreaCode, items []compiledItem, bindings []widget.Binding) ([]widget.Placement, error) {
@@ -401,9 +473,9 @@ func (c *Catalog) Definitions() []Definition {
 func CloneDefinition(definition Definition) Definition {
 	definition.Fields = field.CloneDefinitions(definition.Fields)
 	definition.EditorTabs = field.CloneEditorTabs(definition.EditorTabs)
-	definition.Layout = Layout{
-		Body:    cloneItems(definition.Layout.Body),
-		Sidebar: cloneItems(definition.Layout.Sidebar),
+	definition.Layout = append(Layout(nil), definition.Layout...)
+	for i := range definition.Layout {
+		definition.Layout[i].Items = cloneItems(definition.Layout[i].Items)
 	}
 	return definition
 }

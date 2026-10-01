@@ -469,7 +469,7 @@ func (r *memoryRepository) DeleteWidget(_ context.Context, _ *security.UserID, i
 	if !removed {
 		return ErrNotFound
 	}
-	positions := map[widget.AreaCode]int{widget.AreaBody: 0, widget.AreaSidebar: 0}
+	positions := map[widget.AreaCode]int{"body": 0, "sidebar": 0}
 	for index := range result {
 		result[index].Position = positions[result[index].Area]
 		positions[result[index].Area]++
@@ -968,8 +968,8 @@ func newTestService(
 					Code:  "article",
 					Label: "Article",
 					Layout: template.Layout{
-						Body:    []template.Item{template.ResourceWidgets{}},
-						Sidebar: []template.Item{template.ResourceWidgets{}},
+						{Code: "body", Label: "Основная область", Items: []template.Item{template.ResourceWidgets{}}},
+						{Code: "sidebar", Label: "Боковая область", Items: []template.Item{template.ResourceWidgets{}}},
 					},
 					Fields: []field.Definition{{
 						Key:        "headline",
@@ -986,8 +986,8 @@ func newTestService(
 					Code:  "empty",
 					Label: "Empty",
 					Layout: template.Layout{
-						Body:    []template.Item{template.ResourceWidgets{}},
-						Sidebar: []template.Item{template.ResourceWidgets{}},
+						{Code: "body", Label: "Основная область", Items: []template.Item{template.ResourceWidgets{}}},
+						{Code: "sidebar", Label: "Боковая область", Items: []template.Item{template.ResourceWidgets{}}},
 					},
 				},
 				{
@@ -1622,7 +1622,7 @@ func TestServiceWidgetBindingsKeepIdentityAcrossReorderAndMove(t *testing.T) {
 	enabled := true
 	first, err := service.CreateWidget(ctx, security.System(), created.ID, CreateWidgetInput{
 		ExpectedVersion: created.Version,
-		Code:            "test_summary", Area: widget.AreaBody, Columns: 12, Enabled: &enabled,
+		Code:            "test_summary", Area: "body", Columns: 12, Enabled: &enabled,
 		Params: map[string]any{"title": "Primary", "limit": json.Number("3")},
 	})
 	if err != nil {
@@ -1630,7 +1630,7 @@ func TestServiceWidgetBindingsKeepIdentityAcrossReorderAndMove(t *testing.T) {
 	}
 	second, err := service.CreateWidget(ctx, security.System(), created.ID, CreateWidgetInput{
 		ExpectedVersion: created.Version,
-		Code:            "test_summary", Area: widget.AreaBody, Columns: 6, Enabled: &enabled,
+		Code:            "test_summary", Area: "body", Columns: 6, Enabled: &enabled,
 		Params: map[string]any{"title": "Secondary"},
 	})
 	if err != nil {
@@ -1647,13 +1647,13 @@ func TestServiceWidgetBindingsKeepIdentityAcrossReorderAndMove(t *testing.T) {
 		t.Fatalf("updated = %#v, %v", updated, err)
 	}
 	ordered, err := service.ReorderWidgets(ctx, security.System(), created.ID, created.Version, []widget.Order{
-		{ID: second.ID, Area: widget.AreaBody, Position: 0},
-		{ID: first.ID, Area: widget.AreaSidebar, Position: 0},
+		{ID: second.ID, Area: "body", Position: 0},
+		{ID: first.ID, Area: "sidebar", Position: 0},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ordered) != 2 || ordered[0].ID != second.ID || ordered[1].ID != first.ID || ordered[1].Area != widget.AreaSidebar {
+	if len(ordered) != 2 || ordered[0].ID != second.ID || ordered[1].ID != first.ID || ordered[1].Area != "sidebar" {
 		t.Fatalf("ordered = %#v", ordered)
 	}
 	stored, err := service.Get(ctx, security.System(), created.ID)
@@ -1683,10 +1683,10 @@ func TestServiceRejectsInvalidWidgetMutations(t *testing.T) {
 		input CreateWidgetInput
 		match string
 	}{
-		{name: "unknown", input: CreateWidgetInput{Code: "missing_widget", Area: widget.AreaBody, Columns: 12, Enabled: &enabled, Params: map[string]any{}}, match: "unavailable"},
-		{name: "required", input: CreateWidgetInput{Code: "test_summary", Area: widget.AreaBody, Columns: 12, Enabled: &enabled, Params: map[string]any{}}, match: "required"},
+		{name: "unknown", input: CreateWidgetInput{Code: "missing_widget", Area: "body", Columns: 12, Enabled: &enabled, Params: map[string]any{}}, match: "unavailable"},
+		{name: "required", input: CreateWidgetInput{Code: "test_summary", Area: "body", Columns: 12, Enabled: &enabled, Params: map[string]any{}}, match: "required"},
 		{name: "area", input: CreateWidgetInput{Code: "test_summary", Area: "footer", Columns: 12, Enabled: &enabled, Params: map[string]any{"title": "Title"}}, match: "area"},
-		{name: "columns", input: CreateWidgetInput{Code: "test_summary", Area: widget.AreaBody, Columns: 13, Enabled: &enabled, Params: map[string]any{"title": "Title"}}, match: "columns"},
+		{name: "columns", input: CreateWidgetInput{Code: "test_summary", Area: "body", Columns: 13, Enabled: &enabled, Params: map[string]any{"title": "Title"}}, match: "columns"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -2429,7 +2429,7 @@ func TestBoundWidgetDoesNotBlockResourceSaveForMissingRequiredValue(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.CreateWidget(ctx, actor, current.ID, CreateWidgetInput{ExpectedVersion: current.Version, Code: "test_summary", Area: widget.AreaBody, Columns: 12, ParamBindings: widget.ParamBindings{"title": widget.ResourceProperty("menu_title")}})
+	_, err = service.CreateWidget(ctx, actor, current.ID, CreateWidgetInput{ExpectedVersion: current.Version, Code: "test_summary", Area: "body", Columns: 12, ParamBindings: widget.ParamBindings{"title": widget.ResourceProperty("menu_title")}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2471,4 +2471,45 @@ func (a testAuthorizer) Allowed(ctx context.Context, actor security.Actor, codes
 		result = append(result, code)
 	}
 	return result, nil
+}
+
+func TestWidgetReorderPreservesRemovedAreaUntilExplicitMove(t *testing.T) {
+	service, repository, _ := newTestService(t)
+	ctx := context.Background()
+	code := template.Code("empty")
+	current, err := service.Create(ctx, security.System(), CreateInput{SiteID: 1, Template: &code, Title: "Recovery"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := service.CreateWidget(ctx, security.System(), current.ID, CreateWidgetInput{ExpectedVersion: current.Version, Code: "test_summary", Area: "body", Columns: 12, Params: map[string]any{"title": "First"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.CreateWidget(ctx, security.System(), current.ID, CreateWidgetInput{ExpectedVersion: current.Version, Code: "test_summary", Area: "sidebar", Columns: 12, Params: map[string]any{"title": "Second"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored := repository.items[current.ID]
+	stored.Widgets[0].Area = "removed"
+	repository.items[current.ID] = stored
+	loaded, err := service.Get(ctx, security.System(), current.ID)
+	if err != nil || loaded.Widgets[0].Area != "removed" {
+		t.Fatalf("read: %#v %v", loaded.Widgets, err)
+	}
+	order := []widget.Order{{ID: first.ID, Area: "removed", Position: 0}, {ID: second.ID, Area: "body", Position: 0}}
+	reordered, err := service.ReorderWidgets(ctx, security.System(), current.ID, current.Version, order)
+	recovered, _ := findWidget(reordered, first.ID)
+	if err != nil || recovered.Area != "removed" {
+		t.Fatalf("reorder: %#v %v", reordered, err)
+	}
+	order[0].Area = "invented"
+	if _, err := service.ReorderWidgets(ctx, security.System(), current.ID, current.Version, order); err == nil {
+		t.Fatal("accepted unknown destination")
+	}
+	order[0].Area = widget.AreaDefault
+	reordered, err = service.ReorderWidgets(ctx, security.System(), current.ID, current.Version, order)
+	recovered, _ = findWidget(reordered, first.ID)
+	if err != nil || recovered.Area != widget.AreaDefault {
+		t.Fatalf("explicit move: %#v %v", reordered, err)
+	}
 }
