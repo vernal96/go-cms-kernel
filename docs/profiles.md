@@ -1,0 +1,226 @@
+# Работа с профилями
+
+Профиль описывает набор модулей приложения и их bindings. В приложении Starter каждый профиль находится в отдельном пакете `backend/internal/profiles/<name>`: профиль `starter` объявлен как `starter.Profile` в [`backend/internal/profiles/starter/profile.go`](https://github.com/vernal96/go-cms/blob/main/backend/internal/profiles/starter/profile.go). Bootstrap передаёт подключённые профили в декларацию приложения. Сайты ссылаются на профиль по `profile_code`; текущий seed создаёт сайт с кодом `starter`.
+
+## Создание профиля
+
+1. Создайте пакет `backend/internal/profiles/editorial` и объявите профиль в `profile.go`:
+
+   ```go
+   package editorial
+
+   import (
+       kernel "github.com/vernal96/go-cms-kernel"
+       "github.com/vernal96/go-cms-kernel/cache"
+       "github.com/vernal96/go-cms-kernel/modules/admin"
+       "github.com/vernal96/go-cms-kernel/modules/core"
+   )
+
+   var Profile = kernel.Profile{
+       Code: "editorial",
+       Name: "Editorial",
+       Modules: []kernel.Module{
+           core.New(core.Config{Caches: []cache.Binding{
+               {Alias: core.DurableCacheAlias, Code: "shared"},
+               {Alias: core.HotCacheAlias, Code: "shared"},
+           }}),
+           admin.New(),
+       },
+   }
+   ```
+
+   `Code` должен быть уникальным и стабильным: по нему сайты выбирают профиль.
+2. Добавьте модули в нужном порядке. `core` обязателен и должен быть первым; `admin` также обязателен. Для остальных модулей явно задавайте зависимости и используйте их bindings (например, cache aliases).
+3. Передайте профиль в `Profiles` в `backend/internal/bootstrap/bootstrap.go`. Например, импортируйте пакет и добавьте `editorial.Profile` к существующим профилям:
+
+   ```go
+   Profiles: []kernel.Profile{
+       starter.Profile,
+       editorial.Profile,
+   },
+   ```
+
+   `settings.Config.Definition()` передаёт этот список в `app.Definition.Profiles`.
+4. Убедитесь, что каждый модуль имеет требуемые database adapters, инфраструктурные bindings, migrations и seeds в проектных декларациях `backend/internal/infrastructure` и `backend/internal/settings`. Bootstrap объединяет их; профиль только перечисляет модули и не создаёт эти зависимости автоматически.
+5. Для нового сайта укажите `profile_code`, совпадающий с `Profile.Code`. Если сайт создаётся проектным seed, обновите seed отдельно.
+
+Профили объявляйте как переменные `kernel.Profile`, без фабричных функций. Не помещайте в них lifecycle-код, создание приложения, подключение инфраструктуры или изменяемые runtime-объекты.
+
+## Типизированные параметры модулей
+
+`Profile.Modules` — список `[]kernel.Module`. Параметры принадлежат модулю: `core.New(core.Config{...})`, `mail.New(mail.Config{...})`, `forms.New(forms.Config{...})`, `seo.New(seo.Config{...})`. Модули без параметров объявляются как `admin.New()` и `search.New()`.
+
+IDE подсказывает поля конкретного `Config`. Например, `seo.New(seo.Config{MaxTemplateLength: 2000})` принимает целочисленный лимит, но не предлагает кэш или файловые привязки. `core.Config.Caches` задаёт кэши Core; `mail.Config.Filesystems` и `forms.Config.Filesystems` задают файловые привязки spool. Открытые соединения и runtime в конструкторы не передаются.
+
+Компилятор Go отклоняет чужой тип конфигурации, неизвестное поле, неверный тип значения и аргументы для модуля без параметров. Нулевые значения полей допустимы для языка Go: обязательность и допустимые диапазоны проверяются при запуске с сохранением документированных defaults.
+
+При подготовке blueprint проверяются **все объявленные профили**, включая профили без сайтов: зависимости, параметры модулей, кэши, диски, database adapters и application dependencies. Ошибка прекращает запуск до HTTP listener и фоновых обработчиков; сообщение содержит профиль, модуль и причину. Проверки данных конкретного сайта и внешних операций остаются в runtime.
+
+Для собственного модуля реализуйте `Code`, `Validate(context.Context, kernel.ModuleValidationContext) error` и `Build(context.Context, kernel.ModuleContext) (kernel.ModuleRuntime, error)`. Сигнатуру конструктора выбирает модуль: например, `counter.New(limit int)`. `Validate` проверяет требования без создания фиктивного сайта; `Build` создаёт отдельный runtime сайта. Настройки декларации должны быть неизменяемыми: копируйте срезы и указатели на данные в конструкторе.
+
+При необходимости модуль реализует `RegistryProvider` с `Registry() (kernel.ModuleRegistry, error)`, `CacheBindingsProvider` или `FilesystemBindingsProvider`. Возвращайте копии изменяемых привязок. Типизированные зависимости доступны через `ModuleDatabaseFrom` и `ModuleApplicationFrom` как при проверке, так и при сборке runtime; контекст проверки не разрешает выбирать database другого модуля.
+
+Этот API включён в kernel `v0.4.0`, закреплённый в Starter. Обычные Go- и Docker-сборки используют опубликованную зависимость без локального `replace` или Go workspace.
+
+## Поля параметров профиля
+
+`Profile.Params` задаёт поля настроек сайта для всех сайтов, использующих профиль. Это именно параметры сайта, сохраняемые в `core.sites.settings`; это не поля контентных ресурсов (они объявляются в шаблонах ресурсов).
+
+Тип поля указывается через `field.Definition`; стандартные типы регистрирует модуль `core`. Примеры `Validators` ниже используют контракт kernel `v0.4.0`, закреплённого в `backend/go.mod`:
+
+| Код типа | Назначение | Опции |
+| --- | --- | --- |
+| `field.TypeString` (`string`) | Однострочный текст | `field.StringOptions`: `Multiple` |
+| `field.TypeTextarea` (`textarea`) | Многострочный текст | `field.StringOptions`: `Multiple` |
+| `field.TypeInteger` (`int`) | Целое число | `field.IntegerOptions`: `Step`, `Multiple` |
+| `field.TypeFloat` (`float`) | Дробное число | `field.FloatOptions`: `Step`, `Multiple` |
+| `field.TypeCheckbox` (`checkbox`) | Логический флаг | Нет |
+| `field.TypeRadio` (`radio`) | Выбор одного значения из вариантов | `field.RadioOptions{Choices: []field.Choice{...}}` |
+| `field.TypeSelect` (`select`) | Выбор из списка; может быть множественным | `field.SelectOptions`: `Choices`, `Multiple` |
+| `field.TypeEmail` (`email`) | Строка с проверкой формата email | `field.StringOptions`: `Multiple` |
+| `field.TypePhone` (`phone`) | Телефон | `field.PhoneOptions`: `Multiple` |
+| `field.TypeFile` (`file`) | Ссылка на файл | `field.FileOptions`: `Storages`, `MIMETypes`, `Multiple` |
+| `field.TypeMedia` (`media`) | Медиа, в текущей реализации — изображение | `field.MediaOptions`: `Multiple`, `SettingsCode` |
+| `field.TypeJSON` (`json`) | Структурированный JSON-объект или массив | Нет |
+| `field.TypeRepeater` (`repeater`) | Упорядоченный список групп вложенных полей | `field.RepeaterOptions{Fields: []field.Definition{...}}` |
+
+`Multiple` включает список значений там, где тип его поддерживает; число элементов ограничивают валидаторы `validation.MinItems` и `validation.MaxItems`. `Choices` задаёт пары стабильных значений `Value` и отображаемых подписей `Label`. Для файла можно ограничить допустимые коды хранилищ и MIME-типы, например `image/*`. Для телефона формат E.164 проверяется самим типом; дополнительный шаблон задают `validation.Regex`. `Step` задаёт шаг числового редактора.
+
+У определения также есть общие свойства: `Key` — уникальный ключ параметра, `Label` — подпись, `Required` — указатель на bool для явного включения или выключения обязательности, `Validators` — список типизированных дополнительных проверок, `Public` — разрешение включить значение в публичные данные сайта, `Editor` — код редактора, а `VisibleWhen` — простое условие показа относительно другого поля. `Editor` меняет представление в админке, но не тип и правила хранения значения.
+
+### Как добавить поля в профиль
+
+Добавьте определения в `Params` конкретного `kernel.Profile`. Для группировки используйте `EditorTabs`: это список `field.EditorTab` со ссылками на ключи полей. Ниже полный вариант профиля `Editorial` из раздела «Создание профиля» с тремя полями и двумя табами; поместите его в `backend/internal/profiles/editorial/profile.go`:
+
+```go
+package editorial
+
+import (
+	kernel "github.com/vernal96/go-cms-kernel"
+	"github.com/vernal96/go-cms-kernel/cache"
+	"github.com/vernal96/go-cms-kernel/modules/admin"
+	"github.com/vernal96/go-cms-kernel/modules/core"
+	"github.com/vernal96/go-cms-kernel/modules/core/field"
+	"github.com/vernal96/go-cms-kernel/modules/core/field/validation"
+)
+
+var editorialRequired = true
+
+var editorialParams = []field.Definition{
+	{
+		Key: "organization_name", Type: field.TypeString,
+		Label: "Название организации", Required: &editorialRequired,
+	},
+	{
+		Key: "contact_email", Type: field.TypeEmail,
+		Label: "Контактный email", Public: true,
+	},
+	{
+		Key: "office_phone", Type: field.TypePhone,
+		Label: "Телефон приёмной",
+		Validators: []field.ValidatorDefinition{validation.Regex(`^\+7`)},
+	},
+}
+
+var Profile = kernel.Profile{
+	Code: "editorial",
+	Name: "Editorial",
+	Modules: []kernel.Module{
+		core.New(core.Config{Caches: []cache.Binding{
+			{Alias: core.DurableCacheAlias, Code: "shared"},
+			{Alias: core.HotCacheAlias, Code: "shared"},
+		}}),
+		admin.New(),
+	},
+	Params: editorialParams,
+	EditorTabs: []field.EditorTab{
+		{
+			Code: "main", Label: "Основное",
+			Fields: []string{"organization_name"},
+		},
+		{
+			Code: "contacts", Label: "Контакты",
+			Fields: []string{"contact_email", "office_phone"},
+		},
+	},
+}
+```
+
+Этот пример использует хранилище кэша `shared`, объявленное в инфраструктуре приложения. Подключите `editorial.Profile` к списку `Profiles`, как показано выше, и пересоберите и перезапустите backend (`make up` при запуске через Compose). В админке выберите этот профиль для сайта: таб «Основное» содержит название организации, а «Контакты» — email и телефон.
+
+При добавлении определений:
+
+1. Выбирайте стабильные уникальные `Key` в пределах параметров профиля: ключ используется для сохранения значения в настройках сайта.
+2. Указывайте `Type` из списка выше и опции соответствующего типа. Не задавайте `Options`, если тип их не принимает.
+3. Если параметр должен попадать в публичную проекцию сайта, явно установите `Public: true`; без этого значения остаются непубличными.
+4. Добавьте профиль в `Profiles` конфигурации приложения по инструкции выше. Отдельная миграция БД для добавления определения не нужна: значения профиля хранятся в настройках сайта.
+5. Если поле удаляется или переименовывается, согласуйте это с чтением его ключа в коде и с используемыми настройками сайтов: смена `Key` означает новый параметр.
+
+### Правила и отображение табов
+
+- `Code` таба должен быть уникальным в пределах профиля. `Code` и `Label` должны быть непустыми, без пробелов по краям.
+- `Fields` содержит ключи `Key` из `Params`, а не подписи полей. Неизвестные ключи недопустимы.
+- Если `EditorTabs` непустой, каждое поле из `Params` должно входить ровно в один таб. Повтор ключа внутри одного таба или в разных табах и пропуск поля приводят к ошибке при компиляции профиля. При добавлении нового параметра добавьте его ключ и в нужный таб.
+- Табы отображаются в порядке `EditorTabs`. Поля внутри каждого таба следуют порядку `Params`; перестановка ключей в `EditorTab.Fields` не меняет их порядок отображения.
+
+В текущей админке табы параметров показываются слева при **редактировании сайта**. При создании сайта поля выводятся обычным списком, даже если `EditorTabs` объявлены. Если `EditorTabs` отсутствует или пуст, обычный список используется и при редактировании. Домен, профиль, локаль и публичность сайта остаются отдельными элементами формы вне этих табов.
+
+Табы задают только группировку редактора. Значения по-прежнему сохраняются по ключам полей в `core.sites.settings`, без вложенных объектов `main` или `contacts`. Например, объект `settings` для приведённого профиля:
+
+```json
+{
+  "organization_name": "Редакция",
+  "contact_email": "info@example.com",
+  "office_phone": "+74951234567"
+}
+```
+
+Перенос поля между табами не меняет его значение, правила валидации или публичность. В примере только `contact_email` имеет `Public: true`; размещение в табе «Контакты» само по себе не делает телефон публичным. Для добавления или перестановки табов миграция БД не нужна.
+
+## Изменение профиля
+
+Изменяйте декларацию профиля в его пакете `backend/internal/profiles/<name>`, сохраняя уникальный код и обязательные модули. Добавляя модуль, проверьте порядок зависимостей и добавьте нужные адаптеры/миграции в композицию проекта. Изменение набора модулей может менять доступные API и поведение сайтов с этим профилем.
+
+`Profile.Code` — идентификатор, на который ссылаются сайты (`core.sites.profile_code`). Переименование кода — это изменение данных и конфигурации: согласованно обновите декларацию, seed-данные и ссылки сайтов. В pre-production базе проекта допустимо пересоздать данные; не оставляйте сайты со старым неизвестным кодом.
+
+## Удаление профиля
+
+Перед удалением проверьте, что ни один seed, окружение или сайт не ссылается на код профиля. Удалите профиль из `Profiles` в `backend/internal/bootstrap/bootstrap.go`, саму декларацию и связанные только с ним проектные seed-данные. Не удаляйте модули/адаптеры из приложения, если они используются другим профилем.
+
+Текущая конфигурация передаёт только `starter`; вручную запускаемый dev seed сайта использует этот профиль. Удаление профиля допустимо, если нет сайтов или seed-данных с его `profile_code`. Не удаляйте последний профиль, на который ссылается сайт: сначала добавьте замену и перенесите сайт на её код либо пересоздайте локальные данные.
+
+## Runtime
+
+Профиль — декларация, а не runtime экземпляр. Kernel проверяет и упорядочивает модули, строит blueprint, а затем создаёт runtime сайта с нужной областью видимости. Не кэшируйте изменяемое состояние в декларации профиля и не переносите сборку runtime в обработчик запроса.
+
+## Зоны виджетов шаблона
+
+Полный пример шаблона и описание параметров `Definition`, зон и виджетов — в [руководстве по разработке шаблонов](templates.md).
+
+В `Profile.Templates` шаблон задаёт упорядоченный список зон:
+
+```go
+Layout: template.Layout{
+    {Code: "main", Label: "Основная область", AdminSpan: 16},
+    {Code: "aside", Label: "Боковая область", AdminSpan: 8},
+    {Code: "footer", Label: "Подвал"},
+},
+```
+
+`template` импортируется из `github.com/vernal96/go-cms-kernel/modules/core/template`.
+Коды соответствуют `[a-z][a-z0-9_-]*`, уникальны в шаблоне; `default` зарезервирован.
+Label обязателен. `AdminSpan` задаёт ширину 1–24 только в админке; по умолчанию 24.
+На узком экране зоны занимают всю строку. Ширина контейнера не меняет параметр
+`columns` самого виджета (1–12).
+
+Без `Items` зона принимает ресурсные виджеты. Явный список `Items` сохраняет
+порядок статических `template.Widget` и места вставки `template.ResourceWidgets{}`;
+допустим один слот на зону. Пустой явный список или список без слота не допускает
+добавление ресурсных виджетов в эту зону.
+
+Без зон доступен контейнер `default` с названием «Страница сайта», даже пустой.
+После объявления зон он остаётся последним только при наличии виджетов.
+Виджеты удалённой зоны также выводятся в `default`, но исходный код сохраняется
+в БД до явного переноса. Возврат зоны с тем же кодом возвращает её виджеты.
+Сначала в `default` идут собственные виджеты, затем виджеты отсутствующих зон
+по исходному коду и позиции. Выключенные виджеты учитываются при показе контейнера.
