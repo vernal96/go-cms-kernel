@@ -244,7 +244,7 @@ func TestRendererPreservesRequiredFieldsAndUsesPrivateSiteVariables(t *testing.T
 	}
 	template.Subject = "{{site.id}} {{site.profile_code}} {{site.domain}} {{site.locale}} {{site.is_public}} {{site.field.company}} {{data.name}}"
 	template.HTMLBody = "<p>Body</p>"
-	template.Variables = []field.Definition{{Key: "name", Type: field.TypeString, Label: "Name", Required: &required}}
+	template.Variables = []field.Definition{{Key: "name", Type: field.TypeString, Label: "Name", Required: required}}
 	if _, err := renderer.Render(context.Background(), template, nil, security.User(9)); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("missing required value = %v", err)
 	}
@@ -275,7 +275,7 @@ func TestRendererRejectsMissingRequiredStringEmailAndFile(t *testing.T) {
 		template := mailTemplate()
 		template.To = []AddressTemplate{{Email: "person@example.net"}}
 		template.HTMLBody = "<p>Body</p>"
-		definition := field.Definition{Key: "required_value", Type: code, Label: "Required", Required: &required}
+		definition := field.Definition{Key: "required_value", Type: code, Label: "Required", Required: required}
 		if code == field.TypeFile {
 			definition.Options = field.FileOptions{}
 		}

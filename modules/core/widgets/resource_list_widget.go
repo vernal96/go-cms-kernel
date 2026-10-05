@@ -67,16 +67,15 @@ func resourceListFieldChoices(templates []template.Definition) []field.Choice {
 }
 
 func (w resourceListWidget) Definition() widget.Definition {
-	trueValue := true
 	return widget.Definition{
 		Reference: ResourceList, Label: "Список ресурсов", Description: "Выводит опубликованные ресурсы текущего сайта",
 		Fields: []field.Definition{
-			{Key: "parent_mode", Type: field.TypeRadio, Label: "Родитель", Required: &trueValue, Options: field.RadioOptions{Choices: []field.Choice{{Value: "root", Label: "Корень"}, {Value: "current", Label: "Текущий ресурс"}, {Value: "selected", Label: "Выбранный ресурс"}}}},
+			{Key: "parent_mode", Type: field.TypeRadio, Label: "Родитель", Required: true, Options: field.RadioOptions{Choices: []field.Choice{{Value: "root", Label: "Корень"}, {Value: "current", Label: "Текущий ресурс"}, {Value: "selected", Label: "Выбранный ресурс"}}}},
 			{Key: "parent_resource", Type: field.TypeInteger, Label: "Выбранный ресурс", Editor: "resource-picker", VisibleWhen: &field.VisibleWhen{Field: "parent_mode", Value: "selected"}},
 			{Key: "resources", Type: field.TypeJSON, Label: "Ресурсы", Editor: "resource-multi-picker"},
 			{Key: "exclude", Type: field.TypeJSON, Label: "Исключить ресурсы", Editor: "resource-multi-picker"},
 			{Key: "resource_types", Type: field.TypeSelect, Label: "Типы ресурсов", Options: field.SelectOptions{Choices: w.types, Multiple: true}, Editor: "resource-type-picker"},
-			{Key: "limit", Type: field.TypeInteger, Label: "Лимит", Required: &trueValue, Validators: []field.ValidatorDefinition{validation.Min(1), validation.Max(100)}},
+			{Key: "limit", Type: field.TypeInteger, Label: "Лимит", Required: true, Validators: []field.ValidatorDefinition{validation.Min(1), validation.Max(100)}},
 			{Key: "pagination_enabled", Type: field.TypeCheckbox, Label: "Пагинация"},
 			{Key: "per_page", Type: field.TypeInteger, Label: "На странице", Validators: []field.ValidatorDefinition{validation.Min(1), validation.Max(100)}, VisibleWhen: &field.VisibleWhen{Field: "pagination_enabled", Value: true}},
 			{Key: "fields", Type: field.TypeSelect, Label: "Поля", Options: field.SelectOptions{Choices: w.fields, Multiple: true}, Editor: "resource-field-picker"},

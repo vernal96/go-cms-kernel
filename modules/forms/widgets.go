@@ -24,16 +24,15 @@ func (r *Runtime) Widgets() []widget.Widget {
 }
 
 func (w formWidget) Definition() widget.Definition {
-	required, optional := true, false
 	result := widget.Definition{
 		Reference: FormWidget, Label: "Форма", Description: "Выводит форму текущего сайта",
-		Fields:        []field.Definition{{Key: "form_id", Type: field.TypeInteger, Label: "Форма", Required: &required, Validators: []field.ValidatorDefinition{validation.Min(1)}, Editor: "forms.form-picker"}},
+		Fields:        []field.Definition{{Key: "form_id", Type: field.TypeInteger, Label: "Форма", Required: true, Validators: []field.ValidatorDefinition{validation.Min(1)}, Editor: "forms.form-picker"}},
 		SummaryFields: []string{"form_id"},
 	}
 	if w.results {
 		result.Reference, result.Label = ResultsWidget, "Результаты формы"
 		result.Description = "Выводит публичные поля результатов формы постранично"
-		result.Fields = append(result.Fields, field.Definition{Key: "per_page", Type: field.TypeInteger, Label: "На странице", Required: &optional, Validators: []field.ValidatorDefinition{validation.Min(1), validation.Max(100)}, Editor: "forms.results-page-size"})
+		result.Fields = append(result.Fields, field.Definition{Key: "per_page", Type: field.TypeInteger, Label: "На странице", Required: false, Validators: []field.ValidatorDefinition{validation.Min(1), validation.Max(100)}, Editor: "forms.results-page-size"})
 	}
 	return result
 }

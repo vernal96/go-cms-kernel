@@ -441,8 +441,7 @@ func (v variableDTO) definition() (field.Definition, error) {
 	if err != nil {
 		return field.Definition{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
-	required := v.Required
-	return field.Definition{Key: v.Key, Type: v.Type, Label: v.Label, Required: &required, Validators: field.CloneValidatorDefinitions(v.Validators), Options: options}, nil
+	return field.Definition{Key: v.Key, Type: v.Type, Label: v.Label, Required: v.Required, Validators: field.CloneValidatorDefinitions(v.Validators), Options: options}, nil
 }
 
 func toTemplateResponse(item Template) (templateResponse, error) {
@@ -462,7 +461,7 @@ func toVariableDTO(definition field.Definition) (variableDTO, error) {
 	if err != nil {
 		return variableDTO{}, err
 	}
-	return variableDTO{Key: definition.Key, Type: definition.Type, Label: definition.Label, Required: definition.Required != nil && *definition.Required, Validators: field.CloneValidatorDefinitions(definition.Validators), Options: options}, nil
+	return variableDTO{Key: definition.Key, Type: definition.Type, Label: definition.Label, Required: definition.Required, Validators: field.CloneValidatorDefinitions(definition.Validators), Options: options}, nil
 }
 
 func pageQuery(request *http.Request) (PageQuery, error) {

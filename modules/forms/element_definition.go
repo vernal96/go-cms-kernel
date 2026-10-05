@@ -35,8 +35,7 @@ func (e ElementDefinition) ValidateConfig(raw json.RawMessage) error {
 		if err != nil {
 			return err
 		}
-		required := item.Required
-		definitions[i] = field.Definition{Key: item.Key, Type: item.Type, Label: item.Label, Required: &required, Validators: item.Validators, Options: decoded}
+		definitions[i] = field.Definition{Key: item.Key, Type: item.Type, Label: item.Label, Required: item.Required, Validators: item.Validators, Options: decoded}
 	}
 	resolver := e.FieldTypes
 	if resolver == nil {

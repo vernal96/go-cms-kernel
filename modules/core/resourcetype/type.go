@@ -240,12 +240,11 @@ type libraryType struct{}
 func (libraryType) Code() Code         { return Library }
 func (libraryType) PathMode() PathMode { return PathRoute }
 func (libraryType) Metadata() Metadata {
-	required := true
 	return Metadata{
 		Label:        "Библиотека",
 		Capabilities: Capabilities{SupportsTemplate: true, SupportsContent: true, SupportsWidgets: true, SupportsFields: true, MutableType: false, OwnsLibraryItems: true, DefaultIcon: "Collection"},
 		SettingsFields: []field.Definition{
-			{Key: "item_url_pattern", Type: field.TypeString, Label: "Шаблон URL ресурса", Required: &required},
+			{Key: "item_url_pattern", Type: field.TypeString, Label: "Шаблон URL ресурса", Required: true},
 			{Key: "default_item_template", Type: field.TypeString, Label: "Шаблон ресурса по умолчанию", Editor: "resource-template"},
 		},
 		SettingsDefaults: map[string]any{"item_url_pattern": DefaultItemURLPattern},

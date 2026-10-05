@@ -79,7 +79,7 @@ func (t mailActionType) ValidateConfig(ctx context.Context, validation ActionVal
 		}
 	}
 	for _, definition := range template.Variables {
-		if definition.Required != nil && *definition.Required {
+		if definition.Required {
 			if _, exists := config.Values[definition.Key]; !exists {
 				return fmt.Errorf("%w: required Mail variable %q is not mapped", ErrInvalid, definition.Key)
 			}

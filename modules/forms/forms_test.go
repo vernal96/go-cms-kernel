@@ -530,7 +530,7 @@ type mailIntegrationStub struct {
 
 func (*mailIntegrationStub) IntegrationTemplate(context.Context, security.Actor, string) (mail.IntegrationTemplateMetadata, error) {
 	required := true
-	return mail.IntegrationTemplateMetadata{Code: "feedback", Name: "Feedback", Enabled: true, Variables: []field.Definition{{Key: "email", Type: field.TypeEmail, Label: "Email", Required: &required}}}, nil
+	return mail.IntegrationTemplateMetadata{Code: "feedback", Name: "Feedback", Enabled: true, Variables: []field.Definition{{Key: "email", Type: field.TypeEmail, Label: "Email", Required: required}}}, nil
 }
 func (m *mailIntegrationStub) QueueByCode(_ context.Context, input mail.QueueInput) (mail.Message, error) {
 	m.input = input

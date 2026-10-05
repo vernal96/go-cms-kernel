@@ -56,10 +56,6 @@ func (i testInstance) Render(
 	return i.data, nil
 }
 
-func boolPointer(value bool) *bool {
-	return &value
-}
-
 func testModule(code string) ModuleDescriptor {
 	return ModuleDescriptor{Code: code, Label: "Test " + code}
 }
@@ -79,7 +75,7 @@ func TestCatalogQualifiesCompilesAndClonesWidgets(t *testing.T) {
 						Key:      "count",
 						Type:     field.TypeInteger,
 						Label:    "Count",
-						Required: boolPointer(true),
+						Required: true,
 					}},
 				},
 				new: func(values map[string]any) (Instance, error) {
@@ -143,7 +139,7 @@ func TestRuntimeClassifiesParamsAndInstanceFailures(t *testing.T) {
 						Key:      "title",
 						Type:     field.TypeString,
 						Label:    "Title",
-						Required: boolPointer(true),
+						Required: true,
 					}},
 				},
 				new: func(map[string]any) (Instance, error) {

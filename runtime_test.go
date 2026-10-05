@@ -1336,7 +1336,7 @@ func TestProfileRuntimeFreezesResourceTypeMetadataAndAcceptsPartialDefaults(t *t
 		Label:        "Custom",
 		Capabilities: resourcetype.Capabilities{SupportsContent: true, MutableType: true},
 		SettingsFields: []field.Definition{
-			{Key: "catalog_id", Type: field.TypeString, Label: "Catalog", Required: &required},
+			{Key: "catalog_id", Type: field.TypeString, Label: "Catalog", Required: required},
 			{Key: "mode", Type: field.TypeString, Label: "Mode"},
 			{Key: "config", Type: field.TypeJSON, Label: "Config"},
 		},
@@ -1467,7 +1467,7 @@ func TestProfileRuntimeRejectsInvalidResourceTypeRegistrations(
 				metadata: &resourcetype.Metadata{
 					Label: "Custom",
 					SettingsFields: []field.Definition{{
-						Key: "catalog_id", Type: field.TypeString, Label: "Catalog", Required: &required,
+						Key: "catalog_id", Type: field.TypeString, Label: "Catalog", Required: required,
 					}},
 					SettingsDefaults: map[string]any{"catalog_id": ""},
 				},
@@ -1590,7 +1590,7 @@ func TestProfileRuntimeCompilesAndClonesTemplates(t *testing.T) {
 					Key:        "headline",
 					Type:       field.TypeString,
 					Label:      "Headline",
-					Required:   &required,
+					Required:   required,
 					Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 2}}},
 				},
 				{

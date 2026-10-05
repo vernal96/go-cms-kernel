@@ -20,7 +20,7 @@ type variableJSON struct {
 func encodeVariables(definitions []field.Definition) ([]byte, error) {
 	items := make([]variableJSON, len(definitions))
 	for index, definition := range definitions {
-		item := variableJSON{Key: definition.Key, Type: definition.Type, Label: definition.Label, Required: definition.Required != nil && *definition.Required, Validators: field.CloneValidatorDefinitions(definition.Validators)}
+		item := variableJSON{Key: definition.Key, Type: definition.Type, Label: definition.Label, Required: definition.Required, Validators: field.CloneValidatorDefinitions(definition.Validators)}
 		options, err := field.EncodeOptionsJSON(definition.Options)
 		if err != nil {
 			return nil, err
@@ -38,12 +38,11 @@ func decodeVariables(raw []byte) ([]field.Definition, error) {
 	}
 	result := make([]field.Definition, len(items))
 	for index, item := range items {
-		required := item.Required
 		options, err := field.DecodeOptionsJSON(item.Type, item.Options)
 		if err != nil {
 			return nil, fmt.Errorf("decode variable %q options: %w", item.Key, err)
 		}
-		result[index] = field.Definition{Key: item.Key, Type: item.Type, Label: item.Label, Required: &required, Validators: field.CloneValidatorDefinitions(item.Validators), Options: options}
+		result[index] = field.Definition{Key: item.Key, Type: item.Type, Label: item.Label, Required: item.Required, Validators: field.CloneValidatorDefinitions(item.Validators), Options: options}
 	}
 	return result, nil
 }

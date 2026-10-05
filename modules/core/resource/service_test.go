@@ -100,7 +100,7 @@ func (testWidget) Definition() widget.Definition {
 				Key:      "title",
 				Type:     field.TypeString,
 				Label:    "Title",
-				Required: &required,
+				Required: required,
 			},
 			{
 				Key:   "limit",
@@ -148,7 +148,7 @@ func (settingsContractType) Metadata() resourcetype.Metadata {
 		Label:        "Settings contract",
 		Capabilities: resourcetype.Capabilities{MutableType: true},
 		SettingsFields: []field.Definition{
-			{Key: "catalog_id", Type: field.TypeString, Label: "Catalog", Required: &required},
+			{Key: "catalog_id", Type: field.TypeString, Label: "Catalog", Required: required},
 			{Key: "mode", Type: field.TypeString, Label: "Mode"},
 		},
 		SettingsDefaults: map[string]any{"mode": "standard"},
@@ -975,7 +975,7 @@ func newTestService(
 						Key:        "headline",
 						Type:       field.TypeString,
 						Label:      "Headline",
-						Required:   &required,
+						Required:   required,
 						Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 2}}},
 					}, {
 						Key: "tags", Type: field.TypeSelect, Label: "Tags",

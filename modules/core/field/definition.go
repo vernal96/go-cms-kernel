@@ -55,7 +55,7 @@ type Definition struct {
 	Key         string
 	Type        TypeCode
 	Label       string
-	Required    *bool
+	Required    bool
 	Validators  []ValidatorDefinition
 	Options     any
 	Editor      EditorCode
@@ -238,10 +238,6 @@ func CloneDefinitions(source []Definition) []Definition {
 			result[index].VisibleWhen = &condition
 		}
 
-		if definition.Required != nil {
-			required := *definition.Required
-			result[index].Required = &required
-		}
 	}
 
 	return result

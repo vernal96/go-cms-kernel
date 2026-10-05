@@ -58,7 +58,7 @@ func TestVariableCodecUsesStableTypedChoiceJSON(t *testing.T) {
 	t.Parallel()
 	required := false
 	raw, err := encodeVariables([]field.Definition{{
-		Key: "kind", Type: field.TypeSelect, Label: "Kind", Required: &required,
+		Key: "kind", Type: field.TypeSelect, Label: "Kind", Required: required,
 		Options: field.SelectOptions{Choices: []field.Choice{{Value: "news", Label: "News"}}, Multiple: true},
 	}})
 	if err != nil {

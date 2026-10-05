@@ -75,7 +75,7 @@ func TestParamBindingsRejectInvalidConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := bindingRuntime(t, []field.Definition{{Key: "text", Label: "Text", Type: field.TypeString, Required: boolPointer(true)}, {Key: "required", Label: "Required", Type: field.TypeString, Required: boolPointer(true)}})
+	runtime := bindingRuntime(t, []field.Definition{{Key: "text", Label: "Text", Type: field.TypeString, Required: true}, {Key: "required", Label: "Required", Type: field.TypeString, Required: true}})
 	tests := []struct {
 		name     string
 		params   map[string]any
@@ -100,7 +100,7 @@ func TestParamBindingsRejectInvalidConfiguration(t *testing.T) {
 }
 
 func TestParamBindingsDeferConstraintsAndReadCurrentResource(t *testing.T) {
-	runtime := bindingRuntime(t, []field.Definition{{Key: "title", Label: "Title", Type: field.TypeString, Required: boolPointer(true), Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 3}}}}})
+	runtime := bindingRuntime(t, []field.Definition{{Key: "title", Label: "Title", Type: field.TypeString, Required: true, Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 3}}}}})
 	bindings := ParamBindings{"title": ResourceProperty("title")}
 	if _, err := runtime.NormalizeConfiguration(nil, bindings, nil); err != nil {
 		t.Fatal(err)

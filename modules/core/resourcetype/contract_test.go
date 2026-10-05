@@ -48,7 +48,7 @@ func TestCompiledTypeEnforcesSettingsSchemaAfterNormalize(t *testing.T) {
 	metadata := Metadata{
 		Label: "Contract test",
 		SettingsFields: []field.Definition{
-			{Key: "catalog_id", Type: field.TypeString, Label: "Catalog", Required: &required},
+			{Key: "catalog_id", Type: field.TypeString, Label: "Catalog", Required: required},
 			{Key: "limit", Type: field.TypeInteger, Label: "Limit"},
 			{Key: "mode", Type: field.TypeString, Label: "Mode"},
 		},

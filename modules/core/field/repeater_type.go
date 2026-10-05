@@ -25,8 +25,7 @@ func (o *RepeaterOptions) UnmarshalJSON(raw []byte) error {
 		if err != nil {
 			return fmt.Errorf("field %q options: %w", desc.Key, err)
 		}
-		required := desc.Required
-		o.Fields[i] = Definition{Key: desc.Key, Type: desc.Type, Label: desc.Label, Required: &required, Validators: desc.Validators, Options: options, Editor: desc.Editor, VisibleWhen: desc.VisibleWhen}
+		o.Fields[i] = Definition{Key: desc.Key, Type: desc.Type, Label: desc.Label, Required: desc.Required, Validators: desc.Validators, Options: options, Editor: desc.Editor, VisibleWhen: desc.VisibleWhen}
 	}
 	return nil
 }

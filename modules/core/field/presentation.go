@@ -175,7 +175,7 @@ type OptionsPresenter interface{ DescribeOptions() (any, error) }
 // Resolver-dependent editor selection remains in Describe.
 func definitionDescriptor(definition Definition, options json.RawMessage, editor EditorCode) Descriptor {
 	return Descriptor{Key: definition.Key, Type: definition.Type, Label: definition.Label,
-		Required:   definition.Required != nil && *definition.Required,
+		Required:   definition.Required,
 		Validators: CloneValidatorDefinitions(definition.Validators), Options: options,
 		Editor: editor, VisibleWhen: definition.VisibleWhen}
 }

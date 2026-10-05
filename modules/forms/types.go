@@ -102,9 +102,8 @@ type FormField struct {
 }
 
 func (f FormField) Definition() field.Definition {
-	required := f.Required
 	return field.Definition{
-		Key: f.Code, Type: f.Type, Label: f.Label, Required: &required,
+		Key: f.Code, Type: f.Type, Label: f.Label, Required: f.Required,
 		Validators: field.CloneValidatorDefinitions(f.Validators), Options: f.Options,
 		Editor: f.Editor, VisibleWhen: cloneVisibleWhen(f.VisibleWhen),
 	}

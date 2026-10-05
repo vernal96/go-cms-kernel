@@ -15,7 +15,7 @@ func TestFileTypeNormalizesReferencesAndClonesOptions(t *testing.T) {
 	}
 	schema, err := field.Compile([]field.Definition{{
 		Key: "asset", Type: field.TypeFile, Label: "Asset",
-		Required: &required, Options: options,
+		Required: required, Options: options,
 	}}, standardResolver())
 	if err != nil {
 		t.Fatal(err)

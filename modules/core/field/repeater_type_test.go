@@ -50,7 +50,7 @@ func TestRepeaterCompilation(t *testing.T) {
 func TestRepeaterNormalizeValidateAndStorage(t *testing.T) {
 	required := true
 	title := textDefinition()
-	title.Required = &required
+	title.Required = required
 	title.Validators = []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 2}}}
 	def := repeater(title, field.Definition{Key: "count", Type: field.TypeInteger, Label: "Count"})
 	def.Validators = []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": 1}}, {Type: "max_items", Options: map[string]any{"value": 2}}}
@@ -127,13 +127,30 @@ func TestRepeaterEmptyAndRequired(t *testing.T) {
 		}
 	}
 	required := true
-	def.Required = &required
+	def.Required = required
 	schema, err = field.Compile([]field.Definition{def}, field.StandardTypes())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := schema.Validate(map[string]any{"slides": []any{}}); err == nil {
 		t.Fatal("required repeater accepted empty")
+	}
+}
+func TestRepeaterRequiredFlagsRoundTrip(t *testing.T) {
+	options := field.RepeaterOptions{Fields: []field.Definition{
+		{Key: "title", Type: field.TypeString, Label: "Title", Required: true},
+		{Key: "subtitle", Type: field.TypeString, Label: "Subtitle", Required: false},
+	}}
+	raw, err := json.Marshal(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded field.RepeaterOptions
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Fields) != 2 || !decoded.Fields[0].Required || decoded.Fields[1].Required {
+		t.Fatalf("required flags after round trip: %#v", decoded.Fields)
 	}
 }
 func TestRepeaterCustomMetadataAndCloning(t *testing.T) {

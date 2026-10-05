@@ -31,10 +31,6 @@ func standardResolver() typeResolver {
 	return result
 }
 
-func boolPointer(value bool) *bool {
-	return &value
-}
-
 func int64Pointer(value int64) *int64 {
 	return &value
 }
@@ -46,7 +42,7 @@ func TestSchemaNormalizesStandardTypes(t *testing.T) {
 				Key:        "title",
 				Type:       field.TypeString,
 				Label:      "Title",
-				Required:   boolPointer(true),
+				Required:   true,
 				Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 2}}},
 			},
 			{
@@ -66,7 +62,7 @@ func TestSchemaNormalizesStandardTypes(t *testing.T) {
 				Key:      "enabled",
 				Type:     field.TypeCheckbox,
 				Label:    "Enabled",
-				Required: boolPointer(true),
+				Required: true,
 			},
 			{
 				Key:   "color",
@@ -115,7 +111,7 @@ func TestSchemaNormalizesStandardTypes(t *testing.T) {
 				Key:      "explicit_optional",
 				Type:     field.TypeString,
 				Label:    "Explicit optional",
-				Required: boolPointer(false),
+				Required: false,
 			},
 		},
 		standardResolver(),
@@ -204,13 +200,13 @@ func TestSchemaRequiredAndStrictValidation(t *testing.T) {
 				Key:      "employees",
 				Type:     field.TypeInteger,
 				Label:    "Employees",
-				Required: boolPointer(true),
+				Required: true,
 			},
 			{
 				Key:      "enabled",
 				Type:     field.TypeCheckbox,
 				Label:    "Enabled",
-				Required: boolPointer(true),
+				Required: true,
 			},
 			{
 				Key:   "email",
@@ -349,7 +345,7 @@ func TestSchemaRequiredAndStrictValidation(t *testing.T) {
 func TestSchemaValidatePartialDistinguishesOmittedAndEmptyRequiredValues(t *testing.T) {
 	required := true
 	schema, err := field.Compile([]field.Definition{
-		{Key: "catalog_id", Type: field.TypeString, Label: "Catalog", Required: &required},
+		{Key: "catalog_id", Type: field.TypeString, Label: "Catalog", Required: required},
 		{Key: "limit", Type: field.TypeInteger, Label: "Limit"},
 		{Key: "note", Type: field.TypeString, Label: "Note"},
 	}, standardResolver())
@@ -541,7 +537,7 @@ func TestSchemaDefinitionsAreCloned(t *testing.T) {
 			Key:        "value",
 			Type:       field.TypeSelect,
 			Label:      "Value",
-			Required:   &required,
+			Required:   required,
 			Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 1}}},
 			Options: field.SelectOptions{
 				Choices: choices,
@@ -555,7 +551,7 @@ func TestSchemaDefinitionsAreCloned(t *testing.T) {
 	}
 
 	definitions[0].Validators[0].Type = "max_length"
-	definitions[0].Required = boolPointer(false)
+	definitions[0].Required = false
 	choices[0].Value = "changed"
 
 	first := schema.Definitions()
@@ -566,8 +562,7 @@ func TestSchemaDefinitionsAreCloned(t *testing.T) {
 	second := schema.Definitions()
 	secondOptions := second[0].Options.(field.SelectOptions)
 	if second[0].Validators[0].Type != "min_length" ||
-		second[0].Required == nil ||
-		!*second[0].Required ||
+		!second[0].Required ||
 		secondOptions.Choices[0].Value != "one" {
 		t.Fatalf("schema definitions were mutated: %#v", second)
 	}

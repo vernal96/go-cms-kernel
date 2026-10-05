@@ -177,8 +177,7 @@ func compile(
 		schema.fields[definition.Key] = compiledField{
 			definition: definition,
 			valueType:  valueType,
-			required: definition.Required != nil &&
-				*definition.Required,
+			required:   definition.Required,
 			validators: validators,
 		}
 	}

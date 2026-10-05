@@ -13,7 +13,7 @@ func TestFieldDefinitionsSerializeAllOptions(t *testing.T) {
 	integerStep := int64(2)
 	floatStep := 0.25
 	definitions := []field.Definition{
-		{Key: "text", Type: field.TypeString, Label: "Text", Required: &required, Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 2}}}},
+		{Key: "text", Type: field.TypeString, Label: "Text", Required: required, Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 2}}}},
 		{Key: "integer", Type: field.TypeInteger, Label: "Integer", Options: field.IntegerOptions{Step: &integerStep}},
 		{Key: "float", Type: field.TypeFloat, Label: "Float", Options: field.FloatOptions{Step: &floatStep}},
 		{Key: "checkbox", Type: field.TypeCheckbox, Label: "Checkbox"},
@@ -38,7 +38,7 @@ func TestFieldDefinitionsSerializeAllOptions(t *testing.T) {
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if len(decoded) != len(definitions) || decoded[0]["required"] != true {
+	if len(decoded) != len(definitions) || decoded[0]["required"] != true || decoded[3]["required"] != false {
 		t.Fatalf("fields = %#v", decoded)
 	}
 	integerOptions := decoded[1]["options"].(map[string]any)

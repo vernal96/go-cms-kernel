@@ -43,8 +43,8 @@ func TestSettingsValidationPermissionsAndIsolation(t *testing.T) {
 	definitions := []SettingsDefinition{{Code: "image", Fields: []field.Definition{
 		{Key: "alt", Type: field.TypeString, Label: "Alt", Validators: []field.ValidatorDefinition{{Type: "max_length", Options: map[string]any{"value": 10}}}},
 		{Key: "count", Type: field.TypeInteger, Label: "Count"},
-		{Key: "decorative", Type: field.TypeCheckbox, Label: "Decorative", Required: &optional},
-		{Key: "attachment", Type: field.TypeFile, Label: "Attachment", Required: &optional, Options: field.FileOptions{MIMETypes: []string{"image/*"}}},
+		{Key: "decorative", Type: field.TypeCheckbox, Label: "Decorative", Required: optional},
+		{Key: "attachment", Type: field.TypeFile, Label: "Attachment", Required: optional, Options: field.FileOptions{MIMETypes: []string{"image/*"}}},
 	}}}
 	catalog, err := CompileSettings(definitions, field.StandardTypes())
 	if err != nil {
@@ -106,7 +106,7 @@ func TestSettingsValidationPermissionsAndIsolation(t *testing.T) {
 
 func TestSettingsCompilationAndMediaMetadata(t *testing.T) {
 	optional := false
-	defs := []field.Definition{{Key: "alt", Type: field.TypeString, Label: "Alt", Required: &optional}}
+	defs := []field.Definition{{Key: "alt", Type: field.TypeString, Label: "Alt", Required: optional}}
 	for _, multiple := range []bool{false, true} {
 		types := append(field.Types{}, field.StandardTypes()...)
 		for i, typ := range types {
