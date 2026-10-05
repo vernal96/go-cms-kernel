@@ -15,7 +15,7 @@ const ModuleCode kernel.ModuleCode = "admin"
 
 const AccessPermission permission.Code = "admin.panel.read"
 
-type Module struct{}
+type module struct{}
 
 type coreDependency interface {
 	kernel.ModuleRuntime
@@ -23,21 +23,21 @@ type coreDependency interface {
 	Authorization() security.Authorizer
 }
 
-func (Module) Code() kernel.ModuleCode {
+func (module) Code() kernel.ModuleCode {
 	return ModuleCode
 }
 
-func (Module) Dependencies() []kernel.ModuleCode {
+func (module) Dependencies() []kernel.ModuleCode {
 	return []kernel.ModuleCode{core.ModuleCode}
 }
 
-func (Module) Registry() kernel.ModuleRegistry {
+func (module) Registry() (kernel.ModuleRegistry, error) {
 	return kernel.ModuleRegistry{
 		PermissionEntities: []permission.Entity{{Code: "panel"}},
-	}
+	}, nil
 }
 
-func (Module) Build(
+func (m module) Build(
 	_ context.Context,
 	ctx kernel.ModuleContext,
 ) (kernel.ModuleRuntime, error) {
@@ -73,7 +73,14 @@ func (*Runtime) ModuleCode() kernel.ModuleCode {
 	return ModuleCode
 }
 
-var _ kernel.Module = Module{}
-var _ kernel.RegistryProvider = Module{}
-var _ kernel.DependencyProvider = Module{}
+var _ kernel.Module = module{}
+var _ kernel.RegistryProvider = module{}
+var _ kernel.DependencyProvider = module{}
 var _ kernel.ModuleRuntime = (*Runtime)(nil)
+
+// New declares the module, which has no configuration parameters.
+func New() kernel.Module { return module{} }
+
+func (m module) Validate(ctx context.Context, environment kernel.ModuleValidationContext) error {
+	return ctx.Err()
+}

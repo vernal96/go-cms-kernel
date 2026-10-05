@@ -69,15 +69,15 @@ func bindCoreServices(
 	for index, profile := range profiles {
 		result[index] = profile
 		result[index].Modules = append(
-			[]kernel.ProfileModule(nil),
+			[]kernel.Module(nil),
 			profile.Modules...,
 		)
 		for moduleIndex := range result[index].Modules {
-			profileModule := &result[index].Modules[moduleIndex]
-			if profileModule.Module.Code() != core.ModuleCode {
+			profileModule := result[index].Modules[moduleIndex]
+			if profileModule.Code() != core.ModuleCode {
 				continue
 			}
-			module, err := core.BindServices(profileModule.Module, services)
+			module, err := core.BindServices(profileModule, services)
 			if err != nil {
 				return nil, fmt.Errorf(
 					"bind core services for profile %q: %w",
@@ -85,7 +85,7 @@ func bindCoreServices(
 					err,
 				)
 			}
-			profileModule.Module = module
+			result[index].Modules[moduleIndex] = module
 		}
 	}
 	return result, nil

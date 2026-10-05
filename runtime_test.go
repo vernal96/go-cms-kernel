@@ -73,11 +73,8 @@ func TestProfileRuntimeListsModuleRuntimesInProfileOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime, err := buildProfileRuntime(factory, context.Background(), kernel.Profile{
-		Code: "ordered",
-		Modules: []kernel.ProfileModule{
-			{Module: registryModule{code: "first"}},
-			{Module: registryModule{code: "second"}},
-		},
+		Code:    "ordered",
+		Modules: []kernel.Module{registryModule{code: "first"}, registryModule{code: "second"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -125,12 +122,8 @@ func TestProfileRuntimeFinalizesModuleRuntimesInProfileOrder(t *testing.T) {
 	}
 	order := []kernel.ModuleCode{}
 	_, err = buildProfileRuntime(factory, context.Background(), kernel.Profile{
-		Code: "finalized",
-		Modules: []kernel.ProfileModule{
-			{Module: finalizingModule{code: "first", order: &order}},
-			{Module: registryModule{code: "ordinary"}},
-			{Module: finalizingModule{code: "second", order: &order}},
-		},
+		Code:    "finalized",
+		Modules: []kernel.Module{finalizingModule{code: "first", order: &order}, registryModule{code: "ordinary"}, finalizingModule{code: "second", order: &order}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -147,11 +140,8 @@ func TestProfileRuntimeFinalizerFailureRejectsCandidate(t *testing.T) {
 	}
 	order := []kernel.ModuleCode{}
 	_, err = buildProfileRuntime(factory, context.Background(), kernel.Profile{
-		Code: "finalizer-failure",
-		Modules: []kernel.ProfileModule{
-			{Module: finalizingModule{code: "first", order: &order, err: errors.New("seal failed")}},
-			{Module: finalizingModule{code: "second", order: &order}},
-		},
+		Code:    "finalizer-failure",
+		Modules: []kernel.Module{finalizingModule{code: "first", order: &order, err: errors.New("seal failed")}, finalizingModule{code: "second", order: &order}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "finalize module runtime \"first\"") ||
 		!strings.Contains(err.Error(), "seal failed") {
@@ -173,7 +163,7 @@ func TestProfileRuntimePassesImmutableSiteScopeToEveryModuleBuild(t *testing.T) 
 	module := &scopeAwareModule{}
 	blueprint, err := factory.Compile(context.Background(), kernel.Profile{
 		Code:    "scoped",
-		Modules: []kernel.ProfileModule{{Module: module}},
+		Modules: []kernel.Module{module},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -256,7 +246,7 @@ func (m registryModule) Code() kernel.ModuleCode {
 	return m.code
 }
 
-func (m registryModule) Registry() kernel.ModuleRegistry {
+func (m registryModule) Registry() (kernel.ModuleRegistry, error) {
 	return kernel.ModuleRegistry{
 		FieldTypes:     append([]field.Type(nil), m.fieldTypes...),
 		ValidatorTypes: append([]field.ValidatorType(nil), m.validatorTypes...),
@@ -268,7 +258,7 @@ func (m registryModule) Registry() kernel.ModuleRegistry {
 			[]permission.Entity(nil),
 			m.permissionEntities...,
 		),
-	}
+	}, nil
 }
 
 func (m registryModule) Build(
@@ -346,11 +336,8 @@ func TestModuleApplicationIsAppScopedAndVisibleOnlyToOwningModule(t *testing.T) 
 	owner := &applicationAwareModule{code: "mail_like", wantApplication: true}
 	other := &applicationAwareModule{code: "other"}
 	blueprint, err := factory.Compile(context.Background(), kernel.Profile{
-		Code: "application_dependencies",
-		Modules: []kernel.ProfileModule{
-			{Module: owner},
-			{Module: other},
-		},
+		Code:    "application_dependencies",
+		Modules: []kernel.Module{owner, other},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -721,11 +708,8 @@ func TestProfileRuntimeInjectsOnlyDeclaredModuleDependencies(t *testing.T) {
 	dependency := registryRuntime{code: "dependency"}
 	module := &fileAwareModule{expected: dependency}
 	if _, err := buildProfileRuntime(factory, context.Background(), kernel.Profile{
-		Code: "files",
-		Modules: []kernel.ProfileModule{
-			{Module: registryModule{code: "dependency"}},
-			{Module: module},
-		},
+		Code:    "files",
+		Modules: []kernel.Module{registryModule{code: "dependency"}, module},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -740,22 +724,16 @@ func TestProfileRuntimeRejectsUndeclaredAndMisorderedDependencies(t *testing.T) 
 		t.Fatal(err)
 	}
 	_, err = buildProfileRuntime(factory, context.Background(), kernel.Profile{
-		Code: "undeclared",
-		Modules: []kernel.ProfileModule{
-			{Module: registryModule{code: "dependency"}},
-			{Module: undeclaredDependencyModule{}},
-		},
+		Code:    "undeclared",
+		Modules: []kernel.Module{registryModule{code: "dependency"}, undeclaredDependencyModule{}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "unavailable or undeclared") {
 		t.Fatalf("undeclared dependency error = %v", err)
 	}
 
 	_, err = factory.Compile(context.Background(), kernel.Profile{
-		Code: "misordered",
-		Modules: []kernel.ProfileModule{
-			{Module: &fileAwareModule{}},
-			{Module: registryModule{code: "dependency"}},
-		},
+		Code:    "misordered",
+		Modules: []kernel.Module{&fileAwareModule{}, registryModule{code: "dependency"}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "declared earlier") {
 		t.Fatalf("misordered dependency error = %v", err)
@@ -763,9 +741,9 @@ func TestProfileRuntimeRejectsUndeclaredAndMisorderedDependencies(t *testing.T) 
 
 	_, err = factory.Compile(context.Background(), kernel.Profile{
 		Code: "self-dependent",
-		Modules: []kernel.ProfileModule{{Module: dependencyValidationModule{
+		Modules: []kernel.Module{dependencyValidationModule{
 			code: "self", dependencies: []kernel.ModuleCode{"self"},
-		}}},
+		}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "declares itself") {
 		t.Fatalf("self dependency error = %v", err)
@@ -773,15 +751,12 @@ func TestProfileRuntimeRejectsUndeclaredAndMisorderedDependencies(t *testing.T) 
 
 	_, err = factory.Compile(context.Background(), kernel.Profile{
 		Code: "duplicate-dependency",
-		Modules: []kernel.ProfileModule{
-			{Module: registryModule{code: "dependency"}},
-			{Module: dependencyValidationModule{
-				code: "consumer",
-				dependencies: []kernel.ModuleCode{
-					"dependency", "dependency",
-				},
-			}},
-		},
+		Modules: []kernel.Module{registryModule{code: "dependency"}, dependencyValidationModule{
+			code: "consumer",
+			dependencies: []kernel.ModuleCode{
+				"dependency", "dependency",
+			},
+		}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "more than once") {
 		t.Fatalf("duplicate dependency error = %v", err)
@@ -808,17 +783,14 @@ func TestProfileRuntimeInjectsOnlyBoundCacheAliases(t *testing.T) {
 		context.Background(),
 		kernel.Profile{
 			Code: "cached",
-			Modules: []kernel.ProfileModule{{
-				Module: &cacheAwareModule{},
-				Caches: []cache.Binding{
-					{
-						Alias:     "fast",
-						Code:      "redis",
-						Namespace: "shared/fast",
-					},
-					{Alias: "large", Code: "files"},
+			Modules: []kernel.Module{boundModule{Module: &cacheAwareModule{}, caches: []cache.Binding{
+				{
+					Alias:     "fast",
+					Code:      "redis",
+					Namespace: "shared/fast",
 				},
-			}},
+				{Alias: "large", Code: "files"},
+			}}},
 		},
 	); err != nil {
 		t.Fatal(err)
@@ -857,21 +829,18 @@ func TestProfileRuntimeInjectsScopedInfrastructure(t *testing.T) {
 		context.Background(),
 		kernel.Profile{
 			Code: "infrastructure",
-			Modules: []kernel.ProfileModule{{
-				Module: module,
-				Filesystems: []filesystem.Binding{{
-					Alias: "assets",
-					Code:  "public",
-				}},
-			}},
+			Modules: []kernel.Module{boundModule{Module: module, filesystems: []filesystem.Binding{{
+				Alias: "assets",
+				Code:  "public",
+			}}}},
 		},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	profile := runtime.Profile()
-	profile.Modules[0].Filesystems[0].Alias = "changed"
-	if runtime.Profile().Modules[0].Filesystems[0].Alias != "assets" {
+	profile.Modules[0].(kernel.FilesystemBindingsProvider).FilesystemBindings()[0].Alias = "changed"
+	if runtime.Profile().Modules[0].(kernel.FilesystemBindingsProvider).FilesystemBindings()[0].Alias != "assets" {
 		t.Fatal("profile filesystem bindings share caller memory")
 	}
 }
@@ -889,10 +858,8 @@ func TestProfileRuntimeScopesModuleLogger(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := buildProfileRuntime(factory, context.Background(), kernel.Profile{
-		Code: "profile-one",
-		Modules: []kernel.ProfileModule{{
-			Module: loggerAwareModule{code: "module-one"},
-		}},
+		Code:    "profile-one",
+		Modules: []kernel.Module{loggerAwareModule{code: "module-one"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1005,22 +972,15 @@ func TestProfileRuntimeCollectsFieldTypesBeforeModuleBuild(t *testing.T) {
 
 	profile := kernel.Profile{
 		Code: "custom",
-		Modules: []kernel.ProfileModule{
-			{
-				Module: registryModule{
-					code:       "consumer",
-					expectType: "custom",
-				},
+		Modules: []kernel.Module{registryModule{
+			code:       "consumer",
+			expectType: "custom",
+		}, registryModule{
+			code: "provider",
+			fieldTypes: []field.Type{
+				customFieldType{code: "custom"},
 			},
-			{
-				Module: registryModule{
-					code: "provider",
-					fieldTypes: []field.Type{
-						customFieldType{code: "custom"},
-					},
-				},
-			},
-		},
+		}},
 		Params: []field.Definition{
 			{
 				Key:   "custom_value",
@@ -1061,9 +1021,9 @@ func TestProfileBlueprintValidatesAndClonesEditorTabs(t *testing.T) {
 	}
 	profile := kernel.Profile{
 		Code: "editor-tabs",
-		Modules: []kernel.ProfileModule{{Module: registryModule{
+		Modules: []kernel.Module{registryModule{
 			code: "fields", fieldTypes: field.StandardTypes(),
-		}}},
+		}},
 		Params: []field.Definition{{Key: "title", Type: field.TypeString, Label: "Title"}},
 		EditorTabs: []field.EditorTab{{
 			Code: "main", Label: "Main", Fields: []string{"title"},
@@ -1107,22 +1067,15 @@ func TestProfileRuntimeCollectsDeclaredPermissionsBeforeBuild(
 		context.Background(),
 		kernel.Profile{
 			Code: "permissions",
-			Modules: []kernel.ProfileModule{
-				{
-					Module: registryModule{
-						code:             "consumer",
-						expectPermission: code,
-					},
+			Modules: []kernel.Module{registryModule{
+				code:             "consumer",
+				expectPermission: code,
+			}, registryModule{
+				code: "provider",
+				permissionEntities: []permission.Entity{
+					{Code: "widget"},
 				},
-				{
-					Module: registryModule{
-						code: "provider",
-						permissionEntities: []permission.Entity{
-							{Code: "widget"},
-						},
-					},
-				},
-			},
+			}},
 		},
 	)
 	if err != nil {
@@ -1149,17 +1102,15 @@ func TestProfileRuntimeCollectsOnlyProfileModuleWidgets(t *testing.T) {
 		kernel.Profile{
 			Code:        "with-widgets",
 			WidgetViews: []widget.View{compact},
-			Modules: []kernel.ProfileModule{{
-				Module: widgetProviderModule{
-					code: "content",
-					widgets: []widget.Widget{runtimeWidget{
-						definition: widget.Definition{
-							Reference:   summary,
-							Label:       "Summary",
-							Description: "Article summary",
-						},
-					}},
-				},
+			Modules: []kernel.Module{widgetProviderModule{
+				code: "content",
+				widgets: []widget.Widget{runtimeWidget{
+					definition: widget.Definition{
+						Reference:   summary,
+						Label:       "Summary",
+						Description: "Article summary",
+					},
+				}},
 			}},
 		},
 	)
@@ -1212,24 +1163,17 @@ func TestProfileRuntimeRejectsInvalidFieldRegistrations(t *testing.T) {
 			name: "duplicate",
 			profile: kernel.Profile{
 				Code: "duplicate",
-				Modules: []kernel.ProfileModule{
-					{
-						Module: registryModule{
-							code: "first",
-							fieldTypes: []field.Type{
-								customFieldType{code: "custom"},
-							},
-						},
+				Modules: []kernel.Module{registryModule{
+					code: "first",
+					fieldTypes: []field.Type{
+						customFieldType{code: "custom"},
 					},
-					{
-						Module: registryModule{
-							code: "second",
-							fieldTypes: []field.Type{
-								customFieldType{code: "custom"},
-							},
-						},
+				}, registryModule{
+					code: "second",
+					fieldTypes: []field.Type{
+						customFieldType{code: "custom"},
 					},
-				},
+				}},
 			},
 			contains: "already exists",
 		},
@@ -1237,26 +1181,20 @@ func TestProfileRuntimeRejectsInvalidFieldRegistrations(t *testing.T) {
 			name: "empty code",
 			profile: kernel.Profile{
 				Code: "empty",
-				Modules: []kernel.ProfileModule{
-					{
-						Module: registryModule{
-							code: "provider",
-							fieldTypes: []field.Type{
-								customFieldType{},
-							},
-						},
+				Modules: []kernel.Module{registryModule{
+					code: "provider",
+					fieldTypes: []field.Type{
+						customFieldType{},
 					},
-				},
+				}},
 			},
 			contains: "code is empty",
 		},
 		{
 			name: "unknown",
 			profile: kernel.Profile{
-				Code: "unknown",
-				Modules: []kernel.ProfileModule{
-					{Module: registryModule{code: "module"}},
-				},
+				Code:    "unknown",
+				Modules: []kernel.Module{registryModule{code: "module"}},
 				Params: []field.Definition{
 					{
 						Key: "value", Type: "missing", Label: "Value",
@@ -1293,25 +1231,18 @@ func TestProfileRuntimeCollectsResourceTypesBeforeModuleBuild(
 
 	runtime, err := buildProfileRuntime(factory, context.Background(), kernel.Profile{
 		Code: "custom",
-		Modules: []kernel.ProfileModule{
-			{
-				Module: registryModule{
-					code:               "consumer",
-					expectResourceType: "custom",
+		Modules: []kernel.Module{registryModule{
+			code:               "consumer",
+			expectResourceType: "custom",
+		}, registryModule{
+			code: "provider",
+			resourceTypes: []resourcetype.Type{
+				customResourceType{
+					code:     "custom",
+					pathMode: resourcetype.PathNone,
 				},
 			},
-			{
-				Module: registryModule{
-					code: "provider",
-					resourceTypes: []resourcetype.Type{
-						customResourceType{
-							code:     "custom",
-							pathMode: resourcetype.PathNone,
-						},
-					},
-				},
-			},
-		},
+		}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1350,12 +1281,12 @@ func TestProfileRuntimeFreezesResourceTypeMetadataAndAcceptsPartialDefaults(t *t
 	}
 	runtime, err := buildProfileRuntime(factory, context.Background(), kernel.Profile{
 		Code: "custom",
-		Modules: []kernel.ProfileModule{{Module: registryModule{
+		Modules: []kernel.Module{registryModule{
 			code: "provider", fieldTypes: field.StandardTypes(),
 			resourceTypes: []resourcetype.Type{customResourceType{
 				code: "custom", pathMode: resourcetype.PathRoute, metadata: metadata,
 			}},
-		}}},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("required setting without default did not register: %v", err)
@@ -1541,12 +1472,10 @@ func TestProfileRuntimeRejectsInvalidResourceTypeRegistrations(
 				context.Background(),
 				kernel.Profile{
 					Code: "custom",
-					Modules: []kernel.ProfileModule{{
-						Module: registryModule{
-							code:          "provider",
-							fieldTypes:    field.StandardTypes(),
-							resourceTypes: testCase.types,
-						},
+					Modules: []kernel.Module{registryModule{
+						code:          "provider",
+						fieldTypes:    field.StandardTypes(),
+						resourceTypes: testCase.types,
 					}},
 				},
 			)
@@ -1572,15 +1501,13 @@ func TestProfileRuntimeCompilesAndClonesTemplates(t *testing.T) {
 	required := true
 	profile := kernel.Profile{
 		Code: "templates",
-		Modules: []kernel.ProfileModule{{
-			Module: registryModule{
-				code: "fields",
-				fieldTypes: append(
-					field.StandardTypes(),
-					customFieldType{code: "custom"},
-				),
-				validatorTypes: field.StandardValidatorTypes(),
-			},
+		Modules: []kernel.Module{registryModule{
+			code: "fields",
+			fieldTypes: append(
+				field.StandardTypes(),
+				customFieldType{code: "custom"},
+			),
+			validatorTypes: field.StandardValidatorTypes(),
 		}},
 		Templates: []template.Definition{{
 			Code:  "article",
@@ -1691,11 +1618,9 @@ func TestProfileRuntimeRejectsInvalidTemplates(t *testing.T) {
 				context.Background(),
 				kernel.Profile{
 					Code: "templates",
-					Modules: []kernel.ProfileModule{{
-						Module: registryModule{
-							code:       "fields",
-							fieldTypes: field.StandardTypes(),
-						},
+					Modules: []kernel.Module{registryModule{
+						code:       "fields",
+						fieldTypes: field.StandardTypes(),
 					}},
 					Templates: testCase.templates,
 				},
@@ -1711,7 +1636,10 @@ func TestProfileRuntimeRejectsInvalidTemplates(t *testing.T) {
 }
 
 func TestCoreModuleRegistersAllStandardFieldTypes(t *testing.T) {
-	registry := core.Module{}.Registry()
+	registry, err := kernel.RegistryForModule(core.New(core.Config{}))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(registry.FieldTypes) != 13 {
 		t.Fatalf("standard field types = %d", len(registry.FieldTypes))
 	}
@@ -1824,7 +1752,7 @@ func TestProfileScopedValidatorRegistration(t *testing.T) {
 	metadata := field.ValidatorMetadata{Label: "Prefix", Options: []field.ConfigField{{Key: "value", Label: "Original", Type: field.TypeString, Required: true}}, FieldTypes: []field.TypeCode{field.TypeString}}
 	base := registryModule{code: "fields", fieldTypes: field.StandardTypes(), validatorTypes: field.StandardValidatorTypes()}
 	custom := registryModule{code: "extension", validatorTypes: []field.ValidatorType{testPrefixValidatorType{metadata: &metadata}}}
-	profile := kernel.Profile{Code: "with-validator", Modules: []kernel.ProfileModule{{Module: base}, {Module: custom}}, Params: []field.Definition{{Key: "slug", Type: field.TypeString, Label: "Slug", Validators: []field.ValidatorDefinition{{Type: "example.prefix", Options: map[string]any{"value": "go-"}}}}}}
+	profile := kernel.Profile{Code: "with-validator", Modules: []kernel.Module{base, custom}, Params: []field.Definition{{Key: "slug", Type: field.TypeString, Label: "Slug", Validators: []field.ValidatorDefinition{{Type: "example.prefix", Options: map[string]any{"value": "go-"}}}}}}
 	runtime, err := buildProfileRuntime(factory, context.Background(), profile)
 	if err != nil {
 		t.Fatal(err)
@@ -1846,13 +1774,59 @@ func TestProfileScopedValidatorRegistration(t *testing.T) {
 	if _, err = factory.Compile(context.Background(), profile); err == nil || !strings.Contains(err.Error(), "unknown validator") {
 		t.Fatalf("absent module: %v", err)
 	}
-	profile.Modules = append(profile.Modules, kernel.ProfileModule{Module: custom}, kernel.ProfileModule{Module: registryModule{code: "duplicate", validatorTypes: []field.ValidatorType{testPrefixValidatorType{}}}})
+	profile.Modules = append(profile.Modules, custom, registryModule{code: "duplicate", validatorTypes: []field.ValidatorType{testPrefixValidatorType{}}})
 	if _, err = factory.Compile(context.Background(), profile); err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Fatalf("duplicate: %v", err)
 	}
 	profile.Modules = profile.Modules[:2]
-	profile.Modules = append(profile.Modules, kernel.ProfileModule{Module: registryModule{code: "nil", validatorTypes: []field.ValidatorType{nil}}})
+	profile.Modules = append(profile.Modules, registryModule{code: "nil", validatorTypes: []field.ValidatorType{nil}})
 	if _, err = factory.Compile(context.Background(), profile); err == nil || !strings.Contains(err.Error(), "nil") {
 		t.Fatalf("nil: %v", err)
 	}
+}
+
+func (finalizingModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }
+
+func (registryModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }
+
+func (*applicationAwareModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
+}
+
+func (widgetProviderModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
+}
+
+func (undeclaredDependencyModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
+}
+
+func (dependencyValidationModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
+}
+
+func (*scopeAwareModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }
+
+func (*infrastructureAwareModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
+}
+
+func (loggerAwareModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }
+
+func (*cacheAwareModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }
+
+func (*fileAwareModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }
+
+// boundModule is a test declaration with immutable infrastructure bindings.
+type boundModule struct {
+	kernel.Module
+	caches      []cache.Binding
+	filesystems []filesystem.Binding
+}
+
+func (m boundModule) CacheBindings() []cache.Binding {
+	return append([]cache.Binding(nil), m.caches...)
+}
+func (m boundModule) FilesystemBindings() []filesystem.Binding {
+	return append([]filesystem.Binding(nil), m.filesystems...)
 }

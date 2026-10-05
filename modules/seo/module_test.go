@@ -63,10 +63,8 @@ func TestModuleBuildsProfileScopedRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	blueprint, err := factory.Compile(context.Background(), kernel.Profile{
-		Code: "seo-test",
-		Modules: []kernel.ProfileModule{{
-			Module: Module{},
-		}},
+		Code:    "seo-test",
+		Modules: []kernel.Module{New(Config{})},
 	})
 	if err != nil {
 		t.Fatal(err)

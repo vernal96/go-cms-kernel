@@ -460,8 +460,8 @@ func TestOptionalSiteManagementHTTPIsRuntimeContributed(t *testing.T) {
 		Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{},
 		MainDatabase: appkernel.DatabaseDefinition{Connector: connectorFactory{}, Adapters: []kernel.ModuleDatabaseFactory{databaseFactory{sites: sites, access: privilegedUserAccessRepository{}}}},
 		Profiles: []kernel.Profile{
-			{Code: "with_feature", Modules: []kernel.ProfileModule{{Module: core.Module{}}, {Module: admin.Module{}}, {Module: siteManagementTestModule{}}}},
-			{Code: "plain", Modules: []kernel.ProfileModule{{Module: core.Module{}}, {Module: admin.Module{}}}},
+			{Code: "with_feature", Modules: []kernel.Module{core.New(core.Config{}), admin.New(), siteManagementTestModule{}}},
+			{Code: "plain", Modules: []kernel.Module{core.New(core.Config{}), admin.New()}},
 		},
 	})
 	if err != nil {
@@ -509,7 +509,7 @@ func TestOptionalSiteManagementHTTPRejectsCorePathCollisionAtCompileTime(t *test
 	runtimeApp, err := appkernel.New(context.Background(), appkernel.Definition{
 		Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{},
 		MainDatabase: appkernel.DatabaseDefinition{Connector: connectorFactory{}, Adapters: []kernel.ModuleDatabaseFactory{databaseFactory{sites: sites, access: privilegedUserAccessRepository{}}}},
-		Profiles:     []kernel.Profile{{Code: "collision", Modules: []kernel.ProfileModule{{Module: core.Module{}}, {Module: admin.Module{}}, {Module: siteManagementTestModule{path: "resources"}}}}},
+		Profiles:     []kernel.Profile{{Code: "collision", Modules: []kernel.Module{core.New(core.Config{}), admin.New(), siteManagementTestModule{path: "resources"}}}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -528,7 +528,7 @@ func TestOptionalSiteManagementHTTPRejectsDuplicatePathAtCompileTime(t *testing.
 	runtimeApp, err := appkernel.New(context.Background(), appkernel.Definition{
 		Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{},
 		MainDatabase: appkernel.DatabaseDefinition{Connector: connectorFactory{}, Adapters: []kernel.ModuleDatabaseFactory{databaseFactory{sites: sites, access: privilegedUserAccessRepository{}}}},
-		Profiles:     []kernel.Profile{{Code: "duplicate", Modules: []kernel.ProfileModule{{Module: core.Module{}}, {Module: admin.Module{}}, {Module: siteManagementTestModule{}}, {Module: siteManagementDuplicateModule{}}}}},
+		Profiles:     []kernel.Profile{{Code: "duplicate", Modules: []kernel.Module{core.New(core.Config{}), admin.New(), siteManagementTestModule{}, siteManagementDuplicateModule{}}}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -764,11 +764,8 @@ func TestHandlerLooksUpCompiledRuntimeByRequestHost(t *testing.T) {
 			Adapters:  []kernel.ModuleDatabaseFactory{databaseFactory{}},
 		},
 		Profiles: []kernel.Profile{{
-			Code: "dev",
-			Modules: []kernel.ProfileModule{
-				{Module: core.Module{}},
-				{Module: admin.Module{}},
-			},
+			Code:    "dev",
+			Modules: []kernel.Module{core.New(core.Config{}), admin.New()},
 		}},
 	})
 	if err != nil {
@@ -844,11 +841,8 @@ func TestHandlerHidesRuntimeWithoutGuestPermissionOrPublicFlag(
 						},
 					},
 					Profiles: []kernel.Profile{{
-						Code: "dev",
-						Modules: []kernel.ProfileModule{
-							{Module: core.Module{}},
-							{Module: admin.Module{}},
-						},
+						Code:    "dev",
+						Modules: []kernel.Module{core.New(core.Config{}), admin.New()},
 					}},
 				},
 			)
@@ -946,11 +940,8 @@ func TestHandlerDeliversPublicAndSignedPrivateLocalFiles(t *testing.T) {
 						}},
 					},
 					Profiles: []kernel.Profile{{
-						Code: "dev",
-						Modules: []kernel.ProfileModule{
-							{Module: core.Module{}},
-							{Module: admin.Module{}},
-						},
+						Code:    "dev",
+						Modules: []kernel.Module{core.New(core.Config{}), admin.New()},
 					}},
 				},
 			)
@@ -1108,10 +1099,10 @@ func (m transportModule) Code() kernel.ModuleCode {
 	return m.code
 }
 
-func (m transportModule) Registry() kernel.ModuleRegistry {
+func (m transportModule) Registry() (kernel.ModuleRegistry, error) {
 	return kernel.ModuleRegistry{
 		ResourceTypes: []resourcetype.Type{m.resourceType},
-	}
+	}, nil
 }
 
 func (m transportModule) Build(
@@ -1300,11 +1291,7 @@ func newTransportTestApp(
 					{Code: "content", Label: "Content", Layout: template.Layout{{Code: "body", Label: "Основная область", Items: []template.Item{template.Widget{Widget: corewidgets.Content}}}}},
 					{Code: "empty", Label: "Empty"},
 				}, extraTemplates...),
-				Modules: []kernel.ProfileModule{
-					{Module: core.Module{}},
-					{Module: admin.Module{}},
-					{Module: module},
-				},
+				Modules: []kernel.Module{core.New(core.Config{}), admin.New(), module},
 			}},
 		},
 	)
@@ -1341,12 +1328,8 @@ func TestSiteHTTPPublicationIsAtomicAcrossUpdateCreateAndReload(t *testing.T) {
 			},
 		},
 		Profiles: []kernel.Profile{{
-			Code: "dev",
-			Modules: []kernel.ProfileModule{
-				{Module: core.Module{}},
-				{Module: admin.Module{}},
-				{Module: publicationModule{builds: &moduleBuilds}},
-			},
+			Code:    "dev",
+			Modules: []kernel.Module{core.New(core.Config{}), admin.New(), publicationModule{builds: &moduleBuilds}},
 			Params: []field.Definition{{
 				Key: "broken", Type: field.TypeCheckbox, Label: "Broken",
 			}, {Key: "collision", Type: field.TypeCheckbox, Label: "Collision"}},
@@ -1913,11 +1896,8 @@ func TestPlatformRuntimeMethodMismatchKeeps405AndAllow(t *testing.T) {
 			Adapters:  []kernel.ModuleDatabaseFactory{databaseFactory{}},
 		},
 		Profiles: []kernel.Profile{{
-			Code: "dev",
-			Modules: []kernel.ProfileModule{
-				{Module: core.Module{}},
-				{Module: admin.Module{}},
-			},
+			Code:    "dev",
+			Modules: []kernel.Module{core.New(core.Config{}), admin.New()},
 		}},
 	})
 	if err != nil {
@@ -1965,12 +1945,8 @@ func TestPublicAndProtectedModuleRoutesUseJWTActor(t *testing.T) {
 			}},
 		},
 		Profiles: []kernel.Profile{{
-			Code: "dev",
-			Modules: []kernel.ProfileModule{
-				{Module: core.Module{}},
-				{Module: admin.Module{}},
-				{Module: module},
-			},
+			Code:    "dev",
+			Modules: []kernel.Module{core.New(core.Config{}), admin.New(), module},
 		}},
 	})
 	if err != nil {
@@ -2054,11 +2030,8 @@ func TestLoginRouteIsAvailableBeforePrivateSiteResolution(t *testing.T) {
 			}},
 		},
 		Profiles: []kernel.Profile{{
-			Code: "dev",
-			Modules: []kernel.ProfileModule{
-				{Module: core.Module{}},
-				{Module: admin.Module{}},
-			},
+			Code:    "dev",
+			Modules: []kernel.Module{core.New(core.Config{}), admin.New()},
 		}},
 	})
 	if err != nil {
@@ -2125,11 +2098,8 @@ func TestPlatformMiddlewareCannotBypassJWTAuthentication(
 			}},
 		},
 		Profiles: []kernel.Profile{{
-			Code: "dev",
-			Modules: []kernel.ProfileModule{
-				{Module: core.Module{}},
-				{Module: admin.Module{}},
-			},
+			Code:    "dev",
+			Modules: []kernel.Module{core.New(core.Config{}), admin.New()},
 		}},
 	})
 	if err != nil {
@@ -2215,11 +2185,8 @@ func TestJWTAuthenticationActorPrecedesPrivateSiteResolution(
 						},
 					},
 					Profiles: []kernel.Profile{{
-						Code: "dev",
-						Modules: []kernel.ProfileModule{
-							{Module: core.Module{}},
-							{Module: admin.Module{}},
-						},
+						Code:    "dev",
+						Modules: []kernel.Module{core.New(core.Config{}), admin.New()},
 					}},
 				},
 			)
@@ -2307,11 +2274,8 @@ func TestStandardLinkResourceHandlersRedirect(t *testing.T) {
 			},
 		},
 		Profiles: []kernel.Profile{{
-			Code: "dev",
-			Modules: []kernel.ProfileModule{
-				{Module: core.Module{}},
-				{Module: admin.Module{}},
-			},
+			Code:    "dev",
+			Modules: []kernel.Module{core.New(core.Config{}), admin.New()},
 		}},
 	})
 	if err != nil {
@@ -2368,11 +2332,8 @@ func TestHTTPAccessLogsSafeStructuredMetadataAndLevels(t *testing.T) {
 				},
 			},
 			Profiles: []kernel.Profile{{
-				Code: "dev",
-				Modules: []kernel.ProfileModule{
-					{Module: core.Module{}},
-					{Module: admin.Module{}},
-				},
+				Code:    "dev",
+				Modules: []kernel.Module{core.New(core.Config{}), admin.New()},
 			}},
 		},
 	)
@@ -2692,3 +2653,15 @@ func TestPublicDynamicWidgetAreas(t *testing.T) {
 		}
 	}
 }
+
+func (siteManagementTestModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
+}
+
+func (siteManagementDuplicateModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
+}
+
+func (publicationModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }
+
+func (transportModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }

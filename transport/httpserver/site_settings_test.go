@@ -29,7 +29,7 @@ func TestSiteSettingsHTTPPrivacyAndUpdates(t *testing.T) {
 	application, err := appkernel.New(ctx, appkernel.Definition{
 		Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{},
 		MainDatabase: appkernel.DatabaseDefinition{Connector: connectorFactory{}, Adapters: []kernel.ModuleDatabaseFactory{databaseFactory{sites: repo, access: privilegedUserAccessRepository{}}}},
-		Profiles: []kernel.Profile{{Code: "dev", Modules: []kernel.ProfileModule{{Module: core.Module{}}, {Module: admin.Module{}}}, Params: []field.Definition{
+		Profiles: []kernel.Profile{{Code: "dev", Modules: []kernel.Module{core.New(core.Config{}), admin.New()}, Params: []field.Definition{
 			{Key: "name", Label: "Name", Type: field.TypeString, Public: true},
 			{Key: "secret", Label: "Secret", Type: field.TypeString},
 		}}},

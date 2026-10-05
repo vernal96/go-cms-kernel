@@ -20,16 +20,19 @@ func (s *Services) ConfigureManagementImages(files *management.Files, profiles [
 	limits := image.DefaultLimits()
 	var configured *image.Limits
 	for _, profile := range profiles {
-		for _, module := range profile.Modules {
-			if module.Module.Code() != ModuleCode {
+		for _, declaration := range profile.Modules {
+			if declaration.Code() != ModuleCode {
 				continue
 			}
-			cfg, ok := module.Config.(Config)
-			if ok && cfg.Images != nil {
-				if configured != nil && *configured != *cfg.Images {
+			cfg, ok := declaration.(module)
+			if !ok {
+				return errors.New("core module declaration has invalid type")
+			}
+			if cfg.config.Images != nil {
+				if configured != nil && *configured != *cfg.config.Images {
 					return errors.New("global Media image limits must agree across profiles")
 				}
-				v := *cfg.Images
+				v := *cfg.config.Images
 				configured = &v
 				limits = v
 			}
@@ -46,20 +49,20 @@ func (s *Services) ConfigureManagementImages(files *management.Files, profiles [
 	}
 	thumbnails := map[string]*image.Thumbnails{}
 	for _, profile := range profiles {
-		for _, module := range profile.Modules {
-			if module.Module.Code() != ModuleCode {
+		for _, declaration := range profile.Modules {
+			if declaration.Code() != ModuleCode {
 				continue
 			}
-			config, ok := module.Config.(Config)
+			config, ok := declaration.(module)
 			if !ok {
-				config = Config{}
+				return errors.New("core module declaration has invalid type")
 			}
 			l := limits
-			if config.Images != nil {
-				l = *config.Images
+			if config.config.Images != nil {
+				l = *config.config.Images
 			}
 
-			manager, err := cache.NewModuleManager(caches, string(profile.Code), string(ModuleCode), module.Caches)
+			manager, err := cache.NewModuleManager(caches, string(profile.Code), string(ModuleCode), config.config.Caches)
 			if err != nil {
 				return err
 			}

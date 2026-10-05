@@ -90,12 +90,10 @@ func NewService(siteID site.ID, repository Repository, renderer *Renderer, autho
 	if limits.MaxRecipients < 1 || limits.MaxMessageSize < 1 || limits.MaxAttachmentSize < 1 {
 		return nil, errors.New("mail service limits are invalid")
 	}
-	messageIDDomain = strings.TrimSpace(messageIDDomain)
-	if messageIDDomain == "" {
-		messageIDDomain = "localhost"
-	}
-	if !messageIDDomainPattern.MatchString(messageIDDomain) {
-		return nil, errors.New("mail Message-ID domain is invalid")
+	var err error
+	messageIDDomain, err = normalizeMessageIDDomain(messageIDDomain)
+	if err != nil {
+		return nil, err
 	}
 	return &Service{siteID: siteID, repository: repository, renderer: renderer, lifecycle: &runtimeLifecycle{}, authorizer: authorizer, users: users, spool: spool, limits: limits, messageIDDomain: messageIDDomain}, nil
 }
@@ -493,4 +491,15 @@ func normalizePage(query PageQuery) (PageQuery, error) {
 		return PageQuery{}, fmt.Errorf("%w: pagination is invalid", ErrInvalid)
 	}
 	return query, nil
+}
+
+func normalizeMessageIDDomain(messageIDDomain string) (string, error) {
+	messageIDDomain = strings.TrimSpace(messageIDDomain)
+	if messageIDDomain == "" {
+		messageIDDomain = "localhost"
+	}
+	if !messageIDDomainPattern.MatchString(messageIDDomain) {
+		return "", errors.New("mail Message-ID domain is invalid")
+	}
+	return messageIDDomain, nil
 }

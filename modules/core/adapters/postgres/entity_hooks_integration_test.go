@@ -56,8 +56,8 @@ type hookTestModule struct {
 }
 
 func (hookTestModule) Code() kernel.ModuleCode { return "core" }
-func (hookTestModule) Registry() kernel.ModuleRegistry {
-	return kernel.ModuleRegistry{FieldTypes: field.StandardTypes(), ResourceTypes: resourcetype.StandardTypes()}
+func (hookTestModule) Registry() (kernel.ModuleRegistry, error) {
+	return kernel.ModuleRegistry{FieldTypes: field.StandardTypes(), ResourceTypes: resourcetype.StandardTypes()}, nil
 }
 func (m hookTestModule) Build(_ context.Context, ctx kernel.ModuleContext) (kernel.ModuleRuntime, error) {
 	for _, key := range []entityhooks.Key[resource.Change]{resource.BeforeCreate, resource.BeforeUpdate} {
@@ -122,7 +122,7 @@ func TestPostgresEntityHooksResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "hooks", Modules: []kernel.ProfileModule{{Module: module}}, Templates: []template.Definition{{Code: "hook_template", Label: "Hook template", Layout: template.Layout{{Code: "body", Label: "Основная область", Items: []template.Item{template.ResourceWidgets{}}}, {Code: "sidebar", Label: "Боковая область", Items: []template.Item{template.ResourceWidgets{}}}}, Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}}}})
+	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "hooks", Modules: []kernel.Module{module}, Templates: []template.Definition{{Code: "hook_template", Label: "Hook template", Layout: template.Layout{{Code: "body", Label: "Основная область", Items: []template.Item{template.ResourceWidgets{}}}, {Code: "sidebar", Label: "Боковая область", Items: []template.Item{template.ResourceWidgets{}}}}, Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -649,3 +649,5 @@ func (a hookTestAccess) Allowed(ctx context.Context, actor security.Actor, codes
 	}
 	return result, nil
 }
+
+func (hookTestModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }

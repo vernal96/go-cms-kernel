@@ -11,14 +11,14 @@ import (
 func validateApplicationProfile(profile kernel.Profile) error {
 	moduleCodes := make(map[kernel.ModuleCode]struct{}, len(profile.Modules))
 	for moduleIndex, profileModule := range profile.Modules {
-		if profileModule.Module == nil {
+		if profileModule == nil || nilInterface(profileModule) {
 			return fmt.Errorf(
 				"profile %q module at index %d is nil",
 				profile.Code,
 				moduleIndex,
 			)
 		}
-		moduleCode := profileModule.Module.Code()
+		moduleCode := profileModule.Code()
 		if moduleCode == "" {
 			return fmt.Errorf(
 				"profile %q module at index %d has empty code",
@@ -44,7 +44,7 @@ func validateApplicationProfile(profile kernel.Profile) error {
 			)
 		}
 	}
-	if profile.Modules[0].Module.Code() != core.ModuleCode {
+	if profile.Modules[0].Code() != core.ModuleCode {
 		return fmt.Errorf(
 			"profile %q must declare module %q first",
 			profile.Code,
@@ -62,13 +62,13 @@ func buildPermissionCatalog(
 
 	for _, profile := range profiles {
 		for _, profileModule := range profile.Modules {
-			if profileModule.Module == nil {
+			if profileModule == nil || nilInterface(profileModule) {
 				continue
 			}
-			moduleCode := profileModule.Module.Code()
+			moduleCode := profileModule.Code()
 			registry, err := kernel.RegistryForModule(profileModule)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("profile %q: %w", profile.Code, err)
 			}
 			if len(registry.PermissionEntities) == 0 {
 				continue

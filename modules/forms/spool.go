@@ -34,12 +34,9 @@ func NewUploadSpool(siteID site.ID, disk filesystem.Disk) (*UploadSpool, error) 
 	if siteID <= 0 {
 		return nil, errors.New("Forms upload spool site is invalid")
 	}
-	if disk == nil || disk.Visibility() != filesystem.VisibilityPrivate {
-		return nil, errors.New("Forms upload spool must use a private filesystem")
-	}
-	scanner, ok := disk.(filesystem.PrefixScannerProvider)
-	if !ok {
-		return nil, errors.New("Forms upload spool does not support bounded cleanup")
+	scanner, err := validateSpoolDisk(disk)
+	if err != nil {
+		return nil, err
 	}
 	return &UploadSpool{disk: disk, scannerProvider: scanner, prefix: spoolRootPrefix + fmt.Sprint(siteID) + "/"}, nil
 }
@@ -267,4 +264,15 @@ func (r *uploadCountingReader) Read(buffer []byte) (int, error) {
 	n, err := r.reader.Read(buffer)
 	r.count += int64(n)
 	return n, err
+}
+
+func validateSpoolDisk(disk filesystem.Disk) (filesystem.PrefixScannerProvider, error) {
+	if disk == nil || disk.Visibility() != filesystem.VisibilityPrivate {
+		return nil, errors.New("Forms upload spool must use a private filesystem")
+	}
+	scanner, ok := disk.(filesystem.PrefixScannerProvider)
+	if !ok {
+		return nil, errors.New("Forms upload spool does not support bounded cleanup")
+	}
+	return scanner, nil
 }

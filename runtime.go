@@ -26,22 +26,19 @@ type ProfileCode string
 type Profile struct {
 	Code        ProfileCode
 	Name        string
-	Modules     []ProfileModule
+	Modules     []Module
 	Params      []field.Definition
 	EditorTabs  []field.EditorTab
 	Templates   []template.Definition
 	WidgetViews []widget.View
 }
 
-type ProfileModule struct {
-	Module      Module
-	Config      any
-	Caches      []cache.Binding
-	Filesystems []filesystem.Binding
-}
-
+// Module is an immutable declaration shared by profile blueprints.
+// Validate checks every site-independent requirement before any site is built;
+// Build creates a new runtime for the supplied site scope.
 type Module interface {
 	Code() ModuleCode
+	Validate(context.Context, ModuleValidationContext) error
 	Build(context.Context, ModuleContext) (ModuleRuntime, error)
 }
 
@@ -225,36 +222,42 @@ type ModuleRegistry struct {
 	PermissionEntities []permission.Entity
 }
 
-// ModuleConfigCloner protects mutable config declarations in profile snapshots.
-type ModuleConfigCloner interface{ CloneModuleConfig() any }
-
-// ConfiguredRegistryProvider declares profile-specific types before schemas compile.
-// Implementations must return immutable declarations detached from config.
-type ConfiguredRegistryProvider interface {
-	RegistryForConfig(any) (ModuleRegistry, error)
-}
-
-// RegistryForModule resolves the same declarations for profile compilation and
-// application-wide catalogs. Configured declarations take precedence.
-func RegistryForModule(module ProfileModule) (ModuleRegistry, error) {
-	if module.Module == nil || isNilValue(module.Module) {
+// RegistryForModule resolves declarations owned by the configured module.
+func RegistryForModule(module Module) (ModuleRegistry, error) {
+	if module == nil || isNilValue(module) {
 		return ModuleRegistry{}, errors.New("module is nil")
 	}
-	if provider, ok := module.Module.(ConfiguredRegistryProvider); ok {
-		registry, err := provider.RegistryForConfig(module.Config)
+	if provider, ok := module.(RegistryProvider); ok {
+		registry, err := provider.Registry()
 		if err != nil {
-			return ModuleRegistry{}, fmt.Errorf("module %q registry: %w", module.Module.Code(), err)
+			return ModuleRegistry{}, fmt.Errorf("module %q registry: %w", module.Code(), err)
 		}
 		return registry, nil
-	}
-	if provider, ok := module.Module.(RegistryProvider); ok {
-		return provider.Registry(), nil
 	}
 	return ModuleRegistry{}, nil
 }
 
 type RegistryProvider interface {
-	Registry() ModuleRegistry
+	Registry() (ModuleRegistry, error)
+}
+
+// CacheBindingsProvider exposes the logical caches used by a module.
+type CacheBindingsProvider interface{ CacheBindings() []cache.Binding }
+
+// FilesystemBindingsProvider exposes the logical disks used by a module.
+type FilesystemBindingsProvider interface{ FilesystemBindings() []filesystem.Binding }
+
+func moduleCacheBindings(module Module) []cache.Binding {
+	if provider, ok := module.(CacheBindingsProvider); ok {
+		return provider.CacheBindings()
+	}
+	return nil
+}
+func moduleFilesystemBindings(module Module) []filesystem.Binding {
+	if provider, ok := module.(FilesystemBindingsProvider); ok {
+		return provider.FilesystemBindings()
+	}
+	return nil
 }
 
 type RuntimeRegistry struct {
@@ -525,7 +528,6 @@ type ModuleContext struct {
 	application  ModuleApplication
 	profile      Profile
 	registry     DefinitionRegistry
-	config       any
 	scope        RuntimeScope
 	dependencies map[ModuleCode]ModuleRuntime
 	caches       cache.ModuleManager
@@ -540,7 +542,6 @@ func newModuleContext(
 	application ModuleApplication,
 	profile Profile,
 	registry DefinitionRegistry,
-	config any,
 	scope RuntimeScope,
 	services RuntimeServices,
 	dependencies map[ModuleCode]ModuleRuntime,
@@ -553,7 +554,6 @@ func newModuleContext(
 		application:  application,
 		profile:      cloneProfile(profile),
 		registry:     registry,
-		config:       config,
 		scope:        scope.clone(),
 		dependencies: dependencies,
 		caches:       caches,
@@ -569,7 +569,8 @@ func (c ModuleContext) ModuleCode() ModuleCode {
 	return c.moduleCode
 }
 
-func ModuleApplicationFrom[T ModuleApplication](ctx ModuleContext) (T, error) {
+func ModuleApplicationFrom[T ModuleApplication](environment moduleEnvironment) (T, error) {
+	ctx := environment.moduleContext()
 	var zero T
 	if ctx.application == nil || isNilValue(ctx.application) {
 		return zero, fmt.Errorf("module %q application dependency is unavailable", ctx.ModuleCode())
@@ -592,10 +593,6 @@ func (c ModuleContext) Profile() Profile {
 
 func (c ModuleContext) Registry() DefinitionRegistry {
 	return c.registry
-}
-
-func (c ModuleContext) Config() any {
-	return c.config
 }
 
 func (c ModuleContext) Scope() RuntimeScope {
@@ -625,38 +622,19 @@ func (c ModuleContext) Logger() *slog.Logger {
 	return c.logger
 }
 
-func ModuleConfigFrom[T any](ctx ModuleContext) (T, error) {
-	var zero T
-
-	if ctx.config == nil {
-		return zero, nil
-	}
-
-	if config, ok := ctx.config.(T); ok {
-		return config, nil
-	}
-
-	if config, ok := ctx.config.(*T); ok {
-		if config == nil {
-			return zero, errors.New("module config is nil")
-		}
-
-		return *config, nil
-	}
-
-	return zero, fmt.Errorf(
-		"invalid module config type %T, expected %T",
-		ctx.config,
-		zero,
-	)
-}
-
 func ModuleDatabaseFrom[T ModuleDatabase](
-	ctx ModuleContext,
+	environment moduleEnvironment,
 	connectionCode ConnectionCode,
 	moduleCode ModuleCode,
 ) (T, error) {
+	ctx := environment.moduleContext()
 	var zero T
+	if !environment.allowsDatabase(moduleCode) {
+		return zero, errors.New("cannot validate another module database")
+	}
+	if ctx.resolver == nil {
+		return zero, fmt.Errorf("database for module %q is unavailable", moduleCode)
+	}
 
 	var (
 		database ModuleDatabase
@@ -683,7 +661,7 @@ func ModuleDatabaseFrom[T ModuleDatabase](
 	}
 
 	result, ok := database.(T)
-	if !ok {
+	if !ok || isNilValue(result) {
 		return zero, fmt.Errorf(
 			"database for module %q has invalid type %T",
 			moduleCode,
@@ -916,7 +894,7 @@ func (f *ProfileRuntimeFactory) Compile(
 	)
 
 	for index, profileModule := range profile.Modules {
-		if profileModule.Module == nil {
+		if profileModule == nil || isNilValue(profileModule) {
 			return nil, fmt.Errorf(
 				"profile %q module at index %d is nil",
 				profile.Code,
@@ -924,7 +902,7 @@ func (f *ProfileRuntimeFactory) Compile(
 			)
 		}
 
-		moduleCode := profileModule.Module.Code()
+		moduleCode := profileModule.Code()
 		if moduleCode == "" {
 			return nil, fmt.Errorf(
 				"profile %q module at index %d has empty code",
@@ -952,7 +930,7 @@ func (f *ProfileRuntimeFactory) Compile(
 	for _, profileModule := range profile.Modules {
 		moduleRegistry, err := RegistryForModule(profileModule)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("profile %q: %w", profile.Code, err)
 		}
 
 		for index, fieldType := range moduleRegistry.FieldTypes {
@@ -960,14 +938,14 @@ func (f *ProfileRuntimeFactory) Compile(
 				return nil, fmt.Errorf(
 					"register field type at index %d from module %q: %w",
 					index,
-					profileModule.Module.Code(),
+					profileModule.Code(),
 					err,
 				)
 			}
 		}
 		for index, item := range moduleRegistry.ValidatorTypes {
 			if err := registry.addValidatorType(item); err != nil {
-				return nil, fmt.Errorf("register validator type at index %d from module %q: %w", index, profileModule.Module.Code(), err)
+				return nil, fmt.Errorf("register validator type at index %d from module %q: %w", index, profileModule.Code(), err)
 			}
 		}
 		for index, resourceType := range moduleRegistry.ResourceTypes {
@@ -975,7 +953,7 @@ func (f *ProfileRuntimeFactory) Compile(
 				return nil, fmt.Errorf(
 					"register resource type at index %d from module %q: %w",
 					index,
-					profileModule.Module.Code(),
+					profileModule.Code(),
 					err,
 				)
 			}
@@ -984,13 +962,13 @@ func (f *ProfileRuntimeFactory) Compile(
 			continue
 		}
 		permissionDefinitions, err := permission.Definitions(
-			string(profileModule.Module.Code()),
+			string(profileModule.Code()),
 			moduleRegistry.PermissionEntities,
 		)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"register permissions from module %q: %w",
-				profileModule.Module.Code(),
+				profileModule.Code(),
 				err,
 			)
 		}
@@ -999,7 +977,7 @@ func (f *ProfileRuntimeFactory) Compile(
 				return nil, fmt.Errorf(
 					"register permission at index %d from module %q: %w",
 					index,
-					profileModule.Module.Code(),
+					profileModule.Code(),
 					err,
 				)
 			}
@@ -1034,6 +1012,32 @@ func (f *ProfileRuntimeFactory) Compile(
 		)
 	}
 
+	for _, module := range profile.Modules {
+		moduleCaches, err := cache.NewModuleManager(f.services.Caches, string(profile.Code), string(module.Code()), moduleCacheBindings(module))
+		if err != nil {
+			return nil, fmt.Errorf("profile %q module %q caches: %w", profile.Code, module.Code(), err)
+		}
+		moduleFilesystems, err := filesystem.NewModuleManager(f.services.Filesystems, moduleFilesystemBindings(module))
+		if err != nil {
+			return nil, fmt.Errorf("profile %q module %q filesystems: %w", profile.Code, module.Code(), err)
+		}
+		validation := ModuleValidationContext{
+			context: ModuleContext{
+				resolver:    f.resolver,
+				moduleCode:  module.Code(),
+				application: f.applications[module.Code()],
+				profile:     cloneProfile(profile),
+				registry:    registry,
+				caches:      moduleCaches,
+				filesystems: moduleFilesystems,
+			},
+			disks: f.services.Filesystems,
+		}
+		if err := module.Validate(ctx, validation); err != nil {
+			return nil, fmt.Errorf("profile %q module %q: %w", profile.Code, module.Code(), err)
+		}
+	}
+
 	return &ProfileBlueprint{
 		profile:     profile,
 		registry:    registry,
@@ -1064,8 +1068,7 @@ func (b *ProfileBlueprint) Build(
 	registry := b.registry.cloneDefinitions()
 	hooks := entityhooks.NewRegistry(entityhooks.Site, scope.SiteID())
 	widgetSources := make([]widget.Source, 0, len(profile.Modules))
-	for _, profileModule := range profile.Modules {
-		module := profileModule.Module
+	for _, module := range profile.Modules {
 		dependencies, err := resolveModuleDependencies(module, registry)
 		if err != nil {
 			return nil, fmt.Errorf(
@@ -1083,7 +1086,7 @@ func (b *ProfileBlueprint) Build(
 				Site:    scope.SiteID(),
 			},
 			string(module.Code()),
-			profileModule.Caches,
+			moduleCacheBindings(module),
 		)
 		if err != nil {
 			return nil, fmt.Errorf(
@@ -1096,7 +1099,7 @@ func (b *ProfileBlueprint) Build(
 
 		moduleFilesystems, err := filesystem.NewModuleManager(
 			b.factory.services.Filesystems,
-			profileModule.Filesystems,
+			moduleFilesystemBindings(module),
 		)
 		if err != nil {
 			return nil, fmt.Errorf(
@@ -1120,7 +1123,6 @@ func (b *ProfileBlueprint) Build(
 			b.factory.applications[module.Code()],
 			profile,
 			registry,
-			profileModule.Config,
 			scope,
 			RuntimeServices{
 				Caches:             b.factory.services.Caches,
@@ -1223,8 +1225,7 @@ func (b *ProfileBlueprint) Build(
 
 func validateModuleDependencyOrder(profile Profile) error {
 	available := make(map[ModuleCode]struct{}, len(profile.Modules))
-	for _, profileModule := range profile.Modules {
-		module := profileModule.Module
+	for _, module := range profile.Modules {
 		provider, ok := module.(DependencyProvider)
 		if ok {
 			declared := make(map[ModuleCode]struct{})
@@ -1301,26 +1302,44 @@ func resolveModuleDependencies(
 
 func cloneProfile(profile Profile) Profile {
 	profile.Modules = append(
-		[]ProfileModule(nil),
+		[]Module(nil),
 		profile.Modules...,
 	)
-	for index := range profile.Modules {
-		if cloner, ok := profile.Modules[index].Config.(ModuleConfigCloner); ok {
-			profile.Modules[index].Config = cloner.CloneModuleConfig()
-		}
-		profile.Modules[index].Caches = append(
-			[]cache.Binding(nil),
-			profile.Modules[index].Caches...,
-		)
-		profile.Modules[index].Filesystems = append(
-			[]filesystem.Binding(nil),
-			profile.Modules[index].Filesystems...,
-		)
-	}
 	profile.Params = field.CloneDefinitions(profile.Params)
 	profile.EditorTabs = field.CloneEditorTabs(profile.EditorTabs)
 	profile.Templates = template.CloneDefinitions(profile.Templates)
 	profile.WidgetViews = widget.CloneViews(profile.WidgetViews)
 
 	return profile
+}
+
+// ModuleValidationContext exposes declaration dependencies without a site scope.
+// It is used before any site runtime or background worker is built.
+type ModuleValidationContext struct {
+	context ModuleContext
+	disks   filesystem.Resolver
+}
+type moduleEnvironment interface {
+	moduleContext() ModuleContext
+	allowsDatabase(ModuleCode) bool
+}
+
+func (c ModuleContext) moduleContext() ModuleContext                    { return c }
+func (c ModuleValidationContext) moduleContext() ModuleContext          { return c.context }
+func (c ModuleValidationContext) Registry() DefinitionRegistry          { return c.context.registry }
+func (c ModuleValidationContext) Profile() Profile                      { return cloneProfile(c.context.profile) }
+func (c ModuleValidationContext) Caches() cache.ModuleManager           { return c.context.caches }
+func (c ModuleValidationContext) Filesystems() filesystem.ModuleManager { return c.context.filesystems }
+
+// Disk checks an application disk referenced by a module's own configuration.
+func (c ModuleValidationContext) Disk(code filesystem.Code) (filesystem.Disk, bool) {
+	if c.disks == nil {
+		return nil, false
+	}
+	return c.disks.Disk(code)
+}
+
+func (ModuleContext) allowsDatabase(ModuleCode) bool { return true }
+func (c ModuleValidationContext) allowsDatabase(code ModuleCode) bool {
+	return code == c.context.moduleCode
 }

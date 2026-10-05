@@ -55,7 +55,7 @@ func (testModule) Code() kernel.ModuleCode {
 	return "test"
 }
 
-func (testModule) Registry() kernel.ModuleRegistry {
+func (testModule) Registry() (kernel.ModuleRegistry, error) {
 	return kernel.ModuleRegistry{
 		FieldTypes:     field.StandardTypes(),
 		ValidatorTypes: field.StandardValidatorTypes(),
@@ -65,7 +65,7 @@ func (testModule) Registry() kernel.ModuleRegistry {
 			genericPayloadType{},
 			settingsContractType{},
 		),
-	}
+	}, nil
 }
 
 func (testModule) Build(
@@ -959,10 +959,8 @@ func newTestService(
 	blueprint, err := factory.Compile(
 		context.Background(),
 		kernel.Profile{
-			Code: "test",
-			Modules: []kernel.ProfileModule{{
-				Module: testModule{},
-			}},
+			Code:    "test",
+			Modules: []kernel.Module{testModule{}},
 			Templates: []template.Definition{
 				{
 					Code:  "article",
@@ -2513,3 +2511,5 @@ func TestWidgetReorderPreservesRemovedAreaUntilExplicitMove(t *testing.T) {
 		t.Fatalf("explicit move: %#v %v", reordered, err)
 	}
 }
+
+func (testModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }

@@ -65,11 +65,11 @@ func newNavigationComposer(
 	sources := make([]adminui.Source, 0)
 	for _, profile := range profiles {
 		for _, profileModule := range profile.Modules {
-			if profileModule.Module == nil {
+			if profileModule == nil {
 				continue
 			}
-			moduleCode := profileModule.Module.Code()
-			provider, provided := profileModule.Module.(adminui.NavigationProvider)
+			moduleCode := profileModule.Code()
+			provider, provided := profileModule.(adminui.NavigationProvider)
 			var items []adminui.NavigationItem
 			if provided {
 				items = adminui.Clone(provider.AdminNavigation())

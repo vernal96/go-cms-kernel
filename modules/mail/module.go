@@ -28,6 +28,7 @@ import (
 const ModuleCode kernel.ModuleCode = "mail"
 
 type Config struct {
+	Filesystems          []filesystem.Binding
 	Renderer             RendererConfig
 	MessageIDDomain      string
 	HistoryRetention     time.Duration
@@ -57,41 +58,38 @@ type coreDependency interface {
 	Users() user.Service
 }
 
-type Module struct{}
+type module struct{ config Config }
 
-func (Module) Code() kernel.ModuleCode { return ModuleCode }
+func (module) Code() kernel.ModuleCode { return ModuleCode }
 
-func (Module) Dependencies() []kernel.ModuleCode { return []kernel.ModuleCode{core.ModuleCode} }
+func (module) Dependencies() []kernel.ModuleCode { return []kernel.ModuleCode{core.ModuleCode} }
 
-func (Module) ModuleDescriptor() kernel.ModuleDescriptor {
+func (module) ModuleDescriptor() kernel.ModuleDescriptor {
 	return kernel.ModuleDescriptor{Label: "Mail", Description: "Шаблоны и асинхронная отправка почты"}
 }
 
-func (Module) Registry() kernel.ModuleRegistry {
+func (module) Registry() (kernel.ModuleRegistry, error) {
 	return kernel.ModuleRegistry{PermissionEntities: []permission.Entity{
 		{Code: "template"},
 		{Code: "message", Actions: []permission.Action{permission.Read, permission.Create, permission.Delete}},
-	}}
+	}}, nil
 }
 
-func (Module) JobNames() []string { return []string{SendJobName} }
+func (module) JobNames() []string { return []string{SendJobName} }
 
-func (Module) Build(buildCtx context.Context, ctx kernel.ModuleContext) (kernel.ModuleRuntime, error) {
+func (m module) Build(buildCtx context.Context, ctx kernel.ModuleContext) (kernel.ModuleRuntime, error) {
 	database, err := kernel.ModuleDatabaseFrom[Database](ctx, "", ModuleCode)
 	if err != nil {
 		return nil, err
 	}
-	if database.Mail() == nil {
-		return nil, errors.New("mail repository is nil")
+	if err := validateModuleDatabase(database); err != nil {
+		return nil, err
 	}
 	coreRuntime, err := kernel.ModuleDependencyFrom[coreDependency](ctx, core.ModuleCode)
 	if err != nil {
 		return nil, err
 	}
-	config, err := kernel.ModuleConfigFrom[Config](ctx)
-	if err != nil {
-		return nil, err
-	}
+	config := m.config
 	config, err = normalizeConfig(config)
 	if err != nil {
 		return nil, err
@@ -269,6 +267,16 @@ func (r *Runtime) AdminNavigation() []adminui.NavigationItem {
 }
 
 func normalizeConfig(config Config) (Config, error) {
+	var err error
+	config.Renderer, err = normalizeRendererConfig(config.Renderer)
+	if err != nil {
+		return Config{}, err
+	}
+	config.MessageIDDomain, err = normalizeMessageIDDomain(config.MessageIDDomain)
+	if err != nil {
+		return Config{}, err
+	}
+
 	if config.HistoryRetention < 0 || config.CleanupInterval < 0 || config.CleanupBatchSize < 0 {
 		return Config{}, errors.New("mail history configuration is invalid")
 	}
@@ -306,14 +314,73 @@ func normalizeConfig(config Config) (Config, error) {
 	return config, nil
 }
 
-var _ kernel.Module = Module{}
-var _ kernel.DependencyProvider = Module{}
-var _ kernel.ModuleDescriptorProvider = Module{}
-var _ kernel.RegistryProvider = Module{}
-var _ job.NamesProvider = Module{}
+var _ kernel.Module = module{}
+var _ kernel.DependencyProvider = module{}
+var _ kernel.ModuleDescriptorProvider = module{}
+var _ kernel.RegistryProvider = module{}
+var _ job.NamesProvider = module{}
 var _ kernel.ModuleRuntime = (*Runtime)(nil)
 var _ kernel.RuntimeTransitionParticipant = (*Runtime)(nil)
 var _ job.Provider = (*Runtime)(nil)
 var _ background.Provider = (*Runtime)(nil)
 var _ adminui.NavigationProvider = (*Runtime)(nil)
 var _ httptransport.SiteManagementProvider = (*Runtime)(nil)
+
+func (m module) FilesystemBindings() []filesystem.Binding {
+	return append([]filesystem.Binding(nil), m.config.Filesystems...)
+}
+
+// New declares an immutable module with its own typed configuration.
+func New(config Config) kernel.Module {
+	config.Filesystems = append([]filesystem.Binding(nil), config.Filesystems...)
+	config.Renderer.SenderPolicy.AllowedAddresses = append([]string(nil), config.Renderer.SenderPolicy.AllowedAddresses...)
+	config.Renderer.SenderPolicy.AllowedDomains = append([]string(nil), config.Renderer.SenderPolicy.AllowedDomains...)
+	return module{config: config}
+}
+
+func (m module) Validate(ctx context.Context, environment kernel.ModuleValidationContext) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	database, err := kernel.ModuleDatabaseFrom[Database](environment, "", ModuleCode)
+	if err != nil {
+		return err
+	}
+	if err := validateModuleDatabase(database); err != nil {
+		return err
+	}
+	config, err := normalizeConfig(m.config)
+	if err != nil {
+		return err
+	}
+	for _, binding := range config.Filesystems {
+		if binding.Alias != SpoolFilesystemAlias {
+			return fmt.Errorf("unknown filesystem alias %q", binding.Alias)
+		}
+	}
+	if config.SpoolEnabled {
+		disk, ok := environment.Filesystems().Disk(SpoolFilesystemAlias)
+		if !ok {
+			return errors.New("spool filesystem binding is unavailable")
+		}
+		if _, err := validateSpoolDisk(disk); err != nil {
+			return err
+		}
+	}
+	application, err := kernel.ModuleApplicationFrom[Application](environment)
+	if err != nil {
+		return err
+	}
+	if _, ok := environment.Disk(config.UploadStorage); !ok {
+		return fmt.Errorf("mail upload storage %q is unavailable", config.UploadStorage)
+	}
+
+	return validateTransport(application.Transport)
+}
+
+func validateModuleDatabase(database Database) error {
+	if database.Mail() == nil {
+		return errors.New("mail repository is nil")
+	}
+	return nil
+}

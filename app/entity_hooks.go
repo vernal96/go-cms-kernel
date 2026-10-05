@@ -39,7 +39,7 @@ func (a *App) prepareEntityHooks(ctx context.Context, catalog *site.Catalog) (*e
 	names := map[string]bool{}
 	for _, profile := range a.definition.Profiles {
 		for _, item := range profile.Modules {
-			if provider, ok := item.Module.(entityhooks.NamesProvider); ok {
+			if provider, ok := item.(entityhooks.NamesProvider); ok {
 				for _, name := range provider.EntityHookEventNames() {
 					names[name] = true
 				}

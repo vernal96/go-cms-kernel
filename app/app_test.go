@@ -1114,6 +1114,7 @@ type featureConfig struct {
 }
 
 type featureModule struct {
+	config   featureConfig
 	builds   *atomic.Int32
 	selected **fakeFeatureDatabase
 }
@@ -1126,10 +1127,7 @@ func (m *featureModule) Build(
 ) (kernel.ModuleRuntime, error) {
 	m.builds.Add(1)
 
-	config, err := kernel.ModuleConfigFrom[featureConfig](ctx)
-	if err != nil {
-		return nil, err
-	}
+	config := m.config
 	database, err := kernel.ModuleDatabaseFrom[*fakeFeatureDatabase](
 		ctx,
 		config.Connection,
@@ -1539,7 +1537,7 @@ func TestAppOutboxPublisherStartsAfterMigrationAndStopsBeforeDependencies(t *tes
 				repository: &fakeSiteRepository{}, outboxSources: []outbox.Source{source},
 			}}},
 		},
-		Profiles:        []kernel.Profile{{Code: "dev", Modules: []kernel.ProfileModule{{Module: core.Module{}}, {Module: admin.Module{}}}}},
+		Profiles:        []kernel.Profile{{Code: "dev", Modules: []kernel.Module{core.New(core.Config{}), admin.New()}}},
 		OutboxPublisher: outbox.PublisherConfig{PollInterval: time.Millisecond},
 	})
 	if err != nil {
@@ -1718,7 +1716,8 @@ func TestAppNewBootConsoleAndRuntimeLifecycle(t *testing.T) {
 
 	var moduleBuilds atomic.Int32
 	var selected *fakeFeatureDatabase
-	module := &featureModule{builds: &moduleBuilds, selected: &selected}
+	module := &featureModule{
+		config: featureConfig{Connection: "logs"}, builds: &moduleBuilds, selected: &selected}
 
 	application, err := appkernel.New(ctx, appkernel.Definition{
 		Logger:           fakeLoggerFactory{},
@@ -1761,14 +1760,7 @@ func TestAppNewBootConsoleAndRuntimeLifecycle(t *testing.T) {
 						},
 					},
 				},
-				Modules: []kernel.ProfileModule{
-					{Module: core.Module{}},
-					{Module: admin.Module{}},
-					{
-						Module: module,
-						Config: featureConfig{Connection: "logs"},
-					},
-				},
+				Modules: []kernel.Module{core.New(core.Config{}), admin.New(), module},
 			},
 		},
 	})
@@ -2124,7 +2116,7 @@ func TestAppRunsBackgroundTasksPerSiteAndReplacesStaleRuntimeTasks(t *testing.T)
 		MainDatabase: appkernel.DatabaseDefinition{Connector: &fakeConnectorFactory{connector: newFakeConnector("main")}, Adapters: []kernel.ModuleDatabaseFactory{&fakeDatabaseFactory{
 			code: core.ModuleCode, database: &fakeCoreDatabase{repository: repository},
 		}}},
-		Profiles: []kernel.Profile{{Code: "dev", Params: []field.Definition{{Key: "generation", Type: field.TypeString, Label: "Generation"}}, Modules: []kernel.ProfileModule{{Module: core.Module{}}, {Module: admin.Module{}}, {Module: backgroundLifecycleModule{events: events}}}}},
+		Profiles: []kernel.Profile{{Code: "dev", Params: []field.Definition{{Key: "generation", Type: field.TypeString, Label: "Generation"}}, Modules: []kernel.Module{core.New(core.Config{}), admin.New(), backgroundLifecycleModule{events: events}}}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -2206,11 +2198,8 @@ func TestAppResourceServices(t *testing.T) {
 			},
 		},
 		Profiles: []kernel.Profile{{
-			Code: "dev",
-			Modules: []kernel.ProfileModule{
-				{Module: core.Module{}},
-				{Module: admin.Module{}},
-			},
+			Code:    "dev",
+			Modules: []kernel.Module{core.New(core.Config{}), admin.New()},
 			Templates: []template.Definition{{
 				Code:  templateCode,
 				Label: "Article",
@@ -2331,16 +2320,10 @@ func TestAppResourceWriteInvalidatesSiteRuntimeRepositoryCache(t *testing.T) {
 		Caches: []cache.Factory{fakeCacheFactory{store: cacheStore}},
 		Profiles: []kernel.Profile{{
 			Code: "dev",
-			Modules: []kernel.ProfileModule{
-				{
-					Module: core.Module{},
-					Caches: []cache.Binding{{
-						Alias: core.DurableCacheAlias,
-						Code:  cacheStore.Code(),
-					}},
-				},
-				{Module: admin.Module{}},
-			},
+			Modules: []kernel.Module{core.New(core.Config{Caches: []cache.Binding{{
+				Alias: core.DurableCacheAlias,
+				Code:  cacheStore.Code(),
+			}}}), admin.New()},
 			Templates: []template.Definition{{Code: templateCode, Label: "Article"}},
 		}},
 	})
@@ -2465,21 +2448,17 @@ func TestAppResourceWriteInvalidatesSiteRuntimeRepositoryCache(t *testing.T) {
 func TestAppNewRequiresCoreAndAdminModules(t *testing.T) {
 	tests := []struct {
 		name    string
-		modules []kernel.ProfileModule
+		modules []kernel.Module
 		missing kernel.ModuleCode
 	}{
 		{
-			name: "core",
-			modules: []kernel.ProfileModule{
-				{Module: admin.Module{}},
-			},
+			name:    "core",
+			modules: []kernel.Module{admin.New()},
 			missing: core.ModuleCode,
 		},
 		{
-			name: "admin",
-			modules: []kernel.ProfileModule{
-				{Module: core.Module{}},
-			},
+			name:    "admin",
+			modules: []kernel.Module{core.New(core.Config{})},
 			missing: admin.ModuleCode,
 		},
 	}
@@ -2526,32 +2505,22 @@ func TestAppNewRequiresCoreAndAdminModules(t *testing.T) {
 func TestAppNewValidatesCoreFirstDuplicatesAndValidOrder(t *testing.T) {
 	tests := []struct {
 		name    string
-		modules []kernel.ProfileModule
+		modules []kernel.Module
 		wantErr string
 	}{
 		{
-			name: "core not first",
-			modules: []kernel.ProfileModule{
-				{Module: admin.Module{}},
-				{Module: core.Module{}},
-			},
+			name:    "core not first",
+			modules: []kernel.Module{admin.New(), core.New(core.Config{})},
 			wantErr: `must declare module "core" first`,
 		},
 		{
-			name: "duplicate module",
-			modules: []kernel.ProfileModule{
-				{Module: core.Module{}},
-				{Module: admin.Module{}},
-				{Module: admin.Module{}},
-			},
+			name:    "duplicate module",
+			modules: []kernel.Module{core.New(core.Config{}), admin.New(), admin.New()},
 			wantErr: `duplicate module "admin"`,
 		},
 		{
-			name: "valid ordered profile",
-			modules: []kernel.ProfileModule{
-				{Module: core.Module{}},
-				{Module: admin.Module{}},
-			},
+			name:    "valid ordered profile",
+			modules: []kernel.Module{core.New(core.Config{}), admin.New()},
 		},
 	}
 
@@ -2633,11 +2602,8 @@ func TestAppMediaServices(t *testing.T) {
 			},
 		},
 		Profiles: []kernel.Profile{{
-			Code: "dev",
-			Modules: []kernel.ProfileModule{
-				{Module: core.Module{}},
-				{Module: admin.Module{}},
-			},
+			Code:    "dev",
+			Modules: []kernel.Module{core.New(core.Config{}), admin.New()},
 		}},
 	})
 	if err != nil {
@@ -2826,37 +2792,23 @@ func TestAppBootAllowsDifferentCoreRepositoryCachesAcrossProfiles(
 			Profiles: []kernel.Profile{
 				{
 					Code: "first",
-					Modules: []kernel.ProfileModule{
-						{
-							Module: core.Module{},
-							Config: core.Config{
-								RepositoryCacheTTL: time.Minute,
-							},
-							Caches: []cache.Binding{{
-								Alias:     core.DurableCacheAlias,
-								Code:      cacheStore.code,
-								Namespace: "core/first",
-							}},
-						},
-						{Module: admin.Module{}},
-					},
+					Modules: []kernel.Module{core.New(core.Config{
+						RepositoryCacheTTL: time.Minute,
+						Caches: []cache.Binding{{
+							Alias:     core.DurableCacheAlias,
+							Code:      cacheStore.code,
+							Namespace: "core/first",
+						}}}), admin.New()},
 				},
 				{
 					Code: "second",
-					Modules: []kernel.ProfileModule{
-						{
-							Module: core.Module{},
-							Config: core.Config{
-								RepositoryCacheTTL: time.Minute,
-							},
-							Caches: []cache.Binding{{
-								Alias:     core.DurableCacheAlias,
-								Code:      cacheStore.code,
-								Namespace: "core/second",
-							}},
-						},
-						{Module: admin.Module{}},
-					},
+					Modules: []kernel.Module{core.New(core.Config{
+						RepositoryCacheTTL: time.Minute,
+						Caches: []cache.Binding{{
+							Alias:     core.DurableCacheAlias,
+							Code:      cacheStore.code,
+							Namespace: "core/second",
+						}}}), admin.New()},
 				},
 			},
 		},
@@ -2874,7 +2826,7 @@ func TestAppBootAllowsDifferentCoreRepositoryCachesAcrossProfiles(
 		if !exists {
 			t.Fatalf("profile blueprint %q is unavailable", profileCode)
 		}
-		binding := blueprint.Profile().Modules[0].Caches[0]
+		binding := blueprint.Profile().Modules[0].(kernel.CacheBindingsProvider).CacheBindings()[0]
 		if binding.Namespace != "core/"+string(profileCode) {
 			t.Fatalf("core cache %q = %#v", profileCode, binding)
 		}
@@ -2950,11 +2902,8 @@ func TestAppCollectsSeedSourcesAcrossConnectionsAndClonesTags(t *testing.T) {
 			},
 			Profiles: []kernel.Profile{
 				{
-					Code: "dev",
-					Modules: []kernel.ProfileModule{
-						{Module: core.Module{}},
-						{Module: admin.Module{}},
-					},
+					Code:    "dev",
+					Modules: []kernel.Module{core.New(core.Config{}), admin.New()},
 				},
 			},
 		},
@@ -3058,11 +3007,8 @@ func TestBootFailureIsRememberedAndNotRetried(t *testing.T) {
 		},
 		Profiles: []kernel.Profile{
 			{
-				Code: "dev",
-				Modules: []kernel.ProfileModule{
-					{Module: core.Module{}},
-					{Module: admin.Module{}},
-				},
+				Code:    "dev",
+				Modules: []kernel.Module{core.New(core.Config{}), admin.New()},
 			},
 		},
 	})
@@ -3103,4 +3049,10 @@ func (s *taggedCacheStore) Prepare(ctx context.Context, tags []cache.Tag) (cache
 		}
 		return s.setLocked(key, value, cache.SetOptions{TTL: ttl, Tags: tags})
 	}, nil
+}
+
+func (*featureModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }
+
+func (backgroundLifecycleModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
 }

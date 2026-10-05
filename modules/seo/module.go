@@ -22,11 +22,11 @@ type Database interface {
 	ResourceMetadata() Repository
 }
 
-type Module struct{}
+type module struct{ config Config }
 
-func (Module) Code() kernel.ModuleCode { return ModuleCode }
+func (module) Code() kernel.ModuleCode { return ModuleCode }
 
-func (Module) Build(
+func (m module) Build(
 	_ context.Context,
 	ctx kernel.ModuleContext,
 ) (kernel.ModuleRuntime, error) {
@@ -34,13 +34,10 @@ func (Module) Build(
 	if err != nil {
 		return nil, err
 	}
-	if database.ResourceMetadata() == nil {
-		return nil, errors.New("SEO metadata repository is nil")
-	}
-	config, err := kernel.ModuleConfigFrom[Config](ctx)
-	if err != nil {
+	if err := validateModuleDatabase(database); err != nil {
 		return nil, err
 	}
+	config := m.config
 	normalized := normalizeConfig(config)
 	renderer, err := NewRenderer(
 		ctx.Profile(),
@@ -214,9 +211,48 @@ func extensionError(err error) error {
 	return err
 }
 
-var _ kernel.Module = Module{}
+var _ kernel.Module = module{}
 var _ kernel.ModuleRuntime = (*Runtime)(nil)
 var _ resourceextension.EditorProvider = (*Runtime)(nil)
 var _ resourceextension.Editor = (*Runtime)(nil)
 var _ resourceextension.TransferUsage = (*Runtime)(nil)
 var _ resourceextension.PublicProvider = (*Runtime)(nil)
+
+// New declares an immutable module with its own typed configuration.
+func New(config Config) kernel.Module {
+	if config.DefaultRobotsIndex != nil {
+		v := *config.DefaultRobotsIndex
+		config.DefaultRobotsIndex = &v
+	}
+	if config.DefaultRobotsFollow != nil {
+		v := *config.DefaultRobotsFollow
+		config.DefaultRobotsFollow = &v
+	}
+	return module{config: config}
+}
+
+func (m module) Validate(ctx context.Context, environment kernel.ModuleValidationContext) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	database, err := kernel.ModuleDatabaseFrom[Database](environment, "", ModuleCode)
+	if err != nil {
+		return err
+	}
+	if err := validateModuleDatabase(database); err != nil {
+		return err
+	}
+	config := normalizeConfig(m.config)
+	renderer, err := NewRenderer(environment.Profile(), config.maxTemplateLength, config.maxResultLength)
+	if err != nil {
+		return err
+	}
+	return renderer.Validate(config.defaults)
+}
+
+func validateModuleDatabase(database Database) error {
+	if database.ResourceMetadata() == nil {
+		return errors.New("SEO metadata repository is nil")
+	}
+	return nil
+}

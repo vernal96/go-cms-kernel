@@ -13,6 +13,7 @@ import (
 	"github.com/vernal96/go-cms-kernel"
 	"github.com/vernal96/go-cms-kernel/adminui"
 	"github.com/vernal96/go-cms-kernel/background"
+	"github.com/vernal96/go-cms-kernel/filesystem"
 	"github.com/vernal96/go-cms-kernel/job"
 	"github.com/vernal96/go-cms-kernel/modules/core"
 	corefile "github.com/vernal96/go-cms-kernel/modules/core/file"
@@ -24,6 +25,7 @@ import (
 )
 
 type Config struct {
+	Filesystems            []filesystem.Binding
 	ActionMaxAttempts      int
 	Public                 PublicLimits
 	SpoolEnabled           bool
@@ -49,27 +51,27 @@ type mailDependency interface {
 	Mail() *mail.Service
 }
 
-type Module struct{}
+type module struct{ config Config }
 
-func (Module) Code() kernel.ModuleCode { return ModuleCode }
-func (Module) Dependencies() []kernel.ModuleCode {
+func (module) Code() kernel.ModuleCode { return ModuleCode }
+func (module) Dependencies() []kernel.ModuleCode {
 	return []kernel.ModuleCode{core.ModuleCode, mail.ModuleCode}
 }
-func (Module) ModuleDescriptor() kernel.ModuleDescriptor {
+func (module) ModuleDescriptor() kernel.ModuleDescriptor {
 	return kernel.ModuleDescriptor{Label: "Формы", Description: "Конструктор форм и результаты отправок"}
 }
-func (Module) Registry() kernel.ModuleRegistry {
-	return kernel.ModuleRegistry{FieldTypes: fieldTypes(), PermissionEntities: []permission.Entity{{Code: "form"}, {Code: "result"}, {Code: "action"}, {Code: "status"}}}
+func (module) Registry() (kernel.ModuleRegistry, error) {
+	return kernel.ModuleRegistry{FieldTypes: fieldTypes(), PermissionEntities: []permission.Entity{{Code: "form"}, {Code: "result"}, {Code: "action"}, {Code: "status"}}}, nil
 }
-func (Module) JobNames() []string { return []string{ExecuteActionJobName} }
+func (module) JobNames() []string { return []string{ExecuteActionJobName} }
 
-func (Module) Build(ctx context.Context, moduleContext kernel.ModuleContext) (kernel.ModuleRuntime, error) {
+func (m module) Build(ctx context.Context, moduleContext kernel.ModuleContext) (kernel.ModuleRuntime, error) {
 	database, err := kernel.ModuleDatabaseFrom[Database](moduleContext, "", ModuleCode)
 	if err != nil {
 		return nil, err
 	}
-	if database.Forms() == nil {
-		return nil, errors.New("Forms repository is nil")
+	if err := validateModuleDatabase(database); err != nil {
+		return nil, err
 	}
 	coreRuntime, err := kernel.ModuleDependencyFrom[coreDependency](moduleContext, core.ModuleCode)
 	if err != nil {
@@ -82,10 +84,7 @@ func (Module) Build(ctx context.Context, moduleContext kernel.ModuleContext) (ke
 	if mailRuntime.Mail() == nil {
 		return nil, errors.New("Forms Mail dependency is unavailable")
 	}
-	config, err := kernel.ModuleConfigFrom[Config](moduleContext)
-	if err != nil {
-		return nil, err
-	}
+	config := m.config
 	config, err = normalizeConfig(config)
 	if err != nil {
 		return nil, err
@@ -94,19 +93,11 @@ func (Module) Build(ctx context.Context, moduleContext kernel.ModuleContext) (ke
 	if err != nil {
 		return nil, err
 	}
-	providers := make(map[string]CaptchaProvider, len(application.Providers))
-	for index, provider := range application.Providers {
-		if provider == nil || strings.TrimSpace(provider.Code()) == "" {
-			return nil, fmt.Errorf("Forms CAPTCHA provider at index %d is invalid", index)
-		}
-		if _, exists := providers[provider.Code()]; exists {
-			return nil, fmt.Errorf("Forms CAPTCHA provider %q is duplicated", provider.Code())
-		}
-		providers[provider.Code()] = provider
+	providers, err := validateProviders(application, config.DefaultCaptchaProvider)
+	if err != nil {
+		return nil, err
 	}
-	if _, exists := providers[config.DefaultCaptchaProvider]; !exists {
-		return nil, fmt.Errorf("default Forms CAPTCHA provider %q is unavailable", config.DefaultCaptchaProvider)
-	}
+
 	siteIDValue, err := strconv.ParseInt(moduleContext.Scope().SiteID(), 10, 64)
 	if err != nil || siteIDValue <= 0 {
 		return nil, errors.New("Forms runtime site scope is invalid")
@@ -264,11 +255,11 @@ func normalizeConfig(config Config) (Config, error) {
 	return config, nil
 }
 
-var _ kernel.Module = Module{}
-var _ kernel.DependencyProvider = Module{}
-var _ kernel.ModuleDescriptorProvider = Module{}
-var _ kernel.RegistryProvider = Module{}
-var _ job.NamesProvider = Module{}
+var _ kernel.Module = module{}
+var _ kernel.DependencyProvider = module{}
+var _ kernel.ModuleDescriptorProvider = module{}
+var _ kernel.RegistryProvider = module{}
+var _ job.NamesProvider = module{}
 var _ kernel.ModuleRuntime = (*Runtime)(nil)
 var _ kernel.RuntimeBuildFinalizer = (*Runtime)(nil)
 var _ kernel.RuntimeTransitionParticipant = (*Runtime)(nil)
@@ -278,3 +269,74 @@ var _ background.Provider = (*Runtime)(nil)
 var _ adminui.NavigationProvider = (*Runtime)(nil)
 var _ httptransport.Provider = (*Runtime)(nil)
 var _ httptransport.SiteManagementProvider = (*Runtime)(nil)
+
+func (m module) FilesystemBindings() []filesystem.Binding {
+	return append([]filesystem.Binding(nil), m.config.Filesystems...)
+}
+
+// New declares an immutable module with its own typed configuration.
+func New(config Config) kernel.Module {
+	config.Filesystems = append([]filesystem.Binding(nil), config.Filesystems...)
+	return module{config: config}
+}
+
+func (m module) Validate(ctx context.Context, environment kernel.ModuleValidationContext) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	database, err := kernel.ModuleDatabaseFrom[Database](environment, "", ModuleCode)
+	if err != nil {
+		return err
+	}
+	if err := validateModuleDatabase(database); err != nil {
+		return err
+	}
+	config, err := normalizeConfig(m.config)
+	if err != nil {
+		return err
+	}
+	for _, binding := range config.Filesystems {
+		if binding.Alias != SpoolFilesystemAlias {
+			return fmt.Errorf("unknown filesystem alias %q", binding.Alias)
+		}
+	}
+	if config.SpoolEnabled {
+		disk, ok := environment.Filesystems().Disk(SpoolFilesystemAlias)
+		if !ok {
+			return errors.New("spool filesystem binding is unavailable")
+		}
+		if _, err := validateSpoolDisk(disk); err != nil {
+			return err
+		}
+	}
+	application, err := kernel.ModuleApplicationFrom[Application](environment)
+	if err != nil {
+		return err
+	}
+	_, err = validateProviders(application, config.DefaultCaptchaProvider)
+	return err
+}
+
+func validateModuleDatabase(database Database) error {
+	if database.Forms() == nil {
+		return errors.New("Forms repository is nil")
+	}
+	return nil
+}
+
+func validateProviders(application Application, defaultProvider string) (map[string]CaptchaProvider, error) {
+	providers := make(map[string]CaptchaProvider, len(application.Providers))
+	for index, provider := range application.Providers {
+		if provider == nil || strings.TrimSpace(provider.Code()) == "" {
+			return nil, fmt.Errorf("Forms CAPTCHA provider at index %d is invalid", index)
+		}
+		if _, exists := providers[provider.Code()]; exists {
+			return nil, fmt.Errorf("Forms CAPTCHA provider %q is duplicated", provider.Code())
+		}
+		providers[provider.Code()] = provider
+	}
+	if _, exists := providers[defaultProvider]; !exists {
+		return nil, fmt.Errorf("default Forms CAPTCHA provider %q is unavailable", defaultProvider)
+	}
+	return providers, nil
+}

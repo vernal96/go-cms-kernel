@@ -43,7 +43,7 @@ func (s *pendingHookSource) Pending(context.Context) ([]entityhooks.PendingTarge
 
 func TestEntityHooksBlockRemovalAndAbortFailedPublication(t *testing.T) {
 	ctx := context.Background()
-	profiles := []kernel.Profile{{Code: "with", Modules: []kernel.ProfileModule{{Module: transitionHookModule{}}}}, {Code: "without"}}
+	profiles := []kernel.Profile{{Code: "with", Modules: []kernel.Module{transitionHookModule{}}}, {Code: "without"}}
 	repository := &jobsTestRepository{items: []site.Site{{ID: 1, ProfileCode: "with", Domain: "hooks.test", Locale: "en-US"}}}
 	catalog, err := site.NewCatalog(repository, jobsTestProfiles{"with": compileJobsTestProfile(t, profiles[0]), "without": compileJobsTestProfile(t, profiles[1])}, jobsTestAccess{})
 	if err != nil {
@@ -119,4 +119,8 @@ func TestEntityHookStartupRejectsMissingPendingHandler(t *testing.T) {
 	if err := runner.ValidatePending(context.Background()); !errors.Is(err, entityhooks.ErrUnavailable) {
 		t.Fatalf("startup accepted lost work: %v", err)
 	}
+}
+
+func (transitionHookModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
 }

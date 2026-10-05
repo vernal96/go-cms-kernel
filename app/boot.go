@@ -83,7 +83,7 @@ func (a *App) boot(ctx context.Context) error {
 	var knownHookModules []kernel.ModuleCode
 	for _, profile := range a.definition.Profiles {
 		for _, item := range profile.Modules {
-			knownHookModules = append(knownHookModules, item.Module.Code())
+			knownHookModules = append(knownHookModules, item.Code())
 		}
 	}
 	applicationHooks, err := kernel.BuildApplicationEntityHooks(ctx, a.definition.ModuleApplications, knownHookModules)
@@ -397,27 +397,27 @@ func declaredNames(
 	modules := make(map[kernel.ModuleCode][]string)
 	for _, profile := range profiles {
 		for _, profileModule := range profile.Modules {
-			names, ok := resolve(profileModule.Module)
+			names, ok := resolve(profileModule)
 			if !ok {
 				continue
 			}
 			names = append([]string(nil), names...)
 			sort.Strings(names)
-			if previous, exists := modules[profileModule.Module.Code()]; exists {
+			if previous, exists := modules[profileModule.Code()]; exists {
 				if !slices.Equal(previous, names) {
-					return nil, fmt.Errorf("module %q has inconsistent declarations", profileModule.Module.Code())
+					return nil, fmt.Errorf("module %q has inconsistent declarations", profileModule.Code())
 				}
 				continue
 			}
-			modules[profileModule.Module.Code()] = names
+			modules[profileModule.Code()] = names
 			for _, name := range names {
 				if name == "" {
-					return nil, fmt.Errorf("module %q declares an empty name", profileModule.Module.Code())
+					return nil, fmt.Errorf("module %q declares an empty name", profileModule.Code())
 				}
-				if owner, exists := owners[name]; exists && owner != profileModule.Module.Code() {
-					return nil, fmt.Errorf("name %q is declared by modules %q and %q", name, owner, profileModule.Module.Code())
+				if owner, exists := owners[name]; exists && owner != profileModule.Code() {
+					return nil, fmt.Errorf("name %q is declared by modules %q and %q", name, owner, profileModule.Code())
 				}
-				owners[name] = profileModule.Module.Code()
+				owners[name] = profileModule.Code()
 			}
 		}
 	}

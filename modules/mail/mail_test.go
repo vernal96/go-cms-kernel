@@ -1299,3 +1299,20 @@ func (a allowAuthorizer) Allowed(ctx context.Context, actor security.Actor, code
 	}
 	return result, nil
 }
+
+func TestModuleSenderPolicyRemainsImmutableDuringRuntimeNormalization(t *testing.T) {
+	original := SenderPolicy{AllowedAddresses: []string{" B@Example.COM ", "a@example.com"}, AllowedDomains: []string{"@Example.COM"}}
+	declaration := New(Config{Renderer: RendererConfig{SenderPolicy: original}}).(module)
+	original.AllowedAddresses[0] = "changed"
+	original.AllowedDomains[0] = "changed"
+	first := normalizeSenderPolicy(declaration.config.Renderer.SenderPolicy)
+	second := normalizeSenderPolicy(declaration.config.Renderer.SenderPolicy)
+	if declaration.config.Renderer.SenderPolicy.AllowedAddresses[0] != " B@Example.COM " || declaration.config.Renderer.SenderPolicy.AllowedDomains[0] != "@Example.COM" {
+		t.Fatal("constructor or runtime normalization changed the module declaration")
+	}
+	first.AllowedAddresses[0] = "changed"
+	first.AllowedDomains[0] = "changed"
+	if second.AllowedAddresses[0] != "a@example.com" || second.AllowedDomains[0] != "example.com" {
+		t.Fatal("runtime sender policies share mutable state")
+	}
+}

@@ -240,25 +240,13 @@ func cloneDefinition(definition Definition) Definition {
 	definition.Profiles = append([]kernel.Profile(nil), definition.Profiles...)
 	for index := range definition.Profiles {
 		definition.Profiles[index].Modules = append(
-			[]kernel.ProfileModule(nil),
+			[]kernel.Module(nil),
 			definition.Profiles[index].Modules...,
 		)
-		for moduleIndex := range definition.Profiles[index].Modules {
-			definition.Profiles[index].Modules[moduleIndex].Caches = append(
-				[]cache.Binding(nil),
-				definition.Profiles[index].Modules[moduleIndex].Caches...,
-			)
-			definition.Profiles[index].Modules[moduleIndex].Filesystems = append(
-				[]filesystem.Binding(nil),
-				definition.Profiles[index].Modules[moduleIndex].Filesystems...,
-			)
-		}
-		definition.Profiles[index].Params = field.CloneDefinitions(
-			definition.Profiles[index].Params,
-		)
-		definition.Profiles[index].Templates = template.CloneDefinitions(
-			definition.Profiles[index].Templates,
-		)
+
+		definition.Profiles[index].Params = field.CloneDefinitions(definition.Profiles[index].Params)
+		definition.Profiles[index].EditorTabs = field.CloneEditorTabs(definition.Profiles[index].EditorTabs)
+		definition.Profiles[index].Templates = template.CloneDefinitions(definition.Profiles[index].Templates)
 	}
 
 	return definition

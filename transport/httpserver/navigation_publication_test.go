@@ -45,7 +45,7 @@ func navigationPublicationApp(t *testing.T, mode string) (*appkernel.App, *publi
 	a, err := appkernel.New(context.Background(), appkernel.Definition{
 		Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{},
 		MainDatabase: appkernel.DatabaseDefinition{Connector: connectorFactory{}, Adapters: []kernel.ModuleDatabaseFactory{databaseFactory{sites: repository}}},
-		Profiles:     []kernel.Profile{{Code: "dev", Modules: []kernel.ProfileModule{{Module: core.Module{}}, {Module: admin.Module{}}, {Module: navigationPublicationModule{}}}, Params: []field.Definition{{Key: "mode", Label: "Mode", Type: field.TypeString}}}},
+		Profiles:     []kernel.Profile{{Code: "dev", Modules: []kernel.Module{core.New(core.Config{}), admin.New(), navigationPublicationModule{}}, Params: []field.Definition{{Key: "mode", Label: "Mode", Type: field.TypeString}}}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -88,4 +88,8 @@ func TestNavigationCollisionsFailBootAndPreservePublishedRuntime(t *testing.T) {
 			}
 		})
 	}
+}
+
+func (navigationPublicationModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
 }

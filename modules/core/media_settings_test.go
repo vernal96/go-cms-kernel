@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/vernal96/go-cms-kernel"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"testing"
@@ -15,8 +16,8 @@ func TestMediaSettingsDeclarationsAreSnapshots(t *testing.T) {
 		t.Fatal("mutable media options escaped")
 	}
 	config := Config{MediaSettings: []media.SettingsDefinition{{Code: "image", Fields: []field.Definition{{Key: "alt", Label: "Alt", Type: field.TypeString}}}}}
-	snapshot := config.CloneModuleConfig().(Config)
-	registry, err := (Module{}).RegistryForConfig(config)
+	snapshot := New(config).(module).config
+	registry, err := kernel.RegistryForModule(New(config))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +32,7 @@ func TestMediaSettingsDeclarationsAreSnapshots(t *testing.T) {
 	if string(descriptor.Options) == "" {
 		t.Fatal("missing settings metadata")
 	}
-	if _, err := (Module{}).RegistryForConfig(Config{MediaSettings: []media.SettingsDefinition{{Code: "same"}, {Code: "same"}}}); err == nil {
+	if _, err := kernel.RegistryForModule(New(Config{MediaSettings: []media.SettingsDefinition{{Code: "same"}, {Code: "same"}}})); err == nil {
 		t.Fatal("duplicate settings accepted")
 	}
 }

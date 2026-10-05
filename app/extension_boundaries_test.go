@@ -8,22 +8,19 @@ import (
 	"github.com/vernal96/go-cms-kernel/permission"
 )
 
-type configuredPermissionsModule struct{}
+type configuredPermissionsModule struct{ config string }
 
 func (configuredPermissionsModule) Code() kernel.ModuleCode { return "custom" }
 func (configuredPermissionsModule) Build(context.Context, kernel.ModuleContext) (kernel.ModuleRuntime, error) {
 	return nil, nil
 }
-func (configuredPermissionsModule) Registry() kernel.ModuleRegistry {
-	return kernel.ModuleRegistry{PermissionEntities: []permission.Entity{{Code: "obsolete"}}}
-}
-func (configuredPermissionsModule) RegistryForConfig(config any) (kernel.ModuleRegistry, error) {
-	return kernel.ModuleRegistry{PermissionEntities: []permission.Entity{{Code: config.(string)}}}, nil
+func (m configuredPermissionsModule) Registry() (kernel.ModuleRegistry, error) {
+	return kernel.ModuleRegistry{PermissionEntities: []permission.Entity{{Code: m.config}}}, nil
 }
 func TestPermissionCatalogUsesConfiguredRegistryAcrossProfiles(t *testing.T) {
 	profiles := []kernel.Profile{}
 	for _, code := range []string{"first", "second", "first"} {
-		profiles = append(profiles, kernel.Profile{Code: kernel.ProfileCode(code), Modules: []kernel.ProfileModule{{Module: configuredPermissionsModule{}, Config: code}}})
+		profiles = append(profiles, kernel.Profile{Code: kernel.ProfileCode(code), Modules: []kernel.Module{configuredPermissionsModule{config: code}}})
 	}
 	catalog, err := buildPermissionCatalog(profiles)
 	if err != nil {
@@ -37,4 +34,8 @@ func TestPermissionCatalogUsesConfiguredRegistryAcrossProfiles(t *testing.T) {
 	if catalog.Has("custom.obsolete.read") || len(catalog.Codes()) != 8 {
 		t.Fatalf("unexpected permissions: %v", catalog.Codes())
 	}
+}
+
+func (configuredPermissionsModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
 }

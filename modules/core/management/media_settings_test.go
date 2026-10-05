@@ -48,8 +48,8 @@ type settingsHTTPModule struct{ service *media.SettingsService }
 
 func (settingsHTTPModule) Code() kernel.ModuleCode       { return "core" }
 func (settingsHTTPModule) ModuleCode() kernel.ModuleCode { return "core" }
-func (settingsHTTPModule) Registry() kernel.ModuleRegistry {
-	return kernel.ModuleRegistry{FieldTypes: field.StandardTypes()}
+func (settingsHTTPModule) Registry() (kernel.ModuleRegistry, error) {
+	return kernel.ModuleRegistry{FieldTypes: field.StandardTypes()}, nil
 }
 func (m settingsHTTPModule) Build(context.Context, kernel.ModuleContext) (kernel.ModuleRuntime, error) {
 	return m, nil
@@ -74,7 +74,7 @@ func TestMediaSettingsHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "test", Modules: []kernel.ProfileModule{{Module: settingsHTTPModule{service}}}})
+	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "test", Modules: []kernel.Module{settingsHTTPModule{service}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,3 +131,5 @@ func TestMediaSettingsHTTP(t *testing.T) {
 		t.Fatal("site access ignored", r.Code)
 	}
 }
+
+func (settingsHTTPModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }

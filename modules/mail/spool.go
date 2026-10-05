@@ -34,15 +34,9 @@ func NewAttachmentSpool(siteID site.ID, disk filesystem.Disk) (*AttachmentSpool,
 	if siteID <= 0 {
 		return nil, errors.New("mail attachment spool site is invalid")
 	}
-	if disk == nil {
-		return nil, errors.New("mail attachment spool disk is nil")
-	}
-	if disk.Visibility() != filesystem.VisibilityPrivate {
-		return nil, errors.New("mail attachment spool must be private")
-	}
-	scannerProvider, ok := disk.(filesystem.PrefixScannerProvider)
-	if !ok {
-		return nil, errors.New("mail attachment spool does not support bounded cleanup")
+	scannerProvider, err := validateSpoolDisk(disk)
+	if err != nil {
+		return nil, err
 	}
 	return &AttachmentSpool{disk: disk, scannerProvider: scannerProvider, prefix: spoolRootPrefix + fmt.Sprint(siteID) + "/"}, nil
 }
@@ -252,4 +246,18 @@ func parseSpoolFilename(raw string) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	return time.Unix(value, 0).UTC(), true
+}
+
+func validateSpoolDisk(disk filesystem.Disk) (filesystem.PrefixScannerProvider, error) {
+	if disk == nil {
+		return nil, errors.New("mail attachment spool disk is nil")
+	}
+	if disk.Visibility() != filesystem.VisibilityPrivate {
+		return nil, errors.New("mail attachment spool must be private")
+	}
+	scannerProvider, ok := disk.(filesystem.PrefixScannerProvider)
+	if !ok {
+		return nil, errors.New("mail attachment spool does not support bounded cleanup")
+	}
+	return scannerProvider, nil
 }

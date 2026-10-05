@@ -55,14 +55,10 @@ func NewRenderer(fields field.TypeResolver, files FileService, item site.Site, p
 	if files == nil {
 		return nil, errors.New("mail file service is nil")
 	}
-	if config.MaxTemplateLength == 0 {
-		config.MaxTemplateLength = DefaultMaxTemplateLength
-	}
-	if config.MaxResultLength == 0 {
-		config.MaxResultLength = DefaultMaxResultLength
-	}
-	if config.MaxTemplateLength < 1 || config.MaxResultLength < 1 {
-		return nil, errors.New("mail rendering limits are invalid")
+	var err error
+	config, err = normalizeRendererConfig(config)
+	if err != nil {
+		return nil, err
 	}
 	if len(config.SenderPolicy.AllowedAddresses) == 0 && len(config.SenderPolicy.AllowedDomains) == 0 && item.Domain != "" {
 		config.SenderPolicy.AllowedDomains = []string{item.Domain}
@@ -433,6 +429,8 @@ func (r *Renderer) validateSender(address string) error {
 }
 
 func normalizeSenderPolicy(policy SenderPolicy) SenderPolicy {
+	policy.AllowedAddresses = append([]string(nil), policy.AllowedAddresses...)
+	policy.AllowedDomains = append([]string(nil), policy.AllowedDomains...)
 	for index := range policy.AllowedAddresses {
 		policy.AllowedAddresses[index] = strings.ToLower(strings.TrimSpace(policy.AllowedAddresses[index]))
 	}
@@ -509,4 +507,17 @@ func templateSources(template Template) map[string]string {
 		result[fmt.Sprintf("attachments.%d.filename", index)] = attachment.FilenameTemplate
 	}
 	return result
+}
+
+func normalizeRendererConfig(config RendererConfig) (RendererConfig, error) {
+	if config.MaxTemplateLength == 0 {
+		config.MaxTemplateLength = DefaultMaxTemplateLength
+	}
+	if config.MaxResultLength == 0 {
+		config.MaxResultLength = DefaultMaxResultLength
+	}
+	if config.MaxTemplateLength < 1 || config.MaxResultLength < 1 {
+		return RendererConfig{}, errors.New("mail rendering limits are invalid")
+	}
+	return config, nil
 }

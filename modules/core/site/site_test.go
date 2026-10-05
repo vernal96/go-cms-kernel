@@ -224,9 +224,9 @@ func compileTransitionProfile(t *testing.T, code kernel.ProfileCode, modules ...
 	if err != nil {
 		t.Fatal(err)
 	}
-	items := make([]kernel.ProfileModule, len(modules))
+	items := make([]kernel.Module, len(modules))
 	for index, module := range modules {
-		items[index] = kernel.ProfileModule{Module: module}
+		items[index] = module
 	}
 	blueprint, err := factory.Compile(context.Background(), kernel.Profile{Code: code, Modules: items})
 	if err != nil {
@@ -636,3 +636,5 @@ func (a testAccess) Allowed(ctx context.Context, actor security.Actor, codes []p
 	}
 	return result, nil
 }
+
+func (transitionModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }

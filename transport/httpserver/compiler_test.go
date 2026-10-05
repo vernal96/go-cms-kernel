@@ -57,8 +57,8 @@ func (m compilerModule) Code() kernel.ModuleCode {
 	return m.code
 }
 
-func (m compilerModule) Registry() kernel.ModuleRegistry {
-	return m.registry
+func (m compilerModule) Registry() (kernel.ModuleRegistry, error) {
+	return m.registry, nil
 }
 
 func (m compilerModule) Build(
@@ -131,11 +131,9 @@ func makeCompilerProfile(
 	if err != nil {
 		t.Fatal(err)
 	}
-	profileModules := make([]kernel.ProfileModule, len(modules))
+	profileModules := make([]kernel.Module, len(modules))
 	for index := range modules {
-		profileModules[index] = kernel.ProfileModule{
-			Module: modules[index],
-		}
+		profileModules[index] = modules[index]
 	}
 	blueprint, err := factory.Compile(context.Background(), kernel.Profile{
 		Code:    code,
@@ -922,3 +920,5 @@ func TestPlatformNamespacesRejectProfileRoutesAndMounts(t *testing.T) {
 	}}})
 	compileProfileForTest(t, runtime)
 }
+
+func (compilerModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }

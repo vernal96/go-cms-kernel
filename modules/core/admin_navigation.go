@@ -5,7 +5,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/permission"
 )
 
-func (Module) AdminNavigation() []adminui.NavigationItem {
+func (module) AdminNavigation() []adminui.NavigationItem {
 	return []adminui.NavigationItem{
 		{
 			Code:       "sites",
@@ -63,4 +63,4 @@ func (Module) AdminNavigation() []adminui.NavigationItem {
 	}
 }
 
-var _ adminui.NavigationProvider = Module{}
+var _ adminui.NavigationProvider = module{}

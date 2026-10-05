@@ -20,13 +20,13 @@ func (a *App) CommandProviders() []console.Provider {
 func (a *App) collectModuleCommandProviders() {
 	for _, profile := range a.definition.Profiles {
 		for _, profileModule := range profile.Modules {
-			if profileModule.Module == nil {
+			if profileModule == nil {
 				continue
 			}
 
 			a.addProvider(
-				"module:"+string(profileModule.Module.Code()),
-				profileModule.Module,
+				"module:"+string(profileModule.Code()),
+				profileModule,
 			)
 		}
 	}

@@ -10,7 +10,7 @@ import (
 )
 
 func TestModuleBuildsAdminRuntime(t *testing.T) {
-	module := admin.Module{}
+	module := admin.New()
 	if module.Code() != admin.ModuleCode {
 		t.Fatalf("module code = %q", module.Code())
 	}
@@ -24,7 +24,10 @@ func TestModuleBuildsAdminRuntime(t *testing.T) {
 }
 
 func TestModuleRegistersAdminPanelPermission(t *testing.T) {
-	registry := admin.Module{}.Registry()
+	registry, err := kernel.RegistryForModule(admin.New())
+	if err != nil {
+		t.Fatal(err)
+	}
 	definitions, err := permission.Definitions(
 		string(admin.ModuleCode),
 		registry.PermissionEntities,

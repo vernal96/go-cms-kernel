@@ -3,10 +3,12 @@
 Reusable Go kernel, built-in modules, persistence adapters, and infrastructure
 connectors for [Go CMS](https://github.com/vernal96/go-cms).
 
+[Документация GO CMS](docs/README.md): запуск Starter, профили, подключение модулей и разработка шаблонов.
+
 ## Installation
 
 ```bash
-go get github.com/vernal96/go-cms-kernel@v0.3.0
+go get github.com/vernal96/go-cms-kernel@v0.4.0
 ```
 
 The kernel package lives at the module root. Common packages include:
@@ -52,11 +54,14 @@ use `httptransport.APIPrefix`. API-relative namespaces `/auth`, `/admin`,
 `/api` are reserved by the platform and cannot be claimed by literal module
 routes or mounts. Unknown management URLs never fall through to public resources.
 
-This routing change is not included in the published v0.3.0 dependency shown
-above. It requires a future release; local starter verification can use a
-temporary Go workspace containing both modules, without a permanent `replace`.
+The `/api` routing contract is included in v0.4.0. Update consumers to the new
+paths; old unprefixed routes are not retained.
 
 Field validator definitions, built-ins, module contributions and admin metadata are documented in [Field validation](docs/field-validation.md).
+
+## Module declarations
+
+Current source uses typed constructors and `[]kernel.Module`; see [Module declarations](docs/modules.md), [built-in module setup](docs/modules/adding-modules.md), [page templates](docs/templates.md) and the [counter example](examples/counter/counter.go). This API is included in v0.4.0; update custom modules to implement `Validate` and use typed constructors.
 
 ## Development
 

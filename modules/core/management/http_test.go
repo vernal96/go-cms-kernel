@@ -334,7 +334,7 @@ func contentHTTPWidgetFixture(t *testing.T) (*Resources, *extensionTestResources
 	t.Helper()
 	profile := kernel.Profile{
 		Code:    "widget-http",
-		Modules: []kernel.ProfileModule{{Module: widgetMetadataModule{}}},
+		Modules: []kernel.Module{widgetMetadataModule{}},
 		Templates: []template.Definition{{
 			Code: "page", Label: "Page",
 			Layout: template.Layout{

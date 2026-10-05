@@ -1,10 +1,23 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
+
+- Replace `ProfileModule` and untyped configuration with `[]kernel.Module` and module-specific constructors. Modules own immutable typed configuration; only modules using caches or filesystems expose their bindings.
+- Add mandatory module declaration validation before site runtime construction. Invalid limits, bindings, adapters and application dependencies stop startup even for profiles without sites.
+- Make module registry preparation return errors and keep configuration private. Update built-in modules and add a typed counter example.
+- Mount public HTTP APIs under `/api`, retaining page/resource paths, `/_cms/files/...` delivery and `/healthz`. Old unprefixed and double-prefixed API paths are rejected.
+
 
 - Make compiled validator scope explicit (`Scope() ValidatorScope`) for whole values and list items, including module contributions. Reject null required options and preserve integer membership precision across JSON round trips.
 - Replace string field rules with typed, module-contributed validators compiled with site schemas. Add core validators, structured errors and admin metadata.
 - Move list cardinality and phone pattern constraints from field options to validators. Forms development migrations and clients using `rules` must be updated; no compatibility alias is retained.
+
+### Integration changes
+
+- Declare `core.New(core.Config{...})`, `admin.New()`, `mail.New(mail.Config{...})`, `forms.New(forms.Config{...})`, `search.New()` and `seo.New(seo.Config{...})` in `[]kernel.Module`.
+- Custom modules implement `Validate(context.Context, kernel.ModuleValidationContext) error`; registries implement `Registry() (kernel.ModuleRegistry, error)`. Keep declarations immutable and create separate site runtime state in `Build`.
+- Replace `ModuleConfigFrom`/`RegistryForConfig` with typed configuration stored by the module. Move Core cache bindings into `core.Config.Caches` and Mail/Forms spool bindings into their `Config.Filesystems`.
+- Update clients to the `/api` prefix and typed field validators. Recreate development data affected by corrected pre-production schemas; no compatibility shims are provided.
 
 ## 0.3.0
 

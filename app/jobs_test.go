@@ -123,7 +123,7 @@ func TestRuntimeJobRunnerAcknowledgesDeletedAndIntentionallyAbsentScopes(t *test
 	module := jobsTestModule{called: &called}
 	profiles := []kernel.Profile{
 		{Code: "without"},
-		{Code: "with", Modules: []kernel.ProfileModule{{Module: module}}},
+		{Code: "with", Modules: []kernel.Module{module}},
 	}
 	catalog, err := site.NewCatalog(&jobsTestRepository{items: []site.Site{
 		{ID: 1, ProfileCode: "without", Domain: "without.test", Locale: "en-US"},
@@ -155,7 +155,7 @@ func TestRuntimeJobRunnerAcknowledgesDeletedAndIntentionallyAbsentScopes(t *test
 func TestRuntimeJobRunnerKeepsAmbiguousHandlersAsErrors(t *testing.T) {
 	called := 0
 	module := jobsTestModule{called: &called, ambiguous: true}
-	profile := kernel.Profile{Code: "with", Modules: []kernel.ProfileModule{{Module: module}}}
+	profile := kernel.Profile{Code: "with", Modules: []kernel.Module{module}}
 	catalog, err := site.NewCatalog(&jobsTestRepository{items: []site.Site{{ID: 2, ProfileCode: "with", Domain: "with.test", Locale: "en-US"}}}, jobsTestProfiles{"with": compileJobsTestProfile(t, profile)}, jobsTestAccess{})
 	if err != nil {
 		t.Fatal(err)
@@ -200,3 +200,5 @@ func (a jobsTestAccess) Allowed(ctx context.Context, actor security.Actor, codes
 	}
 	return result, nil
 }
+
+func (jobsTestModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }

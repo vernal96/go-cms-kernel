@@ -160,7 +160,7 @@ func TestPostgresMediaCascadeHooksAtomicity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "dev", Modules: []kernel.ProfileModule{{Module: module}}})
+	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "dev", Modules: []kernel.Module{module}})
 	if err != nil {
 		t.Fatal(err)
 	}

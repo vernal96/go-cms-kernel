@@ -158,8 +158,8 @@ func (formsTestEventBus) Consume(context.Context, eventbus.Subscription, eventbu
 
 type actionRegistryModule struct{ runtime *Runtime }
 
-func (actionRegistryModule) Registry() kernel.ModuleRegistry {
-	return kernel.ModuleRegistry{FieldTypes: field.StandardTypes(), ValidatorTypes: field.StandardValidatorTypes()}
+func (actionRegistryModule) Registry() (kernel.ModuleRegistry, error) {
+	return kernel.ModuleRegistry{FieldTypes: field.StandardTypes(), ValidatorTypes: field.StandardValidatorTypes()}, nil
 }
 
 func (actionRegistryModule) Code() kernel.ModuleCode { return ModuleCode }
@@ -210,10 +210,7 @@ func TestContributorModuleRegistersActionBeforeFormsFinalization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blueprint, err := factory.Compile(context.Background(), kernel.Profile{Code: "forms-actions", Modules: []kernel.ProfileModule{
-		{Module: actionRegistryModule{runtime: runtime}},
-		{Module: customActionContributor{action: fakeActionType{code: "custom"}}},
-	}})
+	blueprint, err := factory.Compile(context.Background(), kernel.Profile{Code: "forms-actions", Modules: []kernel.Module{actionRegistryModule{runtime: runtime}, customActionContributor{action: fakeActionType{code: "custom"}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -631,4 +628,12 @@ func (a allowAuthorizer) Allowed(ctx context.Context, actor security.Actor, code
 		result = append(result, code)
 	}
 	return result, nil
+}
+
+func (actionRegistryModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
+}
+
+func (customActionContributor) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
 }

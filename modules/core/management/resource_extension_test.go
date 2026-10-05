@@ -96,9 +96,9 @@ func (catalogProductResourceType) Normalize(payload resourcetype.Payload) (resou
 }
 
 func (widgetMetadataModule) Code() kernel.ModuleCode { return "feature" }
-func (widgetMetadataModule) Registry() kernel.ModuleRegistry {
+func (widgetMetadataModule) Registry() (kernel.ModuleRegistry, error) {
 	resourceTypes := append(resourcetype.StandardTypes(), catalogProductResourceType{})
-	return kernel.ModuleRegistry{FieldTypes: field.StandardTypes(), ResourceTypes: resourceTypes}
+	return kernel.ModuleRegistry{FieldTypes: field.StandardTypes(), ResourceTypes: resourceTypes}, nil
 }
 func (widgetMetadataModule) ModuleDescriptor() kernel.ModuleDescriptor {
 	return kernel.ModuleDescriptor{Label: "Feature widgets", Description: "Feature description"}
@@ -347,11 +347,9 @@ func extensionManagement(
 	resourceType resourcetype.Code,
 ) (*Resources, *extensionTestEditor) {
 	t.Helper()
-	var modules []kernel.ProfileModule
+	var modules []kernel.Module
 	if editor != nil {
-		modules = []kernel.ProfileModule{{
-			Module: extensionTestModule{editor: editor},
-		}}
+		modules = []kernel.Module{extensionTestModule{editor: editor}}
 	}
 	profile := kernel.Profile{
 		Code: "test", Modules: modules,
@@ -429,7 +427,7 @@ func TestResourceMetadataDescribesTemplateSlotsAndProfileWidgets(t *testing.T) {
 	profile := kernel.Profile{
 		Code:       "widgets",
 		Name:       "Widgets",
-		Modules:    []kernel.ProfileModule{{Module: widgetMetadataModule{}}},
+		Modules:    []kernel.Module{widgetMetadataModule{}},
 		Params:     []field.Definition{{Key: "company", Type: field.TypeString, Label: "Company"}},
 		EditorTabs: []field.EditorTab{{Code: "main", Label: "Main", Fields: []string{"company"}}},
 		Templates: []template.Definition{{
@@ -613,3 +611,11 @@ var _ eventbus.Bus = extensionTestBus{}
 var _ resourceextension.EditorProvider = (*extensionTestRuntime)(nil)
 var _ SiteCatalog = extensionTestSites{}
 var _ resource.ManagementRepository = (*extensionTestResources)(nil)
+
+func (extensionTestModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
+}
+
+func (widgetMetadataModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
+}

@@ -32,7 +32,7 @@ func TestPostgresWidgetParamBindingsLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	layout := template.Layout{{Code: "promo", Label: "Промо", Items: []template.Item{template.ResourceWidgets{}}}, {Code: "sidebar", Label: "Боковая область", Items: []template.Item{template.ResourceWidgets{}}}}
-	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "bindings", Modules: []kernel.ProfileModule{{Module: module}}, Templates: []template.Definition{
+	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "bindings", Modules: []kernel.Module{module}, Templates: []template.Definition{
 		{Code: "bound", Label: "Bound", Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}, Layout: layout},
 		{Code: "empty", Label: "Empty", Layout: layout},
 	}})
@@ -151,7 +151,7 @@ func TestPostgresWidgetParamBindingsLifecycle(t *testing.T) {
 	}
 	// Destination profile no longer declares the source widget area. Transfer
 	// must preserve its stored code and expose it through the recovery container.
-	targetBlueprint, err := factory.Compile(ctx, kernel.Profile{Code: "bindings", Modules: []kernel.ProfileModule{{Module: module}}, Templates: []template.Definition{
+	targetBlueprint, err := factory.Compile(ctx, kernel.Profile{Code: "bindings", Modules: []kernel.Module{module}, Templates: []template.Definition{
 		{Code: "bound", Label: "Bound", Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}},
 		{Code: "empty", Label: "Empty"},
 	}})

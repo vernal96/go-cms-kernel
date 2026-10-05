@@ -30,7 +30,7 @@ func TestPostgresDynamicWidgetAreasLifecycle(t *testing.T) {
 	sites := hookTestSites{}
 	reload := func(layout template.Layout) {
 		t.Helper()
-		blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "zones", Modules: []kernel.ProfileModule{{Module: bindingTestModule{}}}, Templates: []template.Definition{{Code: "page", Label: "Page", Layout: layout}}})
+		blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "zones", Modules: []kernel.Module{bindingTestModule{}}, Templates: []template.Definition{{Code: "page", Label: "Page", Layout: layout}}})
 		if err != nil {
 			t.Fatal(err)
 		}

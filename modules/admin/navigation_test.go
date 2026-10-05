@@ -46,7 +46,7 @@ func (a navigationAdministrator) IsAdministrator(context.Context, security.Actor
 func TestNavigationComposerRequiresAdministratorVisibility(t *testing.T) {
 	t.Parallel()
 	catalog := corePermissionCatalog(t)
-	profiles := []kernel.Profile{{Code: "dev", Modules: []kernel.ProfileModule{{Module: core.Module{}}}}}
+	profiles := []kernel.Profile{{Code: "dev", Modules: []kernel.Module{core.New(core.Config{})}}}
 	for _, test := range []struct {
 		name    string
 		admin   navigationAdministrator
@@ -80,7 +80,7 @@ func TestNavigationComposerFiltersPermissionsAndEmptyParents(t *testing.T) {
 	composer, err := newNavigationComposer(
 		[]kernel.Profile{{
 			Code:    "dev",
-			Modules: []kernel.ProfileModule{{Module: core.Module{}}},
+			Modules: []kernel.Module{core.New(core.Config{})},
 		}},
 		managementAuthorizer{denied: map[permission.Code]error{
 			FileReadPermission:  security.ErrForbidden,
@@ -113,7 +113,7 @@ func TestNavigationComposerUsesOnlySelectedSiteRuntimeProviders(t *testing.T) {
 	composer, err := newNavigationComposer(
 		[]kernel.Profile{{
 			Code:    "global",
-			Modules: []kernel.ProfileModule{{Module: core.Module{}}},
+			Modules: []kernel.Module{core.New(core.Config{})},
 		}},
 		managementAuthorizer{denied: map[permission.Code]error{}},
 		catalog,
@@ -168,7 +168,7 @@ func TestManagementHTTPNavigationSupportsOptionalSelectedSite(t *testing.T) {
 
 	catalog := corePermissionCatalog(t)
 	composer, err := newNavigationComposer(
-		[]kernel.Profile{{Code: "global", Modules: []kernel.ProfileModule{{Module: core.Module{}}}}},
+		[]kernel.Profile{{Code: "global", Modules: []kernel.Module{core.New(core.Config{})}}},
 		managementAuthorizer{denied: map[permission.Code]error{}},
 		catalog,
 	)
@@ -219,11 +219,9 @@ func navigationSiteRuntime(
 	items []adminui.NavigationItem,
 ) *site.Runtime {
 	t.Helper()
-	modules := []kernel.ProfileModule(nil)
+	modules := []kernel.Module(nil)
 	if items != nil {
-		modules = append(modules, kernel.ProfileModule{
-			Module: navigationTestModule{items: items},
-		})
+		modules = append(modules, navigationTestModule{items: items})
 	}
 	profile := kernel.Profile{
 		Code:    kernel.ProfileCode("site-" + strconv.FormatInt(int64(id), 10)),
@@ -259,9 +257,13 @@ func navigationSiteRuntime(
 
 func corePermissionCatalog(t *testing.T) *permission.Catalog {
 	t.Helper()
+	registry, err := kernel.RegistryForModule(core.New(core.Config{}))
+	if err != nil {
+		t.Fatal(err)
+	}
 	definitions, err := permission.Definitions(
 		string(core.ModuleCode),
-		core.Module{}.Registry().PermissionEntities,
+		registry.PermissionEntities,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -280,4 +282,8 @@ func navigationContains(items []adminui.NavigationItem, code string) bool {
 		}
 	}
 	return false
+}
+
+func (navigationTestModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
 }

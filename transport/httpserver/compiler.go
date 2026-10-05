@@ -162,7 +162,7 @@ func collectHTTPContributions(
 	profile := runtime.Profile()
 	result := make([]moduleContribution, 0, len(profile.Modules))
 	for _, profileModule := range profile.Modules {
-		moduleCode := profileModule.Module.Code()
+		moduleCode := profileModule.Code()
 		moduleRuntime, exists := runtime.Registry().Module(moduleCode)
 		if !exists {
 			return nil, fmt.Errorf(
@@ -356,11 +356,11 @@ func (c *profileCompiler) validateRoutableResourceHandlers(
 ) error {
 	profile := c.runtime.Profile()
 	for _, profileModule := range profile.Modules {
-		provider, ok := profileModule.Module.(kernel.RegistryProvider)
-		if !ok {
-			continue
+		registry, err := kernel.RegistryForModule(profileModule)
+		if err != nil {
+			return err
 		}
-		for _, resourceType := range provider.Registry().ResourceTypes {
+		for _, resourceType := range registry.ResourceTypes {
 			if resourceType.PathMode() != resourcetype.PathRoute {
 				continue
 			}
@@ -368,7 +368,7 @@ func (c *profileCompiler) validateRoutableResourceHandlers(
 				return fmt.Errorf(
 					"profile %q module %q routable resource type %q has no HTTP handler",
 					c.profile,
-					profileModule.Module.Code(),
+					profileModule.Code(),
 					resourceType.Code(),
 				)
 			}

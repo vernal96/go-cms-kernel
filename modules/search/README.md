@@ -72,7 +72,7 @@ rechecks fields individually after candidate selection. Existing writes,
 restores, deletes, publication changes, URL changes and site transfers take
 effect on the next search without a separate document store or reindex job.
 
-Register an engine using the usual module database factory and add `search.Module{}`
+Register an engine using the usual module database factory and add `search.New()`
 to a profile. Backend startup continues to use the normal migration workflow;
 the HTTP path does not initialize indexes or build runtimes.
 

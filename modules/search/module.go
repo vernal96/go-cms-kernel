@@ -25,19 +25,22 @@ type coreDependency interface {
 	Authorization() security.Authorizer
 }
 
-type Module struct{}
+type module struct{}
 
-func (Module) Code() kernel.ModuleCode           { return ModuleCode }
-func (Module) Dependencies() []kernel.ModuleCode { return []kernel.ModuleCode{core.ModuleCode} }
-func (Module) ModuleDescriptor() kernel.ModuleDescriptor {
+func (module) Code() kernel.ModuleCode           { return ModuleCode }
+func (module) Dependencies() []kernel.ModuleCode { return []kernel.ModuleCode{core.ModuleCode} }
+func (module) ModuleDescriptor() kernel.ModuleDescriptor {
 	return kernel.ModuleDescriptor{Label: "Поиск", Description: "Поиск по публичным ресурсам сайта"}
 }
-func (Module) Build(ctx context.Context, moduleContext kernel.ModuleContext) (kernel.ModuleRuntime, error) {
+func (m module) Build(ctx context.Context, moduleContext kernel.ModuleContext) (kernel.ModuleRuntime, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	database, err := kernel.ModuleDatabaseFrom[Database](moduleContext, "", ModuleCode)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateModuleDatabase(database); err != nil {
 		return nil, err
 	}
 	dependency, err := kernel.ModuleDependencyFrom[coreDependency](moduleContext, core.ModuleCode)
@@ -68,5 +71,29 @@ func (*Runtime) ModuleCode() kernel.ModuleCode { return ModuleCode }
 func (r *Runtime) Search() *Service            { return r.service }
 func (r *Runtime) HTTP() httptransport.Builder { return publicHTTP(r.service) }
 
-var _ kernel.Module = Module{}
+var _ kernel.Module = module{}
 var _ httptransport.Provider = (*Runtime)(nil)
+
+// New declares the module, which has no configuration parameters.
+func New() kernel.Module { return module{} }
+
+func (m module) Validate(ctx context.Context, environment kernel.ModuleValidationContext) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	database, err := kernel.ModuleDatabaseFrom[Database](environment, "", ModuleCode)
+	if err != nil {
+		return err
+	}
+	if err := validateModuleDatabase(database); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateModuleDatabase(database Database) error {
+	if database.Search() == nil {
+		return errors.New("search engine is nil")
+	}
+	return nil
+}
