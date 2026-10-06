@@ -94,117 +94,12 @@ FOR UPDATE OF item,entity;`, id).Scan(&storedSiteID, &storedVersion, &deleted, &
 		return resource.SiteTransferResult{}, resource.ErrInvalidTree
 	}
 
-	rows, err := tx.Query(ctx, `
-WITH RECURSIVE tree(id,depth,path,cycle) AS (
-    SELECT id,0,ARRAY[id],false FROM core.resources WHERE id=$1 AND site_id=$2
-    UNION ALL
-    SELECT child.id,parent.depth+1,parent.path||child.id,child.id=ANY(parent.path)
-    FROM core.resources child
-    JOIN tree parent ON child.parent_id=parent.id
-    WHERE child.site_id=$2 AND NOT parent.cycle
-)
-SELECT id,cycle FROM tree ORDER BY depth,id;`, id, sourceSiteID)
+	ids, idValues, err := loadTransferSubtree(ctx, tx, id, sourceSiteID)
 	if err != nil {
-		return resource.SiteTransferResult{}, translateError(err)
-	}
-	ids := make([]resource.ID, 0)
-	for rows.Next() {
-		var current resource.ID
-		var cycle bool
-		if err := rows.Scan(&current, &cycle); err != nil {
-			rows.Close()
-			return resource.SiteTransferResult{}, translateError(err)
-		}
-		if cycle {
-			rows.Close()
-			return resource.SiteTransferResult{}, resource.ErrInvalidTree
-		}
-		ids = append(ids, current)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return resource.SiteTransferResult{}, translateError(err)
-	}
-	rows.Close()
-	if len(ids) == 0 {
-		return resource.SiteTransferResult{}, resource.ErrNotFound
-	}
-	idValues := make([]int64, len(ids))
-	for index, current := range ids {
-		idValues[index] = int64(current)
-	}
-
-	var crossesBoundary bool
-	if err := tx.QueryRow(ctx, `
-SELECT EXISTS (
-    SELECT 1 FROM core.resources item
-    WHERE item.target_resource_id = ANY($1::bigint[])
-      AND NOT (item.id = ANY($1::bigint[]))
-    UNION ALL
-    SELECT 1 FROM core.resources item
-    WHERE item.id = ANY($1::bigint[])
-      AND item.target_resource_id IS NOT NULL
-      AND NOT (item.target_resource_id = ANY($1::bigint[]))
-);`, idValues).Scan(&crossesBoundary); err != nil {
-		return resource.SiteTransferResult{}, translateError(err)
-	}
-	if crossesBoundary {
-		return resource.SiteTransferResult{}, resource.ErrCrossSiteReference
-	}
-
-	items := make([]resource.Resource, len(ids))
-	paths := make(map[resource.ID]*string, len(ids))
-	for index, currentID := range ids {
-		item, err := routeResourceByID(ctx, tx, currentID)
-		if err != nil {
-			return resource.SiteTransferResult{}, err
-		}
-		item.SiteID = targetSiteID
-		if currentID == id {
-			item.ParentID = nil
-		}
-		if item.Path != nil {
-			var next string
-			if item.ParentID == nil {
-				if strings.TrimSpace(item.Slug) == "" {
-					return resource.SiteTransferResult{}, resource.ErrInvalidTree
-				}
-				next = "/" + item.Slug
-			} else {
-				parentPath, exists := paths[*item.ParentID]
-				if !exists || parentPath == nil {
-					return resource.SiteTransferResult{}, resource.ErrInvalidTree
-				}
-				if *parentPath == "/" {
-					next = "/" + item.Slug
-				} else {
-					next = *parentPath + "/" + item.Slug
-				}
-			}
-			item.Path = &next
-		}
-		paths[item.ID] = item.Path
-		items[index] = item
-	}
-
-	prospectivePaths := make([]string, 0, len(items))
-	for _, item := range items {
-		if item.Path == nil {
-			continue
-		}
-		var conflict bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.resources WHERE site_id=$1 AND path=$2);`, targetSiteID, *item.Path).Scan(&conflict); err != nil {
-			return resource.SiteTransferResult{}, translateError(err)
-		}
-		if conflict {
-			return resource.SiteTransferResult{}, resource.ErrRouteConflict
-		}
-		prospectivePaths = append(prospectivePaths, *item.Path)
-	}
-	if err := ensureTreePathsAvailable(ctx, tx, targetSiteID, prospectivePaths, nil); err != nil {
 		return resource.SiteTransferResult{}, err
 	}
-	if err := ensureTransferredLibraryRoutesAvailable(ctx, tx, targetSiteID, items); err != nil {
+	items, err := buildTransferredResources(ctx, tx, ids, id, targetSiteID)
+	if err != nil {
 		return resource.SiteTransferResult{}, err
 	}
 
@@ -382,3 +277,124 @@ SELECT EXISTS (
 }
 
 var _ resource.SiteTransferRepository = (*Repository)(nil)
+
+func loadTransferSubtree(ctx context.Context, tx pgx.Tx, id resource.ID, sourceSiteID site.ID) ([]resource.ID, []int64, error) {
+	rows, err := tx.Query(ctx, `
+WITH RECURSIVE tree(id,depth,path,cycle) AS (
+    SELECT id,0,ARRAY[id],false FROM core.resources WHERE id=$1 AND site_id=$2
+    UNION ALL
+    SELECT child.id,parent.depth+1,parent.path||child.id,child.id=ANY(parent.path)
+    FROM core.resources child
+    JOIN tree parent ON child.parent_id=parent.id
+    WHERE child.site_id=$2 AND NOT parent.cycle
+)
+SELECT id,cycle FROM tree ORDER BY depth,id;`, id, sourceSiteID)
+	if err != nil {
+		return nil, nil, translateError(err)
+	}
+	ids := make([]resource.ID, 0)
+	for rows.Next() {
+		var current resource.ID
+		var cycle bool
+		if err := rows.Scan(&current, &cycle); err != nil {
+			rows.Close()
+			return nil, nil, translateError(err)
+		}
+		if cycle {
+			rows.Close()
+			return nil, nil, resource.ErrInvalidTree
+		}
+		ids = append(ids, current)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, nil, translateError(err)
+	}
+	rows.Close()
+	if len(ids) == 0 {
+		return nil, nil, resource.ErrNotFound
+	}
+	idValues := make([]int64, len(ids))
+	for index, current := range ids {
+		idValues[index] = int64(current)
+	}
+
+	var crossesBoundary bool
+	if err := tx.QueryRow(ctx, `
+SELECT EXISTS (
+    SELECT 1 FROM core.resources item
+    WHERE item.target_resource_id = ANY($1::bigint[])
+      AND NOT (item.id = ANY($1::bigint[]))
+    UNION ALL
+    SELECT 1 FROM core.resources item
+    WHERE item.id = ANY($1::bigint[])
+      AND item.target_resource_id IS NOT NULL
+      AND NOT (item.target_resource_id = ANY($1::bigint[]))
+);`, idValues).Scan(&crossesBoundary); err != nil {
+		return nil, nil, translateError(err)
+	}
+	if crossesBoundary {
+		return nil, nil, resource.ErrCrossSiteReference
+	}
+
+	return ids, idValues, nil
+}
+
+func buildTransferredResources(ctx context.Context, tx pgx.Tx, ids []resource.ID, rootID resource.ID, targetSiteID site.ID) ([]resource.Resource, error) {
+	items := make([]resource.Resource, len(ids))
+	paths := make(map[resource.ID]*string, len(ids))
+	for index, currentID := range ids {
+		item, err := routeResourceByID(ctx, tx, currentID)
+		if err != nil {
+			return nil, err
+		}
+		item.SiteID = targetSiteID
+		if currentID == rootID {
+			item.ParentID = nil
+		}
+		if item.Path != nil {
+			var next string
+			if item.ParentID == nil {
+				if strings.TrimSpace(item.Slug) == "" {
+					return nil, resource.ErrInvalidTree
+				}
+				next = "/" + item.Slug
+			} else {
+				parentPath, exists := paths[*item.ParentID]
+				if !exists || parentPath == nil {
+					return nil, resource.ErrInvalidTree
+				}
+				if *parentPath == "/" {
+					next = "/" + item.Slug
+				} else {
+					next = *parentPath + "/" + item.Slug
+				}
+			}
+			item.Path = &next
+		}
+		paths[item.ID] = item.Path
+		items[index] = item
+	}
+
+	prospectivePaths := make([]string, 0, len(items))
+	for _, item := range items {
+		if item.Path == nil {
+			continue
+		}
+		var conflict bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.resources WHERE site_id=$1 AND path=$2);`, targetSiteID, *item.Path).Scan(&conflict); err != nil {
+			return nil, translateError(err)
+		}
+		if conflict {
+			return nil, resource.ErrRouteConflict
+		}
+		prospectivePaths = append(prospectivePaths, *item.Path)
+	}
+	if err := ensureTreePathsAvailable(ctx, tx, targetSiteID, prospectivePaths, nil); err != nil {
+		return nil, err
+	}
+	if err := ensureTransferredLibraryRoutesAvailable(ctx, tx, targetSiteID, items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

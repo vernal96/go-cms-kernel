@@ -76,128 +76,29 @@ func (s *Service) Submit(ctx context.Context, actor security.Actor, input Submit
 		return ResultDetail{}, ErrRequestTooLarge
 	}
 
-	detail, err := s.repository.FormDetailByCode(ctx, s.siteID, input.FormCode, true)
+	prepared, err := s.validateSubmission(ctx, input, client)
 	if err != nil {
 		return ResultDetail{}, err
 	}
-	if err := validateMandatoryStructure(detail.Fields, detail.Elements, detail.Layout); err != nil {
-		return ResultDetail{}, err
-	}
-	if !exactlyOneDefault(detail.Statuses) {
-		return ResultDetail{}, fmt.Errorf("%w: form status configuration is invalid", ErrInvalid)
-	}
-
-	if input.MultipartValues != nil {
-		input.Values, err = normalizeMultipartLists(detail.Fields, input.Values, s.fieldTypes)
-		if err != nil {
-			return ResultDetail{}, err
-		}
-	}
-	active, err := resolveActiveFields(detail.Fields, input.Values, s.fieldTypes)
+	values, err := submissionResultValues(prepared)
 	if err != nil {
 		return ResultDetail{}, err
 	}
-	fieldErrors := make(FieldValidationErrors)
-	known := make(map[string]FormField, len(detail.Fields))
-	for _, item := range detail.Fields {
-		known[item.Code] = item
-	}
-	for code := range input.Values {
-		if _, exists := known[code]; !exists {
-			fieldErrors[code] = append(fieldErrors[code], "defined")
-		}
-	}
-	for _, upload := range input.Uploads {
-		item, exists := known[upload.FieldCode]
-		if !exists || item.Type != FieldTypeUpload {
-			fieldErrors[upload.FieldCode] = append(fieldErrors[upload.FieldCode], "defined")
-		}
-	}
-	if len(fieldErrors) > 0 {
-		return ResultDetail{}, fieldErrors
-	}
-
-	definitions := make([]field.Definition, 0, len(active))
-	ordinaryValues := make(map[string]any)
-	for _, item := range active {
-		if item.Type == FieldTypeCaptcha || item.Type == FieldTypeUpload {
-			continue
-		}
-		definitions = append(definitions, item.Definition())
-		if value, exists := input.Values[item.Code]; exists {
-			ordinaryValues[item.Code] = value
-		}
-	}
-	schema, err := field.CompilePersistent(definitions, s.fieldTypes)
-	if err != nil {
-		return ResultDetail{}, err
-	}
-	normalized, err := schema.Validate(ordinaryValues)
+	spooled, cleanup, err := s.spoolSubmissionUploads(ctx, prepared)
 	if err != nil {
 		return ResultDetail{}, err
 	}
 
-	if err := s.verifyCaptchas(ctx, detail.Form, active, input.Values, client); err != nil {
-		return ResultDetail{}, err
-	}
-	validatedUploads, err := s.validateUploadInputs(active, input.Uploads)
-	if err != nil {
-		return ResultDetail{}, err
-	}
-
-	stored, err := schema.StoredValues(normalized)
-	if err != nil {
-		return ResultDetail{}, err
-	}
-	values := make([]ResultValue, 0, len(stored))
-	for _, storedValue := range stored {
-		formField, exists := fieldByCode(active, storedValue.Key)
-		if !exists {
-			return ResultDetail{}, errors.New("validated Forms field metadata is unavailable")
-		}
-		fieldID := formField.ID
-		values = append(values, ResultValue{
-			FieldID: &fieldID, FieldCode: formField.Code, FieldLabel: formField.Label,
-			ResultLabel: formField.EffectiveResultLabel(), FieldType: formField.Type,
-			Multiple: storedValue.Multiple, StorageKind: storedValue.Kind, Position: storedValue.Position, Value: storedValue.Value,
-		})
-	}
-
-	spooled := make([]ResultUpload, 0, len(validatedUploads))
-	cleanup := func() {
-		if s.spool == nil {
-			return
-		}
-		for _, item := range spooled {
-			_ = s.spool.Delete(context.WithoutCancel(ctx), item.SpoolReference)
-		}
-	}
-	for _, upload := range validatedUploads {
-		if s.spool == nil {
-			cleanup()
-			return ResultDetail{}, fmt.Errorf("%w: Forms uploads are disabled", ErrInvalid)
-		}
-		storedUpload, putErr := s.spool.Put(ctx, upload, s.limits.MaxUploadFileSize)
-		if putErr != nil {
-			cleanup()
-			return ResultDetail{}, putErr
-		}
-		formField, _ := fieldByCode(active, upload.FieldCode)
-		fieldID := formField.ID
-		storedUpload.FieldID = &fieldID
-		spooled = append(spooled, storedUpload)
-	}
-
-	defaultStatus := defaultStatus(detail.Statuses)
+	defaultStatus := defaultStatus(prepared.detail.Statuses)
 	result := Result{
-		SiteID: s.siteID, FormID: detail.Form.ID, FormCode: detail.Form.Code, FormName: detail.Form.Name,
+		SiteID: s.siteID, FormID: prepared.detail.Form.ID, FormCode: prepared.detail.Form.Code, FormName: prepared.detail.Form.Name,
 		StatusID: defaultStatus.ID, StatusCode: defaultStatus.Code, StatusName: defaultStatus.Name, StatusColor: defaultStatus.Color,
 		UserID: actor.AuditUserID(), UserAgent: truncateUTF8(strings.TrimSpace(input.UserAgent), 1024),
 	}
 	if s.limits.StoreClientAddress {
 		result.ClientAddress = truncateUTF8(client, 255)
 	}
-	actions := matchingActions(detail.Actions, Trigger{Type: TriggerSubmitted})
+	actions := matchingActions(prepared.detail.Actions, Trigger{Type: TriggerSubmitted})
 	record := SubmissionRecord{Result: result, Values: values, Uploads: spooled, Actions: actions}
 	var created ResultDetail
 	err = s.lifecycle.withActive(func() error {
@@ -223,10 +124,148 @@ func (s *Service) Submit(ctx context.Context, actor security.Actor, input Submit
 		}
 	}
 	if s.logger != nil {
-		s.logger.InfoContext(ctx, "Forms result accepted", slog.String("event", "forms.result.accepted"), slog.Int64("site_id", int64(s.siteID)), slog.Int64("form_id", int64(detail.Form.ID)), slog.Int64("result_id", int64(created.Result.ID)), slog.Int("action_count", len(created.Executions)), slog.Int("upload_count", len(spooled)))
+		s.logger.InfoContext(ctx, "Forms result accepted", slog.String("event", "forms.result.accepted"), slog.Int64("site_id", int64(s.siteID)), slog.Int64("form_id", int64(prepared.detail.Form.ID)), slog.Int64("result_id", int64(created.Result.ID)), slog.Int("action_count", len(created.Executions)), slog.Int("upload_count", len(spooled)))
 		s.logQueuedActions(ctx, created.Executions)
 	}
 	return created, nil
+}
+
+type validatedSubmission struct {
+	detail  FormDetail
+	active  []FormField
+	values  map[string]any
+	uploads []UploadInput
+	schema  *field.Schema
+}
+
+func (s *Service) validateSubmission(ctx context.Context, input SubmitInput, client string) (validatedSubmission, error) {
+	detail, err := s.repository.FormDetailByCode(ctx, s.siteID, input.FormCode, true)
+	if err != nil {
+		return validatedSubmission{}, err
+	}
+	if err := validateMandatoryStructure(detail.Fields, detail.Elements, detail.Layout); err != nil {
+		return validatedSubmission{}, err
+	}
+	if !exactlyOneDefault(detail.Statuses) {
+		return validatedSubmission{}, fmt.Errorf("%w: form status configuration is invalid", ErrInvalid)
+	}
+	if input.MultipartValues != nil {
+		input.Values, err = normalizeMultipartLists(detail.Fields, input.Values, s.fieldTypes)
+		if err != nil {
+			return validatedSubmission{}, err
+		}
+	}
+	active, err := resolveActiveFields(detail.Fields, input.Values, s.fieldTypes)
+	if err != nil {
+		return validatedSubmission{}, err
+	}
+	if err := validateSubmissionFieldNames(detail.Fields, input.Values, input.Uploads); err != nil {
+		return validatedSubmission{}, err
+	}
+	definitions, ordinaryValues := submissionFieldInputs(active, input.Values)
+	schema, err := field.CompilePersistent(definitions, s.fieldTypes)
+	if err != nil {
+		return validatedSubmission{}, err
+	}
+	normalized, err := schema.Validate(ordinaryValues)
+	if err != nil {
+		return validatedSubmission{}, err
+	}
+	if err := s.verifyCaptchas(ctx, detail.Form, active, input.Values, client); err != nil {
+		return validatedSubmission{}, err
+	}
+	uploads, err := s.validateUploadInputs(active, input.Uploads)
+	if err != nil {
+		return validatedSubmission{}, err
+	}
+	return validatedSubmission{detail: detail, active: active, values: normalized, uploads: uploads, schema: schema}, nil
+}
+
+func validateSubmissionFieldNames(fields []FormField, values map[string]any, uploads []UploadInput) error {
+	known := make(map[string]FormField, len(fields))
+	for _, item := range fields {
+		known[item.Code] = item
+	}
+	fieldErrors := make(FieldValidationErrors)
+	for code := range values {
+		if _, exists := known[code]; !exists {
+			fieldErrors[code] = append(fieldErrors[code], "defined")
+		}
+	}
+	for _, upload := range uploads {
+		item, exists := known[upload.FieldCode]
+		if !exists || item.Type != FieldTypeUpload {
+			fieldErrors[upload.FieldCode] = append(fieldErrors[upload.FieldCode], "defined")
+		}
+	}
+	if len(fieldErrors) > 0 {
+		return fieldErrors
+	}
+	return nil
+}
+
+func submissionFieldInputs(active []FormField, values map[string]any) ([]field.Definition, map[string]any) {
+	definitions := make([]field.Definition, 0, len(active))
+	ordinaryValues := make(map[string]any)
+	for _, item := range active {
+		if item.Type == FieldTypeCaptcha || item.Type == FieldTypeUpload {
+			continue
+		}
+		definitions = append(definitions, item.Definition())
+		if value, exists := values[item.Code]; exists {
+			ordinaryValues[item.Code] = value
+		}
+	}
+	return definitions, ordinaryValues
+}
+
+func submissionResultValues(prepared validatedSubmission) ([]ResultValue, error) {
+	stored, err := prepared.schema.StoredValues(prepared.values)
+	if err != nil {
+		return nil, err
+	}
+	values := make([]ResultValue, 0, len(stored))
+	for _, storedValue := range stored {
+		formField, exists := fieldByCode(prepared.active, storedValue.Key)
+		if !exists {
+			return nil, errors.New("validated Forms field metadata is unavailable")
+		}
+		fieldID := formField.ID
+		values = append(values, ResultValue{
+			FieldID: &fieldID, FieldCode: formField.Code, FieldLabel: formField.Label,
+			ResultLabel: formField.EffectiveResultLabel(), FieldType: formField.Type,
+			Multiple: storedValue.Multiple, StorageKind: storedValue.Kind, Position: storedValue.Position, Value: storedValue.Value,
+		})
+	}
+	return values, nil
+}
+
+func (s *Service) spoolSubmissionUploads(ctx context.Context, prepared validatedSubmission) ([]ResultUpload, func(), error) {
+	spooled := make([]ResultUpload, 0, len(prepared.uploads))
+	cleanup := func() {
+		if s.spool == nil {
+			return
+		}
+		for _, item := range spooled {
+			_ = s.spool.Delete(context.WithoutCancel(ctx), item.SpoolReference)
+		}
+	}
+	for _, upload := range prepared.uploads {
+		if s.spool == nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("%w: Forms uploads are disabled", ErrInvalid)
+		}
+		storedUpload, err := s.spool.Put(ctx, upload, s.limits.MaxUploadFileSize)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		formField, _ := fieldByCode(prepared.active, upload.FieldCode)
+		fieldID := formField.ID
+		storedUpload.FieldID = &fieldID
+		spooled = append(spooled, storedUpload)
+	}
+	return spooled, cleanup, nil
 }
 
 func (s *Service) logQueuedActions(ctx context.Context, executions []ActionExecution) {

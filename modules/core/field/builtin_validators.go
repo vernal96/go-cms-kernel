@@ -127,7 +127,23 @@ func (types Types) ValidatorType(code ValidatorCode) (ValidatorType, bool) {
 func (types Types) ValidatorTypes() []ValidatorCode { return StandardValidatorTypes().ValidatorTypes() }
 
 func (t builtinValidatorType) Compile(ctx ValidatorContext, options any) (Validator, error) {
-	code := t.code
+	if err := validateBuiltinCompatibility(t.code, ctx); err != nil {
+		return nil, err
+	}
+	params, test, err := compileBuiltinTest(t, ctx, options)
+	if err != nil {
+		return nil, err
+	}
+	items := t.code == "min_items" || t.code == "max_items" || t.code == "items_between" || t.code == "items_count" || t.code == "unique_items"
+	contains := t.code == "contains" || t.code == "doesnt_contain"
+	scope := ValidatorScopeValue
+	if ctx.Multiple && !items && !contains {
+		scope = ValidatorScopeItems
+	}
+	return builtinValidator{code: t.code, scope: scope, params: params, test: test}, nil
+}
+
+func validateBuiltinCompatibility(code ValidatorCode, ctx ValidatorContext) error {
 	isList := ctx.Multiple || ctx.FieldType == TypeRepeater
 	storage := ctx.Storage
 	isNumber := storage == StorageInteger || storage == StorageFloat
@@ -140,199 +156,233 @@ func (t builtinValidatorType) Compile(ctx ValidatorContext, options any) (Valida
 	membership := code == "in" || code == "not_in"
 	contains := code == "contains" || code == "doesnt_contain"
 	if (numeric && !isNumber) || (digits && storage != StorageInteger) || (length && !isString) || (items && !isList) || (boolRule && storage != StorageBoolean) || (membership && !(isNumber || isString || storage == StorageBoolean)) || (!numeric && !length && !items && !boolRule && !membership && !contains && !isString) {
-		return nil, fmt.Errorf("validator %q is incompatible with field %q", code, ctx.FieldType)
+		return fmt.Errorf("validator %q is incompatible with field %q", code, ctx.FieldType)
 	}
 	if contains && !isString && !isList {
-		return nil, fmt.Errorf("validator %q requires string or list", code)
+		return fmt.Errorf("validator %q requires string or list", code)
 	}
-	params := map[string]any{}
-	test := func(any) bool { return true }
+	return nil
+}
+
+func compileBuiltinTest(t builtinValidatorType, ctx ValidatorContext, options any) (map[string]any, func(any) bool, error) {
+	var (
+		params map[string]any
+		test   func(any) bool
+		err    error
+	)
 	switch t.kind {
 	case "number", "count":
-		var o struct {
-			Value float64 `json:"value"`
-		}
-		if err := DecodeRequiredOptions(options, &o, "value"); err != nil {
-			return nil, err
-		}
-		n := o.Value
-		if math.IsNaN(n) || math.IsInf(n, 0) {
-			return nil, errors.New("value must be finite")
-		}
-		if t.kind == "count" && (n < 0 || math.Trunc(n) != n) {
-			return nil, errors.New("count must be a nonnegative integer")
-		}
-		if code == "multiple_of" && n <= 0 {
-			return nil, errors.New("multiple_of must be positive")
-		}
-		params["value"] = n
-		switch code {
-		case "min":
-			test = func(v any) bool { return toFloat(v) >= n }
-		case "max":
-			test = func(v any) bool { return toFloat(v) <= n }
-		case "multiple_of":
-			test = func(v any) bool { q := toFloat(v) / n; return math.Abs(q-math.Round(q)) < 1e-9 }
-		case "digits", "min_digits", "max_digits":
-			test = func(v any) bool {
-				d := digitCount(v)
-				switch code {
-				case "digits":
-					return float64(d) == n
-				case "min_digits":
-					return float64(d) >= n
-				default:
-					return float64(d) <= n
-				}
-			}
-		case "min_length":
-			test = func(v any) bool { return float64(utf8.RuneCountInString(v.(string))) >= n }
-		case "max_length":
-			test = func(v any) bool { return float64(utf8.RuneCountInString(v.(string))) <= n }
-		case "length":
-			test = func(v any) bool { return float64(utf8.RuneCountInString(v.(string))) == n }
-		case "min_items":
-			test = func(v any) bool { return float64(reflect.ValueOf(v).Len()) >= n }
-		case "max_items":
-			test = func(v any) bool { return float64(reflect.ValueOf(v).Len()) <= n }
-		case "items_count":
-			test = func(v any) bool { return float64(reflect.ValueOf(v).Len()) == n }
-		}
+		params, test, err = compileNumberTest(t.code, t.kind, options)
 	case "range_number", "range_count":
-		var o struct {
-			Min float64 `json:"min"`
-			Max float64 `json:"max"`
-		}
-		if err := DecodeRequiredOptions(options, &o, "min", "max"); err != nil {
-			return nil, err
-		}
-		if math.IsNaN(o.Min) || math.IsNaN(o.Max) || math.IsInf(o.Min, 0) || math.IsInf(o.Max, 0) || o.Min > o.Max {
-			return nil, errors.New("invalid range")
-		}
-		if t.kind == "range_count" && (o.Min < 0 || math.Trunc(o.Min) != o.Min || math.Trunc(o.Max) != o.Max) {
-			return nil, errors.New("range counts must be nonnegative integers")
-		}
-		params["min"], params["max"] = o.Min, o.Max
-		switch code {
-		case "between":
-			test = func(v any) bool { x := toFloat(v); return x >= o.Min && x <= o.Max }
-		case "digits_between":
-			test = func(v any) bool { x := float64(digitCount(v)); return x >= o.Min && x <= o.Max }
-		case "length_between":
-			test = func(v any) bool { x := float64(utf8.RuneCountInString(v.(string))); return x >= o.Min && x <= o.Max }
-		case "items_between":
-			test = func(v any) bool { x := float64(reflect.ValueOf(v).Len()); return x >= o.Min && x <= o.Max }
-		}
+		params, test, err = compileRangeTest(t.code, t.kind, options)
 	case "text":
-		var o struct {
-			Value string `json:"value"`
-		}
-		if err := DecodeRequiredOptions(options, &o, "value"); err != nil {
-			return nil, err
-		}
-		params["value"] = o.Value
-		switch code {
-		case "starts_with":
-			test = func(v any) bool { return strings.HasPrefix(v.(string), o.Value) }
-		case "ends_with":
-			test = func(v any) bool { return strings.HasSuffix(v.(string), o.Value) }
-		case "doesnt_start_with":
-			test = func(v any) bool { return !strings.HasPrefix(v.(string), o.Value) }
-		case "doesnt_end_with":
-			test = func(v any) bool { return !strings.HasSuffix(v.(string), o.Value) }
-		case "regex", "not_regex":
-			pattern, err := regexp.Compile(o.Value)
-			if err != nil {
-				return nil, err
-			}
-			test = func(v any) bool { matched := pattern.MatchString(v.(string)); return matched == (code == "regex") }
-		}
+		params, test, err = compileTextTest(t.code, options)
 	case "values":
-		var o struct {
-			Values []any `json:"values"`
-		}
-		if err := DecodeRequiredOptions(options, &o, "values"); err != nil {
-			return nil, err
-		}
-		if len(o.Values) == 0 {
-			return nil, errors.New("values cannot be empty")
-		}
-		values := make([]any, len(o.Values))
-		for i, v := range o.Values {
-			normalized, err := normalizeMember(v, storage)
-			if err != nil {
-				return nil, fmt.Errorf("value at index %d: %w", i, err)
-			}
-			values[i] = normalized
-		}
-		params["values"] = values
-		if membership {
-			test = func(v any) bool { found := memberOf(v, values); return found == (code == "in") }
-		}
-		if contains {
-			if isList {
-				test = func(v any) bool {
-					items := reflect.ValueOf(v)
-					found := false
-					for i := 0; i < items.Len(); i++ {
-						if memberOf(items.Index(i).Interface(), values) {
-							found = true
-							break
-						}
-					}
-					return found == (code == "contains")
-				}
-			}
-			if isString && !isList {
-				test = func(v any) bool {
-					found := false
-					for _, item := range values {
-						if strings.Contains(v.(string), item.(string)) {
-							found = true
-							break
-						}
-					}
-					return found == (code == "contains")
-				}
-			}
-		}
+		params, test, err = compileValuesTest(t.code, ctx, options)
 	case "none":
-		if options != nil {
-			raw, err := json.Marshal(options)
-			if err != nil {
-				return nil, err
-			}
-			if string(raw) != "{}" && string(raw) != "null" {
-				return nil, errors.New("validator does not accept options")
+		params, test, err = compileNoOptionTest(t.code, options)
+	default:
+		params = map[string]any{}
+		test = func(any) bool { return true }
+	}
+	return params, test, err
+}
+
+func compileNumberTest(code ValidatorCode, kind string, options any) (map[string]any, func(any) bool, error) {
+	var o struct {
+		Value float64 `json:"value"`
+	}
+	if err := DecodeRequiredOptions(options, &o, "value"); err != nil {
+		return nil, nil, err
+	}
+	n := o.Value
+	if math.IsNaN(n) || math.IsInf(n, 0) {
+		return nil, nil, errors.New("value must be finite")
+	}
+	if kind == "count" && (n < 0 || math.Trunc(n) != n) {
+		return nil, nil, errors.New("count must be a nonnegative integer")
+	}
+	if code == "multiple_of" && n <= 0 {
+		return nil, nil, errors.New("multiple_of must be positive")
+	}
+	test := func(any) bool { return true }
+	switch code {
+	case "min":
+		test = func(v any) bool { return toFloat(v) >= n }
+	case "max":
+		test = func(v any) bool { return toFloat(v) <= n }
+	case "multiple_of":
+		test = func(v any) bool { q := toFloat(v) / n; return math.Abs(q-math.Round(q)) < 1e-9 }
+	case "digits", "min_digits", "max_digits":
+		test = func(v any) bool {
+			d := digitCount(v)
+			switch code {
+			case "digits":
+				return float64(d) == n
+			case "min_digits":
+				return float64(d) >= n
+			default:
+				return float64(d) <= n
 			}
 		}
-		switch code {
-		case "unique_items":
-			test = func(v any) bool {
-				items := reflect.ValueOf(v)
-				for i := 0; i < items.Len(); i++ {
-					for j := i + 1; j < items.Len(); j++ {
-						if reflect.DeepEqual(items.Index(i).Interface(), items.Index(j).Interface()) {
-							return false
-						}
+	case "min_length":
+		test = func(v any) bool { return float64(utf8.RuneCountInString(v.(string))) >= n }
+	case "max_length":
+		test = func(v any) bool { return float64(utf8.RuneCountInString(v.(string))) <= n }
+	case "length":
+		test = func(v any) bool { return float64(utf8.RuneCountInString(v.(string))) == n }
+	case "min_items":
+		test = func(v any) bool { return float64(reflect.ValueOf(v).Len()) >= n }
+	case "max_items":
+		test = func(v any) bool { return float64(reflect.ValueOf(v).Len()) <= n }
+	case "items_count":
+		test = func(v any) bool { return float64(reflect.ValueOf(v).Len()) == n }
+	}
+	return map[string]any{"value": n}, test, nil
+}
+
+func compileRangeTest(code ValidatorCode, kind string, options any) (map[string]any, func(any) bool, error) {
+	var o struct {
+		Min float64 `json:"min"`
+		Max float64 `json:"max"`
+	}
+	if err := DecodeRequiredOptions(options, &o, "min", "max"); err != nil {
+		return nil, nil, err
+	}
+	if math.IsNaN(o.Min) || math.IsNaN(o.Max) || math.IsInf(o.Min, 0) || math.IsInf(o.Max, 0) || o.Min > o.Max {
+		return nil, nil, errors.New("invalid range")
+	}
+	if kind == "range_count" && (o.Min < 0 || math.Trunc(o.Min) != o.Min || math.Trunc(o.Max) != o.Max) {
+		return nil, nil, errors.New("range counts must be nonnegative integers")
+	}
+	test := func(any) bool { return true }
+	switch code {
+	case "between":
+		test = func(v any) bool { x := toFloat(v); return x >= o.Min && x <= o.Max }
+	case "digits_between":
+		test = func(v any) bool { x := float64(digitCount(v)); return x >= o.Min && x <= o.Max }
+	case "length_between":
+		test = func(v any) bool { x := float64(utf8.RuneCountInString(v.(string))); return x >= o.Min && x <= o.Max }
+	case "items_between":
+		test = func(v any) bool { x := float64(reflect.ValueOf(v).Len()); return x >= o.Min && x <= o.Max }
+	}
+	return map[string]any{"min": o.Min, "max": o.Max}, test, nil
+}
+
+func compileTextTest(code ValidatorCode, options any) (map[string]any, func(any) bool, error) {
+	var o struct {
+		Value string `json:"value"`
+	}
+	if err := DecodeRequiredOptions(options, &o, "value"); err != nil {
+		return nil, nil, err
+	}
+	test := func(any) bool { return true }
+	switch code {
+	case "starts_with":
+		test = func(v any) bool { return strings.HasPrefix(v.(string), o.Value) }
+	case "ends_with":
+		test = func(v any) bool { return strings.HasSuffix(v.(string), o.Value) }
+	case "doesnt_start_with":
+		test = func(v any) bool { return !strings.HasPrefix(v.(string), o.Value) }
+	case "doesnt_end_with":
+		test = func(v any) bool { return !strings.HasSuffix(v.(string), o.Value) }
+	case "regex", "not_regex":
+		pattern, err := regexp.Compile(o.Value)
+		if err != nil {
+			return nil, nil, err
+		}
+		test = func(v any) bool { matched := pattern.MatchString(v.(string)); return matched == (code == "regex") }
+	}
+	return map[string]any{"value": o.Value}, test, nil
+}
+
+func compileValuesTest(code ValidatorCode, ctx ValidatorContext, options any) (map[string]any, func(any) bool, error) {
+	var o struct {
+		Values []any `json:"values"`
+	}
+	if err := DecodeRequiredOptions(options, &o, "values"); err != nil {
+		return nil, nil, err
+	}
+	if len(o.Values) == 0 {
+		return nil, nil, errors.New("values cannot be empty")
+	}
+	values := make([]any, len(o.Values))
+	for i, value := range o.Values {
+		normalized, err := normalizeMember(value, ctx.Storage)
+		if err != nil {
+			return nil, nil, fmt.Errorf("value at index %d: %w", i, err)
+		}
+		values[i] = normalized
+	}
+	isList := ctx.Multiple || ctx.FieldType == TypeRepeater
+	membership := code == "in" || code == "not_in"
+	contains := code == "contains" || code == "doesnt_contain"
+	test := func(any) bool { return true }
+	if membership {
+		test = func(v any) bool { found := memberOf(v, values); return found == (code == "in") }
+	}
+	if contains && isList {
+		test = func(v any) bool {
+			items := reflect.ValueOf(v)
+			found := false
+			for i := 0; i < items.Len(); i++ {
+				if memberOf(items.Index(i).Interface(), values) {
+					found = true
+					break
+				}
+			}
+			return found == (code == "contains")
+		}
+	}
+	if contains && ctx.Storage == StorageString && !isList {
+		test = func(v any) bool {
+			found := false
+			for _, item := range values {
+				if strings.Contains(v.(string), item.(string)) {
+					found = true
+					break
+				}
+			}
+			return found == (code == "contains")
+		}
+	}
+	return map[string]any{"values": values}, test, nil
+}
+
+func compileNoOptionTest(code ValidatorCode, options any) (map[string]any, func(any) bool, error) {
+	if options != nil {
+		raw, err := json.Marshal(options)
+		if err != nil {
+			return nil, nil, err
+		}
+		if string(raw) != "{}" && string(raw) != "null" {
+			return nil, nil, errors.New("validator does not accept options")
+		}
+	}
+	test := func(any) bool { return true }
+	switch code {
+	case "unique_items":
+		test = func(v any) bool {
+			items := reflect.ValueOf(v)
+			for i := 0; i < items.Len(); i++ {
+				for j := i + 1; j < items.Len(); j++ {
+					if reflect.DeepEqual(items.Index(i).Interface(), items.Index(j).Interface()) {
+						return false
 					}
 				}
-				return true
 			}
-		case "accepted":
-			test = func(v any) bool { return v == true }
-		case "declined":
-			test = func(v any) bool { return v == false }
-		default:
-			test = stringTest(code)
+			return true
 		}
+	case "accepted":
+		test = func(v any) bool { return v == true }
+	case "declined":
+		test = func(v any) bool { return v == false }
+	default:
+		test = stringTest(code)
 	}
-	scope := ValidatorScopeValue
-	if ctx.Multiple && !items && !contains {
-		scope = ValidatorScopeItems
-	}
-	return builtinValidator{code: code, scope: scope, params: params, test: test}, nil
+	return map[string]any{}, test, nil
 }
+
 func toFloat(v any) float64 {
 	switch x := v.(type) {
 	case int64:

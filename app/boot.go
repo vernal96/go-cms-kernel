@@ -242,55 +242,10 @@ func (a *App) boot(ctx context.Context) error {
 	a.cmsFiles = cmsFiles
 	a.adminManagement = adminManagement
 	a.siteAccessPolicy = siteAccessPolicy
-	jobRunner, err := jobRunnerFromProfiles(a.definition.Profiles, catalog)
-	if err != nil {
+	if err := a.startRuntimeWorkers(ctx, catalog); err != nil {
 		return err
 	}
-	hookRunner, hookTopics, err := a.prepareEntityHooks(ctx, catalog)
-	if err != nil {
-		return err
-	}
-	var publisher *outbox.Publisher
-	if len(a.outboxSources) > 0 {
-		publisher, err = outbox.NewPublisher(a.eventBus, a.outboxSources, a.logger, a.definition.OutboxPublisher)
-		if err != nil {
-			return err
-		}
-	}
-	workerContext, cancelWorkers := context.WithCancel(context.Background())
-	a.workerCancel = cancelWorkers
-	backgroundTasks := newRuntimeBackgroundTasks(workerContext, a.logger)
-	a.workers.Add(1)
-	go func() {
-		defer a.workers.Done()
-		backgroundTasks.run()
-	}()
-	if err := catalog.AddRuntimePreparer(ctx, backgroundTasks.prepare); err != nil {
-		cancelWorkers()
-		a.workers.Wait()
-		return fmt.Errorf("prepare runtime background tasks: %w", err)
-	}
-	a.startSiteSynchronization(workerContext)
-	a.startEntityHooks(workerContext, hookRunner, hookTopics)
-	if len(a.outboxSources) > 0 {
-		a.outboxPublisher = publisher
-		a.workers.Add(1)
-		go func() {
-			defer a.workers.Done()
-			if err := publisher.Run(workerContext); err != nil && a.logger != nil {
-				a.logger.Error("outbox publisher exited", slog.String("event", "outbox.publisher.failed"), slog.Any("error", err))
-			}
-		}()
-	}
-	if jobRunner != nil {
-		a.workers.Add(1)
-		go func() {
-			defer a.workers.Done()
-			if err := jobRunner.Run(workerContext, a.eventBus, "go-cms"); err != nil && a.logger != nil && workerContext.Err() == nil {
-				a.logger.Error("job runner exited", slog.String("event", "job.runner.failed"), slog.Any("error", err))
-			}
-		}()
-	}
+
 	a.booted.Store(true)
 	return nil
 }
@@ -422,4 +377,57 @@ func declaredNames(
 		}
 	}
 	return owners, nil
+}
+
+func (a *App) startRuntimeWorkers(ctx context.Context, catalog *site.Catalog) error {
+	jobRunner, err := jobRunnerFromProfiles(a.definition.Profiles, catalog)
+	if err != nil {
+		return err
+	}
+	hookRunner, hookTopics, err := a.prepareEntityHooks(ctx, catalog)
+	if err != nil {
+		return err
+	}
+	var publisher *outbox.Publisher
+	if len(a.outboxSources) > 0 {
+		publisher, err = outbox.NewPublisher(a.eventBus, a.outboxSources, a.logger, a.definition.OutboxPublisher)
+		if err != nil {
+			return err
+		}
+	}
+	workerContext, cancelWorkers := context.WithCancel(context.Background())
+	a.workerCancel = cancelWorkers
+	backgroundTasks := newRuntimeBackgroundTasks(workerContext, a.logger)
+	a.workers.Add(1)
+	go func() {
+		defer a.workers.Done()
+		backgroundTasks.run()
+	}()
+	if err := catalog.AddRuntimePreparer(ctx, backgroundTasks.prepare); err != nil {
+		cancelWorkers()
+		a.workers.Wait()
+		return fmt.Errorf("prepare runtime background tasks: %w", err)
+	}
+	a.startSiteSynchronization(workerContext)
+	a.startEntityHooks(workerContext, hookRunner, hookTopics)
+	if len(a.outboxSources) > 0 {
+		a.outboxPublisher = publisher
+		a.workers.Add(1)
+		go func() {
+			defer a.workers.Done()
+			if err := publisher.Run(workerContext); err != nil && a.logger != nil {
+				a.logger.Error("outbox publisher exited", slog.String("event", "outbox.publisher.failed"), slog.Any("error", err))
+			}
+		}()
+	}
+	if jobRunner != nil {
+		a.workers.Add(1)
+		go func() {
+			defer a.workers.Done()
+			if err := jobRunner.Run(workerContext, a.eventBus, "go-cms"); err != nil && a.logger != nil && workerContext.Err() == nil {
+				a.logger.Error("job runner exited", slog.String("event", "job.runner.failed"), slog.Any("error", err))
+			}
+		}()
+	}
+	return nil
 }
