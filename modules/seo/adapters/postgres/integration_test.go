@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	connectorpostgres "github.com/vernal96/go-cms-kernel/connectors/postgres"
 	"github.com/vernal96/go-cms-kernel"
+	connectorpostgres "github.com/vernal96/go-cms-kernel/connectors/postgres"
 	"github.com/vernal96/go-cms-kernel/migrations"
 	corepostgres "github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
@@ -97,8 +97,8 @@ func TestPostgresMigrationsRepositoryScopeAndCascade(t *testing.T) {
 	var firstSiteID, secondSiteID site.ID
 	for index, target := range []*site.ID{&firstSiteID, &secondSiteID} {
 		err := connector.Pool().QueryRow(ctx, `
-INSERT INTO core.sites (profile_code, domain, locale, settings, is_public)
-VALUES ('seo-test', $1, 'ru-RU', '{}'::jsonb, true)
+INSERT INTO core.sites (profile_code, name, domain, locale, settings, is_public)
+VALUES ('seo-test', 'Test site', $1, 'ru-RU', '{}'::jsonb, true)
 RETURNING id;
 `, fmt.Sprintf("seo-%d-%d.example.test", suffix, index)).Scan(target)
 		if err != nil {

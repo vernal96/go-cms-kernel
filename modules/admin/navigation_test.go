@@ -244,7 +244,8 @@ func navigationSiteRuntime(
 	runtime, err := site.NewRuntimeFromBlueprint(
 		context.Background(),
 		site.Site{
-			ID: id, ProfileCode: profile.Code, Domain: "example.test",
+			Name: "Test site",
+			ID:   id, ProfileCode: profile.Code, Domain: "example.test",
 			Locale: "ru-RU", Settings: map[string]any{},
 		},
 		blueprint,

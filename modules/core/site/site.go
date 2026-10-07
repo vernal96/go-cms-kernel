@@ -50,6 +50,7 @@ type Site struct {
 	Version        int64
 	ID             ID
 	ProfileCode    kernel.ProfileCode
+	Name           string
 	Domain         string
 	Locale         string
 	Settings       map[string]any
@@ -121,6 +122,7 @@ type Access interface {
 type UpdateInput struct {
 	ID          ID
 	ProfileCode kernel.ProfileCode
+	Name        string
 	Domain      string
 	Locale      string
 	Settings    map[string]any
@@ -129,6 +131,7 @@ type UpdateInput struct {
 
 type CreateInput struct {
 	ProfileCode kernel.ProfileCode
+	Name        string
 	Domain      string
 	Locale      string
 	Settings    map[string]any
@@ -168,6 +171,7 @@ func NewRuntimeFromBlueprint(
 		kernel.NewSiteRuntimeScope(
 			fmt.Sprint(item.ID),
 			item.ProfileCode,
+			item.Name,
 			item.Domain,
 			item.Locale,
 			item.IsPublic,
@@ -201,6 +205,10 @@ func normalizeRuntimeSite(
 			item.ProfileCode,
 			profileCode,
 		)
+	}
+	item.Name = strings.TrimSpace(item.Name)
+	if item.Name == "" {
+		return Site{}, nil, errors.New("site name is empty")
 	}
 	domain, err := NormalizeDomain(item.Domain)
 	if err != nil {

@@ -68,7 +68,7 @@ func TestPostgresMailCRUDOutboxAttemptsRetentionAndSiteIsolation(t *testing.T) {
 	suffix := time.Now().UnixNano()
 	siteIDs := make([]site.ID, 2)
 	for index := range siteIDs {
-		if err := connector.Pool().QueryRow(ctx, `INSERT INTO core.sites(profile_code,domain,locale,settings,is_public) VALUES('mail-test',$1,'en-US','{}'::jsonb,true) RETURNING id;`, fmt.Sprintf("mail-%d-%d.example.test", suffix, index)).Scan(&siteIDs[index]); err != nil {
+		if err := connector.Pool().QueryRow(ctx, `INSERT INTO core.sites(profile_code,name,domain,locale,settings,is_public) VALUES('mail-test','Test site',$1,'en-US','{}'::jsonb,true) RETURNING id;`, fmt.Sprintf("mail-%d-%d.example.test", suffix, index)).Scan(&siteIDs[index]); err != nil {
 			t.Fatal(err)
 		}
 	}

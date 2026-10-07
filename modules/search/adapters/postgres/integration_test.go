@@ -68,7 +68,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	f := &fixture{ctx: ctx, connector: connector, engine: engine, resources: database.Resources(), libraryItems: database.Resources().(resource.LibraryItemRepository)}
 	for index := range f.sites {
-		if err := connector.Pool().QueryRow(ctx, `INSERT INTO core.sites(profile_code,domain,locale,settings,is_public) VALUES('search-test',$1,'ru-RU','{}',true) RETURNING id`, fmt.Sprintf("search-%d-%d.example.test", time.Now().UnixNano(), index)).Scan(&f.sites[index]); err != nil {
+		if err := connector.Pool().QueryRow(ctx, `INSERT INTO core.sites(profile_code,name,domain,locale,settings,is_public) VALUES('search-test','Test site',$1,'ru-RU','{}',true) RETURNING id`, fmt.Sprintf("search-%d-%d.example.test", time.Now().UnixNano(), index)).Scan(&f.sites[index]); err != nil {
 			t.Fatal(err)
 		}
 	}

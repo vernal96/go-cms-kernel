@@ -121,7 +121,7 @@ func (m module) Build(buildCtx context.Context, ctx kernel.ModuleContext) (kerne
 	}
 	scope := ctx.Scope()
 	renderer, err := NewRenderer(ctx.Registry(), coreRuntime.Files(), site.Site{
-		ID: site.ID(siteIDValue), ProfileCode: ctx.Profile().Code, Domain: scope.Domain(),
+		ID: site.ID(siteIDValue), ProfileCode: ctx.Profile().Code, Name: scope.Name(), Domain: scope.Domain(),
 		Locale: scope.Locale(), IsPublic: scope.IsPublic(), Settings: scope.Settings(),
 	}, ctx.Profile().Params, config.Renderer)
 	if err != nil {

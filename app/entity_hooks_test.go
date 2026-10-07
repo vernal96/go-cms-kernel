@@ -44,7 +44,7 @@ func (s *pendingHookSource) Pending(context.Context) ([]entityhooks.PendingTarge
 func TestEntityHooksBlockRemovalAndAbortFailedPublication(t *testing.T) {
 	ctx := context.Background()
 	profiles := []kernel.Profile{{Code: "with", Modules: []kernel.Module{transitionHookModule{}}}, {Code: "without"}}
-	repository := &jobsTestRepository{items: []site.Site{{ID: 1, ProfileCode: "with", Domain: "hooks.test", Locale: "en-US"}}}
+	repository := &jobsTestRepository{items: []site.Site{{Name: "Test site", ID: 1, ProfileCode: "with", Domain: "hooks.test", Locale: "en-US"}}}
 	catalog, err := site.NewCatalog(repository, jobsTestProfiles{"with": compileJobsTestProfile(t, profiles[0]), "without": compileJobsTestProfile(t, profiles[1])}, jobsTestAccess{})
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +75,7 @@ func TestEntityHooksBlockRemovalAndAbortFailedPublication(t *testing.T) {
 	if err := catalog.Reload(ctx); !errors.Is(err, kernel.ErrRuntimeTransitionBlocked) {
 		t.Fatalf("site deletion=%v", err)
 	}
-	repository.items = []site.Site{{ID: 1, ProfileCode: "with", Domain: "hooks.test", Locale: "en-US"}}
+	repository.items = []site.Site{{Name: "Test site", ID: 1, ProfileCode: "with", Domain: "hooks.test", Locale: "en-US"}}
 	// A later transport preparation failure must also release our drain.
 	fail := false
 	if err := catalog.AddRuntimePreparer(ctx, func(context.Context, site.RuntimePlan) (site.RuntimePreparation, error) {

@@ -85,7 +85,7 @@ func TestManagementHTTPListSiteOptionsAndErrors(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			repository := &managementSiteRepository{page: site.Page{
-				Items: []site.Site{{ID: 1, Domain: "example.com", ProfileCode: "dev", Locale: "ru-RU"}},
+				Items: []site.Site{{Name: "Test site", ID: 1, Domain: "example.com", ProfileCode: "dev", Locale: "ru-RU"}},
 				Total: 1,
 			}, err: test.repositoryError}
 			management := &Sites{
@@ -104,6 +104,15 @@ func TestManagementHTTPListSiteOptionsAndErrors(t *testing.T) {
 
 			if response.Code != test.wantStatus {
 				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+			}
+			if test.wantStatus == http.StatusOK {
+				var payload SiteOptions
+				if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+					t.Fatal(err)
+				}
+				if len(payload.Items) != 1 || payload.Items[0].Name != "Test site" || payload.Items[0].Domain != "example.com" {
+					t.Fatalf("site options = %#v", payload.Items)
+				}
 			}
 			if test.wantExcludeID > 0 && (repository.query.ExcludeID == nil || *repository.query.ExcludeID != test.wantExcludeID) {
 				t.Fatalf("exclude id = %#v", repository.query.ExcludeID)
@@ -354,7 +363,8 @@ func contentHTTPWidgetFixture(t *testing.T) (*Resources, *extensionTestResources
 		t.Fatal(err)
 	}
 	siteRuntime, err := site.NewRuntimeFromBlueprint(context.Background(), site.Site{
-		ID: 7, ProfileCode: profile.Code, Domain: "example.com", Locale: "ru-RU", Settings: map[string]any{},
+		Name: "Test site",
+		ID:   7, ProfileCode: profile.Code, Domain: "example.com", Locale: "ru-RU", Settings: map[string]any{},
 	}, blueprint)
 	if err != nil {
 		t.Fatal(err)

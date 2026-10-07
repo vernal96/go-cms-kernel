@@ -18,7 +18,7 @@ import (
 )
 
 const siteColumns = `
-    id, profile_code, domain, locale, settings, is_public,
+    id, profile_code, name, domain, locale, settings, is_public,
     created_at, updated_at, created_by, updated_by, runtime_version`
 
 type Repository struct {
@@ -90,7 +90,7 @@ func (r *Repository) ListPage(ctx context.Context, query site.ListQuery) (site.P
 	err := r.connector.Pool().QueryRow(ctx, `
 SELECT count(*)
 FROM core.sites
-WHERE ($1 = '' OR domain ILIKE '%' || $1 || '%')
+WHERE ($1 = '' OR name ILIKE '%' || $1 || '%' OR domain ILIKE '%' || $1 || '%')
   AND ($2 OR id = ANY($3::bigint[]))
   AND ($4::bigint IS NULL OR id <> $4);`, search, query.Scope.All, allowed, excluded).Scan(&total)
 	if err != nil {
@@ -99,7 +99,7 @@ WHERE ($1 = '' OR domain ILIKE '%' || $1 || '%')
 
 	rows, err := r.connector.Pool().Query(ctx, `SELECT `+siteColumns+`
 FROM core.sites
-WHERE ($1 = '' OR domain ILIKE '%' || $1 || '%')
+WHERE ($1 = '' OR name ILIKE '%' || $1 || '%' OR domain ILIKE '%' || $1 || '%')
   AND ($2 OR id = ANY($3::bigint[]))
   AND ($4::bigint IS NULL OR id <> $4)
 ORDER BY id
@@ -155,7 +155,7 @@ WHERE $1 OR id = ANY($2::bigint[]);`, query.Scope.All, allowed).Scan(
 	rows, err := r.connector.Pool().Query(ctx, `SELECT `+siteColumns+`
 FROM core.sites
 WHERE $1 OR id = ANY($2::bigint[])
-ORDER BY domain, id
+ORDER BY name, id
 LIMIT $3;`, query.Scope.All, allowed, query.Limit)
 	if err != nil {
 		return site.Statistics{}, fmt.Errorf("query core site statistics: %w", err)
@@ -186,10 +186,11 @@ func (r *Repository) Create(
 	defer func() { _ = tx.Rollback(ctx) }()
 	result, err := scanOne(tx.QueryRow(ctx, `
 INSERT INTO core.sites
-    (profile_code, domain, locale, settings, is_public, created_by, updated_by)
-VALUES ($1, $2, $3, $4::jsonb, $5, $6, $6)
+    (profile_code, name, domain, locale, settings, is_public, created_by, updated_by)
+VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $7)
 RETURNING `+siteColumns+`;`,
 		item.ProfileCode,
+		item.Name,
 		item.Domain,
 		item.Locale,
 		rawSettings,
@@ -231,12 +232,13 @@ func (r *Repository) Update(
 	defer func() { _ = tx.Rollback(ctx) }()
 	result, err := scanOne(tx.QueryRow(ctx, `
 UPDATE core.sites
-SET profile_code = $2, domain = $3, locale = $4, settings = $5::jsonb,
-    is_public = $6, updated_at = now(), updated_by = $7, runtime_version = runtime_version + 1
-WHERE id = $1 AND runtime_version = $8
+SET profile_code = $2, name = $3, domain = $4, locale = $5, settings = $6::jsonb,
+    is_public = $7, updated_at = now(), updated_by = $8, runtime_version = runtime_version + 1
+WHERE id = $1 AND runtime_version = $9
 RETURNING `+siteColumns+`;`,
 		item.ID,
 		item.ProfileCode,
+		item.Name,
 		item.Domain,
 		item.Locale,
 		rawSettings,
@@ -313,6 +315,7 @@ func scanOne(row rowScanner) (site.Site, error) {
 	if err := row.Scan(
 		&item.ID,
 		&item.ProfileCode,
+		&item.Name,
 		&item.Domain,
 		&item.Locale,
 		&rawSettings,

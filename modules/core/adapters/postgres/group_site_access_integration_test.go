@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	connectorpostgres "github.com/vernal96/go-cms-kernel/connectors/postgres"
 	"github.com/vernal96/go-cms-kernel"
+	connectorpostgres "github.com/vernal96/go-cms-kernel/connectors/postgres"
 	"github.com/vernal96/go-cms-kernel/migrations"
 	"github.com/vernal96/go-cms-kernel/modules/core/group"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
@@ -71,14 +71,14 @@ DELETE FROM core.sites WHERE domain IN ('site-access-one.test', 'site-access-two
 
 	var siteOne, siteTwo site.ID
 	if err := connector.Pool().QueryRow(ctx, `
-INSERT INTO core.sites (profile_code, domain, locale, settings)
-VALUES ('dev', 'site-access-one.test', 'ru-RU', '{}') RETURNING id;
+INSERT INTO core.sites (profile_code, name, domain, locale, settings)
+VALUES ('dev', 'Test site', 'site-access-one.test', 'ru-RU', '{}') RETURNING id;
 `).Scan(&siteOne); err != nil {
 		t.Fatal(err)
 	}
 	if err := connector.Pool().QueryRow(ctx, `
-INSERT INTO core.sites (profile_code, domain, locale, settings)
-VALUES ('dev', 'site-access-two.test', 'ru-RU', '{}') RETURNING id;
+INSERT INTO core.sites (profile_code, name, domain, locale, settings)
+VALUES ('dev', 'Test site', 'site-access-two.test', 'ru-RU', '{}') RETURNING id;
 `).Scan(&siteTwo); err != nil {
 		t.Fatal(err)
 	}

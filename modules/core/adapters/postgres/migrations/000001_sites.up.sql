@@ -2,6 +2,7 @@ CREATE TABLE core.sites
 (
     id           BIGSERIAL PRIMARY KEY,
     profile_code TEXT        NOT NULL CHECK (btrim(profile_code) <> ''),
+    name         TEXT        NOT NULL CHECK (btrim(name) <> '' AND name = btrim(name)),
     domain       TEXT        NOT NULL CHECK (
         btrim(domain) <> ''
             AND domain = btrim(domain)

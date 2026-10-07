@@ -22,7 +22,7 @@ func TestPostgresMultipleFields(t *testing.T) {
 			conn, db, ctx := openOutboxIntegrationDatabase(t)
 			suffix := fmt.Sprint(time.Now().UnixNano())
 			var sid site.ID
-			if err := conn.Pool().QueryRow(ctx, `INSERT INTO core.sites(profile_code,domain) VALUES('dev',$1) RETURNING id`, suffix+".test").Scan(&sid); err != nil {
+			if err := conn.Pool().QueryRow(ctx, `INSERT INTO core.sites(profile_code,name,domain) VALUES('dev','Test site',$1) RETURNING id`, suffix+".test").Scan(&sid); err != nil {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() {

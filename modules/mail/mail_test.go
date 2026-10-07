@@ -82,7 +82,7 @@ func (f *testFiles) Open(_ context.Context, _ security.Actor, id file.ID) (file.
 func testRenderer(t *testing.T, policy SenderPolicy) (*Renderer, *testFiles) {
 	t.Helper()
 	files := &testFiles{items: map[file.ID]file.File{7: {ID: 7, Name: "invoice.pdf", MIMEType: "application/pdf", Size: 3, ChecksumSHA256: "abc"}}, body: map[file.ID]string{7: "pdf"}, urls: map[file.ID]string{7: "https://example.com/files/7"}}
-	renderer, err := NewRenderer(standardFields(), files, site.Site{ID: 5, ProfileCode: "test", Domain: "example.com", Locale: "ru-RU"}, nil, RendererConfig{SenderPolicy: policy})
+	renderer, err := NewRenderer(standardFields(), files, site.Site{Name: "Test site", ID: 5, ProfileCode: "test", Domain: "example.com", Locale: "ru-RU"}, nil, RendererConfig{SenderPolicy: policy})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestRendererPreservesRequiredFieldsAndUsesPrivateSiteVariables(t *testing.T
 	required := true
 	params := []field.Definition{{Key: "company", Type: field.TypeString, Label: "Company"}}
 	files := &testFiles{items: map[file.ID]file.File{}, urls: map[file.ID]string{}}
-	renderer, err := NewRenderer(standardFields(), files, site.Site{ID: 5, ProfileCode: "dev", Domain: "example.com", Locale: "ru-RU", IsPublic: true, Settings: map[string]any{"company": "ACME"}}, params, RendererConfig{})
+	renderer, err := NewRenderer(standardFields(), files, site.Site{Name: "Test site", ID: 5, ProfileCode: "dev", Domain: "example.com", Locale: "ru-RU", IsPublic: true, Settings: map[string]any{"company": "ACME"}}, params, RendererConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestRendererPreservesRequiredFieldsAndUsesPrivateSiteVariables(t *testing.T
 	if !found {
 		t.Fatal("private mail parameter missing from metadata")
 	}
-	template.Subject = "{{site.id}} {{site.profile_code}} {{site.domain}} {{site.locale}} {{site.is_public}} {{site.field.company}} {{data.name}}"
+	template.Subject = "{{site.id}} {{site.profile_code}} {{site.name}} {{site.domain}} {{site.locale}} {{site.is_public}} {{site.field.company}} {{data.name}}"
 	template.HTMLBody = "<p>Body</p>"
 	template.Variables = []field.Definition{{Key: "name", Type: field.TypeString, Label: "Name", Required: required}}
 	if _, err := renderer.Render(context.Background(), template, nil, security.User(9)); !errors.Is(err, ErrInvalid) {
@@ -252,7 +252,7 @@ func TestRendererPreservesRequiredFieldsAndUsesPrivateSiteVariables(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Subject != "5 dev example.com ru-RU true ACME Alice" {
+	if result.Subject != "5 dev Test site example.com ru-RU true ACME Alice" {
 		t.Fatalf("site variables = %q", result.Subject)
 	}
 	if _, err := renderer.Render(context.Background(), template, map[string]any{
@@ -290,7 +290,7 @@ func TestAttachmentAuthorizationDistinguishesEditingManualAndTrustedSiteSources(
 	t.Parallel()
 	files := &testFiles{items: map[file.ID]file.File{7: {ID: 7, Name: "contract.pdf", MIMEType: "application/pdf", Size: 3}}, body: map[file.ID]string{7: "pdf"}, urls: map[file.ID]string{}, denyUsers: true}
 	params := []field.Definition{{Key: "contract", Type: field.TypeFile, Label: "Contract", Options: field.FileOptions{}}}
-	renderer, err := NewRenderer(standardFields(), files, site.Site{ID: 5, ProfileCode: "dev", Domain: "example.com", Locale: "ru-RU", Settings: map[string]any{"contract": int64(7)}}, params, RendererConfig{})
+	renderer, err := NewRenderer(standardFields(), files, site.Site{Name: "Test site", ID: 5, ProfileCode: "dev", Domain: "example.com", Locale: "ru-RU", Settings: map[string]any{"contract": int64(7)}}, params, RendererConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}

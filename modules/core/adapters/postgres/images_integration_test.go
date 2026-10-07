@@ -18,7 +18,7 @@ func TestPostgresImageDeletionImpactCascadeAndFields(t *testing.T) {
 	files := db.Files()
 	cascade := files.(file.CascadeRepository)
 	var siteID, ownerID, userID, itemID int64
-	if err := conn.Pool().QueryRow(ctx, `INSERT INTO core.sites(profile_code,domain) VALUES('dev',$1) RETURNING id`, "images-"+suffix+".test").Scan(&siteID); err != nil {
+	if err := conn.Pool().QueryRow(ctx, `INSERT INTO core.sites(profile_code,name,domain) VALUES('dev','Test site',$1) RETURNING id`, "images-"+suffix+".test").Scan(&siteID); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {

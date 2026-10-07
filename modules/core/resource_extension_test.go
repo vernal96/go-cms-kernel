@@ -34,13 +34,13 @@ func TestPublicResourceExtensionsAreOptionalAndFailureIsIsolated(t *testing.T) {
 	}
 	item := resource.Resource{ID: 9}
 	if result := handler.publicExtensions(
-		context.Background(), site.Site{ID: 7}, nil, item, false,
+		context.Background(), site.Site{Name: "Test site", ID: 7}, nil, item, false,
 	); result != nil {
 		t.Fatalf("extensions without providers = %#v", result)
 	}
 	result := handler.publicExtensions(
 		context.Background(),
-		site.Site{ID: 7},
+		site.Site{Name: "Test site", ID: 7},
 		[]kernel.ModuleRuntime{
 			publicExtensionRuntime{err: errors.New("provider failed")},
 			publicExtensionRuntime{code: "seo", data: map[string]any{"title": "Page"}},

@@ -27,6 +27,7 @@ func (v TemplateVariables) Metadata() []TemplateVariable {
 	result := []TemplateVariable{
 		{Variable: "site.id", Label: "ID сайта", Type: field.TypeInteger, Source: TemplateVariableSource},
 		{Variable: "site.profile_code", Label: "Профиль сайта", Type: field.TypeString, Source: TemplateVariableSource},
+		{Variable: "site.name", Label: "Название сайта", Type: field.TypeString, Source: TemplateVariableSource},
 		{Variable: "site.domain", Label: "Домен сайта", Type: field.TypeString, Source: TemplateVariableSource},
 		{Variable: "site.locale", Label: "Локаль сайта", Type: field.TypeString, Source: TemplateVariableSource},
 		{Variable: "site.is_public", Label: "Сайт опубликован", Type: field.TypeCheckbox, Source: TemplateVariableSource},
@@ -38,7 +39,7 @@ func (v TemplateVariables) Metadata() []TemplateVariable {
 }
 
 func (v TemplateVariables) Allowed() map[string]struct{} {
-	result := make(map[string]struct{}, len(v.params)+5)
+	result := make(map[string]struct{}, len(v.params)+6)
 	for _, item := range v.Metadata() {
 		result[item.Variable] = struct{}{}
 	}
@@ -65,6 +66,8 @@ func (v TemplateVariables) Value(variable string) (any, bool) {
 		return int64(v.item.ID), v.item.ID > 0
 	case "site.profile_code":
 		return string(v.item.ProfileCode), v.item.ProfileCode != ""
+	case "site.name":
+		return v.item.Name, v.item.Name != ""
 	case "site.domain":
 		return v.item.Domain, v.item.Domain != ""
 	case "site.locale":

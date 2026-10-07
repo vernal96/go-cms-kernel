@@ -13,11 +13,12 @@ import (
 )
 
 type LibrarySource struct {
-	ID     resource.ID `json:"id"`
-	SiteID site.ID     `json:"site_id"`
-	Domain string      `json:"domain"`
-	Title  string      `json:"title"`
-	Path   *string     `json:"path"`
+	ID       resource.ID `json:"id"`
+	SiteID   site.ID     `json:"site_id"`
+	SiteName string      `json:"site_name"`
+	Domain   string      `json:"domain"`
+	Title    string      `json:"title"`
+	Path     *string     `json:"path"`
 }
 
 func (m *Resources) checkLibrarySource(ctx context.Context, actor security.Actor, settings map[string]any) error {
@@ -97,7 +98,7 @@ func (h *contentHTTP) librarySources(response http.ResponseWriter, request *http
 		if search != "" && !strings.Contains(strings.ToLower(item.Title), search) && (item.Path == nil || !strings.Contains(strings.ToLower(*item.Path), search)) {
 			continue
 		}
-		options = append(options, LibrarySource{ID: item.ID, SiteID: item.SiteID, Domain: runtime.Site().Domain, Title: item.Title, Path: item.Path})
+		options = append(options, LibrarySource{ID: item.ID, SiteID: item.SiteID, SiteName: runtime.Site().Name, Domain: runtime.Site().Domain, Title: item.Title, Path: item.Path})
 	}
 	page, perPage, ok := parsePagination(response, request)
 	if !ok {

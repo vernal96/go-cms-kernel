@@ -44,7 +44,7 @@ func TestRendererSubstitutesEveryVariableAndStripsHTML(t *testing.T) {
 		RobotsFollow:        true,
 	}, RenderInput{
 		Site: site.Site{
-			Domain: "example.com", Locale: "ru-RU",
+			Name: "Test site", Domain: "example.com", Locale: "ru-RU",
 			Settings: map[string]any{"site_name": "<b>Компания</b>"},
 		},
 		Resource: resource.Resource{
@@ -130,11 +130,11 @@ func TestRendererExcludesFileFieldsButKeepsScalarFields(t *testing.T) {
 			}
 		}
 	}
-	result, err := renderer.Render(Settings{TitleTemplate: "{{ site.field.company }} {{ resource.field.summary }}"}, RenderInput{
-		Site:     site.Site{Settings: map[string]any{"company": "Acme", "logo": int64(42)}},
+	result, err := renderer.Render(Settings{TitleTemplate: "{{ site.name }} {{ site.field.company }} {{ resource.field.summary }}"}, RenderInput{
+		Site:     site.Site{Name: "Test site", Settings: map[string]any{"company": "Acme", "logo": int64(42)}},
 		Resource: resource.Resource{Fields: map[string]any{"summary": "About", "hero": int64(43)}},
 	})
-	if err != nil || result.Title != "Acme About" {
+	if err != nil || result.Title != "Test site Acme About" {
 		t.Fatalf("scalar rendering = %#v, %v", result, err)
 	}
 }
@@ -229,7 +229,7 @@ func TestPrivateSiteParametersCannotAppearInSEO(t *testing.T) {
 			t.Fatal("private variable advertised")
 		}
 	}
-	_, err = renderer.Render(Settings{TitleTemplate: "{{site.field.secret}}"}, RenderInput{Site: site.Site{Settings: map[string]any{"secret": "never public"}}})
+	_, err = renderer.Render(Settings{TitleTemplate: "{{site.field.secret}}"}, RenderInput{Site: site.Site{Name: "Test site", Settings: map[string]any{"secret": "never public"}}})
 	if err == nil {
 		t.Fatal("private variable rendered")
 	}

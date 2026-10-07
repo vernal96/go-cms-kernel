@@ -107,7 +107,7 @@ func TestRuntimeEditorAndPublicContracts(t *testing.T) {
 	}
 	request := resourceextension.Request{
 		Actor: security.User(1),
-		Site:  site.Site{ID: 7, Domain: "example.com"},
+		Site:  site.Site{Name: "Test site", ID: 7, Domain: "example.com"},
 		Resource: resource.Resource{
 			ID: 9, SiteID: 7, Type: resourcetype.Page,
 			Title: "Контакты", Annotation: "Напишите нам",

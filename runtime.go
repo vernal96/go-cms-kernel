@@ -85,6 +85,7 @@ type RuntimeTransitionParticipant interface {
 type RuntimeScope struct {
 	siteID      string
 	profileCode ProfileCode
+	name        string
 	domain      string
 	locale      string
 	isPublic    bool
@@ -94,12 +95,13 @@ type RuntimeScope struct {
 func NewSiteRuntimeScope(
 	siteID string,
 	profileCode ProfileCode,
+	name string,
 	domain string,
 	locale string,
 	isPublic bool,
 	settings map[string]any,
 ) RuntimeScope {
-	return RuntimeScope{siteID: siteID, profileCode: profileCode, domain: domain, locale: locale, isPublic: isPublic, settings: cloneRuntimeSettings(settings)}
+	return RuntimeScope{siteID: siteID, profileCode: profileCode, name: name, domain: domain, locale: locale, isPublic: isPublic, settings: cloneRuntimeSettings(settings)}
 }
 
 func NewRuntimeScope(
@@ -120,6 +122,8 @@ func (s RuntimeScope) SiteID() string { return s.siteID }
 
 func (s RuntimeScope) ProfileCode() ProfileCode { return s.profileCode }
 
+func (s RuntimeScope) Name() string { return s.name }
+
 func (s RuntimeScope) Domain() string { return s.domain }
 
 func (s RuntimeScope) Locale() string { return s.locale }
@@ -131,7 +135,7 @@ func (s RuntimeScope) Settings() map[string]any {
 }
 
 func (s RuntimeScope) clone() RuntimeScope {
-	return NewSiteRuntimeScope(s.siteID, s.profileCode, s.domain, s.locale, s.isPublic, s.settings)
+	return NewSiteRuntimeScope(s.siteID, s.profileCode, s.name, s.domain, s.locale, s.isPublic, s.settings)
 }
 
 func cloneRuntimeSettings(source map[string]any) map[string]any {

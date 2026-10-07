@@ -66,7 +66,7 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 	actor := security.System()
 	createSite := func(suffix string) *site.Runtime {
 		t.Helper()
-		runtime, err := application.Sites().Create(ctx, actor, site.CreateInput{ProfileCode: profile, Domain: fmt.Sprintf("cache-%d-%s.example", time.Now().UnixNano(), suffix), Locale: "en", IsPublic: true})
+		runtime, err := application.Sites().Create(ctx, actor, site.CreateInput{Name: "Test site", ProfileCode: profile, Domain: fmt.Sprintf("cache-%d-%s.example", time.Now().UnixNano(), suffix), Locale: "en", IsPublic: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -83,7 +83,7 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 	}
 	oldRuntime, _ := replica.Sites().RuntimeByID(first.Site().ID)
 	siteState := first.Site()
-	closed, err := application.Sites().Update(ctx, actor, site.UpdateInput{ID: siteState.ID, ProfileCode: siteState.ProfileCode, Domain: siteState.Domain, Locale: siteState.Locale, Settings: siteState.Settings, IsPublic: false})
+	closed, err := application.Sites().Update(ctx, actor, site.UpdateInput{Name: "Test site", ID: siteState.ID, ProfileCode: siteState.ProfileCode, Domain: siteState.Domain, Locale: siteState.Locale, Settings: siteState.Settings, IsPublic: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 	if err := replica.Sites().CheckCurrent(ctx, refreshed); err != nil {
 		t.Fatal(err)
 	}
-	first, err = application.Sites().Update(ctx, actor, site.UpdateInput{ID: siteState.ID, ProfileCode: siteState.ProfileCode, Domain: siteState.Domain, Locale: siteState.Locale, Settings: siteState.Settings, IsPublic: true})
+	first, err = application.Sites().Update(ctx, actor, site.UpdateInput{Name: "Test site", ID: siteState.ID, ProfileCode: siteState.ProfileCode, Domain: siteState.Domain, Locale: siteState.Locale, Settings: siteState.Settings, IsPublic: true})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -105,8 +105,8 @@ func TestManagementDashboardCollectsScopedStatistics(t *testing.T) {
 	t.Parallel()
 	sites := &dashboardSiteRepository{statistics: site.Statistics{
 		Items: []site.Site{
-			{ID: 7, Domain: "alpha.test", IsPublic: true},
-			{ID: 8, Domain: "beta.test", IsPublic: false},
+			{ID: 7, Name: "Альфа", Domain: "alpha.test", IsPublic: true},
+			{ID: 8, Name: "Бета", Domain: "beta.test", IsPublic: false},
 		},
 		Total:   3,
 		Public:  1,
@@ -145,6 +145,7 @@ func TestManagementDashboardCollectsScopedStatistics(t *testing.T) {
 	}
 	if result.Sites == nil || result.Sites.Total != 3 || result.Sites.Public != 1 ||
 		result.Sites.Private != 2 || len(result.Sites.Items) != 2 ||
+		result.Sites.Items[0].Name != "Альфа" || result.Sites.Items[1].Name != "Бета" ||
 		result.Sites.Items[0].ResourceCount == nil ||
 		*result.Sites.Items[0].ResourceCount != 4 ||
 		result.Sites.Items[1].ResourceCount == nil ||
@@ -212,7 +213,7 @@ func TestManagementHTTPDashboardOmitsForbiddenSections(t *testing.T) {
 	t.Parallel()
 	management := &Management{
 		repository: &dashboardSiteRepository{statistics: site.Statistics{
-			Items:   []site.Site{{ID: 1, Domain: "example.test", IsPublic: true}},
+			Items:   []site.Site{{Name: "Test site", ID: 1, Domain: "example.test", IsPublic: true}},
 			Total:   1,
 			Public:  1,
 			Private: 0,
@@ -301,7 +302,7 @@ func TestDashboardRunsIndependentBranchesAndPreservesDependency(t *testing.T) {
 			}
 		}
 	}
-	sites := &dashboardSiteRepository{statistics: site.Statistics{Items: []site.Site{{ID: 7}}}, run: func(ctx context.Context) error {
+	sites := &dashboardSiteRepository{statistics: site.Statistics{Items: []site.Site{{Name: "Test site", ID: 7}}}, run: func(ctx context.Context) error {
 		if err := wait("sites")(ctx); err != nil {
 			return err
 		}

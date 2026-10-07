@@ -369,7 +369,8 @@ func extensionManagement(
 		t.Fatal(err)
 	}
 	siteRuntime, err := site.NewRuntimeFromBlueprint(context.Background(), site.Site{
-		ID: 7, ProfileCode: "test", Domain: "example.com", Locale: "ru-RU",
+		Name: "Test site",
+		ID:   7, ProfileCode: "test", Domain: "example.com", Locale: "ru-RU",
 		Settings: map[string]any{},
 	}, blueprint)
 	if err != nil {
@@ -455,7 +456,8 @@ func TestResourceMetadataDescribesTemplateSlotsAndProfileWidgets(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime, err := site.NewRuntimeFromBlueprint(context.Background(), site.Site{
-		ID: 7, ProfileCode: profile.Code, Domain: "example.com", Locale: "ru-RU", Settings: map[string]any{},
+		Name: "Test site",
+		ID:   7, ProfileCode: profile.Code, Domain: "example.com", Locale: "ru-RU", Settings: map[string]any{},
 	}, blueprint)
 	if err != nil {
 		t.Fatal(err)

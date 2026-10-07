@@ -81,7 +81,7 @@ func TestPostgresAllowedSingleQueryAndFreshPolicy(t *testing.T) {
 	t.Cleanup(func() { _, _ = conn.Pool().Exec(context.Background(), `DELETE FROM core.users WHERE id=$1`, uid) })
 	var siteOne, siteTwo site.ID
 	for i, target := range []*site.ID{&siteOne, &siteTwo} {
-		if err := conn.Pool().QueryRow(ctx, `INSERT INTO core.sites(profile_code,domain) VALUES('dev',$1) RETURNING id`, fmt.Sprintf("batch-%s-%d.test", suffix, i)).Scan(target); err != nil {
+		if err := conn.Pool().QueryRow(ctx, `INSERT INTO core.sites(profile_code,name,domain) VALUES('dev','Test site',$1) RETURNING id`, fmt.Sprintf("batch-%s-%d.test", suffix, i)).Scan(target); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -174,7 +174,7 @@ func TestPostgresAllowedSingleQueryAndFreshPolicy(t *testing.T) {
 func TestPostgresLibraryPageIncludesVersionsWithoutExtraQuery(t *testing.T) {
 	conn, db, ctx := openOutboxIntegrationDatabase(t)
 	var sid site.ID
-	if err := conn.Pool().QueryRow(ctx, `INSERT INTO core.sites(profile_code,domain) VALUES('dev',$1) RETURNING id`, fmt.Sprintf("versions-%d.test", time.Now().UnixNano())).Scan(&sid); err != nil {
+	if err := conn.Pool().QueryRow(ctx, `INSERT INTO core.sites(profile_code,name,domain) VALUES('dev','Test site',$1) RETURNING id`, fmt.Sprintf("versions-%d.test", time.Now().UnixNano())).Scan(&sid); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Sites().(site.ManagementRepository).Delete(context.Background(), sid) })

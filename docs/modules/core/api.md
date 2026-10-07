@@ -20,14 +20,16 @@
 
 | Маршруты | Параметры |
 | --- | --- |
-| `GET /api/sites` | Query: `search`, `page`, `per_page`; pagination defaults: `1` и `10`, `per_page` максимум `100`. |
-| `GET /api/sites/options` | Те же параметры плюс необязательный `exclude_id` — положительный ID сайта, исключаемого из вариантов. |
+| `GET /api/sites` | Query: `search` (по названию или домену), `page`, `per_page`; pagination defaults: `1` и `10`, `per_page` максимум `100`. Элементы содержат `name` и `domain`. |
+| `GET /api/sites/options` | Те же параметры плюс необязательный `exclude_id` — положительный ID сайта, исключаемого из вариантов. Элементы содержат `id`, `name`, `domain`. |
 | `GET /api/site-profiles` | Параметров нет. |
-| `POST /api/sites` | JSON: `profile_code`, `domain`, `locale`, `settings` (объект, может быть пустым), `is_public` (boolean). |
+| `POST /api/sites` | JSON: `profile_code`, обязательное непустое `name`, `domain`, `locale`, `settings` (объект, может быть пустым), `is_public` (boolean). Пробелы по краям названия удаляются. |
 | `GET /api/sites/{siteID}`, `DELETE /api/sites/{siteID}` | `{siteID}` — положительный ID; body/query нет. |
-| `PATCH /api/sites/{siteID}` | JSON: `profile_code`, `domain`, `locale`, `settings` (обязательно объект), `is_public` (обязательный boolean). Обновление задаёт состояние сайта целиком. |
+| `PATCH /api/sites/{siteID}` | JSON: `profile_code`, обязательное непустое `name`, `domain`, `locale`, `settings` (обязательно объект), `is_public` (обязательный boolean). Обновление задаёт состояние сайта целиком. |
 
 Пример запроса списка: `GET /api/sites?search=example&page=1&per_page=20`.
+
+Название сайта доступно в шаблонах как встроенная переменная `site.name`; параметры профиля остаются отдельными переменными `site.field.*`.
 
 ### Ресурсы и дерево
 
@@ -142,7 +144,7 @@ Metadata типа включает `capabilities.mirrors_library_items: true`,
 `GET /api/sites/{siteID}/resources/library-sources` — выбор источника в админке.
 Параметры: `source_site_id`, `search`, `page`, `per_page` (стандартная пагинация).
 Для восстановления сохранённого выбора используется `selected_id` вместо
-`source_site_id`. Ответ: `items: [{id, site_id, domain, title, path}]`,
+`source_site_id`. Ответ: `items: [{id, site_id, site_name, domain, title, path}]`,
 `pagination: {page, per_page, total}`. В список входят только неудалённые библиотеки.
 Требуются чтение ресурсов и доступ редактирования принимающего сайта, а также
 доступ просмотра сайта-источника. Создание, смена источника и восстановление

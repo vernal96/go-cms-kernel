@@ -260,6 +260,7 @@ func (c *Catalog) Create(
 	candidate, fileReferences, err := normalizeRuntimeSite(Site{
 		ID:          1,
 		ProfileCode: input.ProfileCode,
+		Name:        input.Name,
 		Domain:      input.Domain,
 		Locale:      input.Locale,
 		Settings:    cloneSettings(input.Settings),
@@ -386,6 +387,7 @@ func (c *Catalog) Update(
 	}
 	item := current.Site()
 	item.ProfileCode = input.ProfileCode
+	item.Name = input.Name
 	item.Domain = input.Domain
 	item.Locale = strings.TrimSpace(input.Locale)
 	item.Settings = cloneSettings(input.Settings)

@@ -41,7 +41,7 @@ func (r navigationPublicationRuntime) AdminNavigation() []adminui.NavigationItem
 }
 func navigationPublicationApp(t *testing.T, mode string) (*appkernel.App, *publicationSiteRepository) {
 	t.Helper()
-	repository := &publicationSiteRepository{items: []site.Site{{ID: 1, ProfileCode: "dev", Domain: "first.test", Locale: "en-US", IsPublic: true, Settings: map[string]any{"mode": mode}}}}
+	repository := &publicationSiteRepository{items: []site.Site{{Name: "Test site", ID: 1, ProfileCode: "dev", Domain: "first.test", Locale: "en-US", IsPublic: true, Settings: map[string]any{"mode": mode}}}}
 	a, err := appkernel.New(context.Background(), appkernel.Definition{
 		Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{},
 		MainDatabase: appkernel.DatabaseDefinition{Connector: connectorFactory{}, Adapters: []kernel.ModuleDatabaseFactory{databaseFactory{sites: repository}}},
@@ -66,7 +66,7 @@ func TestNavigationCollisionsFailBootAndPreservePublishedRuntime(t *testing.T) {
 				t.Fatal(err)
 			}
 			initial, _ := a.Sites().RuntimeByID(1)
-			_, err := a.Sites().Update(ctx, security.System(), site.UpdateInput{ID: 1, ProfileCode: "dev", Domain: "changed.test", Locale: "en-US", IsPublic: true, Settings: map[string]any{"mode": mode}})
+			_, err := a.Sites().Update(ctx, security.System(), site.UpdateInput{Name: "Test site", ID: 1, ProfileCode: "dev", Domain: "changed.test", Locale: "en-US", IsPublic: true, Settings: map[string]any{"mode": mode}})
 			if err == nil {
 				t.Fatal("update accepted invalid navigation")
 			}
@@ -74,7 +74,7 @@ func TestNavigationCollisionsFailBootAndPreservePublishedRuntime(t *testing.T) {
 			if current != initial || repository.updateCalls != 0 {
 				t.Fatal("failed candidate changed runtime or storage")
 			}
-			_, err = a.Sites().Create(ctx, security.System(), site.CreateInput{ProfileCode: "dev", Domain: "new.test", Locale: "en-US", IsPublic: true, Settings: map[string]any{"mode": mode}})
+			_, err = a.Sites().Create(ctx, security.System(), site.CreateInput{Name: "Test site", ProfileCode: "dev", Domain: "new.test", Locale: "en-US", IsPublic: true, Settings: map[string]any{"mode": mode}})
 			if err == nil || len(repository.items) != 1 {
 				t.Fatal("create accepted invalid navigation")
 			}

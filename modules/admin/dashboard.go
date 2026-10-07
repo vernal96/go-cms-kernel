@@ -32,6 +32,7 @@ type DashboardSites struct {
 
 type DashboardSite struct {
 	ID            site.ID `json:"id"`
+	Name          string  `json:"name"`
 	Domain        string  `json:"domain"`
 	IsPublic      bool    `json:"is_public"`
 	ResourceCount *int    `json:"resource_count,omitempty"`
@@ -107,6 +108,7 @@ func (m *Management) Dashboard(
 				for index, item := range statistics.Items {
 					items[index] = DashboardSite{
 						ID:       item.ID,
+						Name:     item.Name,
 						Domain:   item.Domain,
 						IsPublic: item.IsPublic,
 					}

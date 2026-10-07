@@ -1005,6 +1005,7 @@ func newTestService(
 	sites := make(testSites)
 	for _, siteID := range []site.ID{1, 2} {
 		runtime, err := site.NewRuntimeFromBlueprint(context.Background(), site.Site{
+			Name:        "Test site",
 			ID:          siteID,
 			ProfileCode: "test",
 			Domain:      fmt.Sprintf("site-%d.example.com", siteID),

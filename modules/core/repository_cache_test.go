@@ -22,6 +22,7 @@ func TestCachedSiteRepositoryUsesCacheAndInvalidatesUpdate(t *testing.T) {
 	store := newMemoryCacheStore()
 	base := &siteRepositoryStub{
 		items: []site.Site{{
+			Name:        "Test site",
 			ID:          1,
 			ProfileCode: "dev",
 			Domain:      "example.test",
@@ -80,7 +81,7 @@ func TestCachedSiteRepositoryUsesCacheAndInvalidatesUpdate(t *testing.T) {
 	created, err := repository.Create(
 		context.Background(),
 		nil,
-		site.Site{ID: 2, Domain: "created.example.test"},
+		site.Site{Name: "Test site", ID: 2, Domain: "created.example.test"},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +111,7 @@ func TestCachedRepositoriesFailOpen(t *testing.T) {
 	store.setErr = errors.New("redis unavailable")
 	store.invalidateErr = errors.New("redis unavailable")
 	base := &siteRepositoryStub{
-		items: []site.Site{{ID: 1, Settings: map[string]any{}}},
+		items: []site.Site{{Name: "Test site", ID: 1, Settings: map[string]any{}}},
 	}
 	policy := newTestRepositoryCachePolicy(store)
 	repository := &cachedSiteRepository{
@@ -148,7 +149,7 @@ func TestCachedSiteRepositoryDoesNotInvalidateFailedMutation(t *testing.T) {
 	if _, err := repository.Update(
 		context.Background(),
 		nil,
-		site.Site{ID: 1},
+		site.Site{Name: "Test site", ID: 1},
 	); !errors.Is(err, updateErr) {
 		t.Fatalf("update error = %v", err)
 	}

@@ -42,7 +42,7 @@ func TestPostgresWidgetParamBindingsLifecycle(t *testing.T) {
 	sites := hookTestSites{}
 	siteIDs := []site.ID{}
 	for i := 0; i < 2; i++ {
-		stored, err := database.Sites().(site.ManagementRepository).Create(ctx, nil, site.Site{ProfileCode: "bindings", Domain: fmt.Sprintf("bindings-%d-%d.example", time.Now().UnixNano(), i), Locale: "ru-RU", Settings: map[string]any{}})
+		stored, err := database.Sites().(site.ManagementRepository).Create(ctx, nil, site.Site{Name: "Test site", ProfileCode: "bindings", Domain: fmt.Sprintf("bindings-%d-%d.example", time.Now().UnixNano(), i), Locale: "ru-RU", Settings: map[string]any{}})
 		if err != nil {
 			t.Fatal(err)
 		}

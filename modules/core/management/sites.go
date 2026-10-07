@@ -199,6 +199,7 @@ type PermissionSet struct {
 type SiteDTO struct {
 	ID           site.ID            `json:"id"`
 	ProfileCode  kernel.ProfileCode `json:"profile_code"`
+	Name         string             `json:"name"`
 	Domain       string             `json:"domain"`
 	Locale       string             `json:"locale"`
 	Settings     map[string]any     `json:"settings"`
@@ -214,6 +215,7 @@ type SiteCapabilities struct {
 
 type SiteOption struct {
 	ID     site.ID `json:"id"`
+	Name   string  `json:"name"`
 	Domain string  `json:"domain"`
 }
 
@@ -246,6 +248,7 @@ type SiteProfiles struct {
 
 type SiteCreateInput struct {
 	ProfileCode kernel.ProfileCode
+	Name        string
 	Domain      string
 	Locale      string
 	Settings    map[string]any
@@ -254,6 +257,7 @@ type SiteCreateInput struct {
 
 type SiteUpdateInput struct {
 	ProfileCode kernel.ProfileCode
+	Name        string
 	Domain      string
 	Locale      string
 	Settings    map[string]any
@@ -340,7 +344,7 @@ func (m *Sites) ListSiteOptions(
 	}
 	items := make([]SiteOption, len(result.Items))
 	for index, item := range result.Items {
-		items[index] = SiteOption{ID: item.ID, Domain: item.Domain}
+		items[index] = SiteOption{ID: item.ID, Name: item.Name, Domain: item.Domain}
 	}
 	return SiteOptions{Items: items, Pagination: Pagination{Page: page, PerPage: perPage, Total: result.Total}}, nil
 }
@@ -378,6 +382,7 @@ func (m *Sites) CreateSite(
 	}
 	runtime, err := m.sites.Create(ctx, actor, site.CreateInput{
 		ProfileCode: input.ProfileCode,
+		Name:        input.Name,
 		Domain:      input.Domain,
 		Locale:      input.Locale,
 		Settings:    input.Settings,
@@ -430,6 +435,7 @@ func (m *Sites) UpdateSite(
 	runtime, err := m.sites.Update(ctx, actor, site.UpdateInput{
 		ID:          id,
 		ProfileCode: input.ProfileCode,
+		Name:        input.Name,
 		Domain:      input.Domain,
 		Locale:      input.Locale,
 		Settings:    input.Settings,

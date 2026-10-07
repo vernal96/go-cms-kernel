@@ -78,7 +78,7 @@ func TestPostgresMediaCascadeHooksAtomicity(t *testing.T) {
 	conn, db, ctx := openOutboxIntegrationDatabase(t)
 	suffix := fmt.Sprint(time.Now().UnixNano())
 	var siteID site.ID
-	if err := conn.Pool().QueryRow(ctx, `INSERT INTO core.sites(profile_code,domain) VALUES('dev',$1) RETURNING id`, "cascade-"+suffix+".test").Scan(&siteID); err != nil {
+	if err := conn.Pool().QueryRow(ctx, `INSERT INTO core.sites(profile_code,name,domain) VALUES('dev','Test site',$1) RETURNING id`, "cascade-"+suffix+".test").Scan(&siteID); err != nil {
 		t.Fatal(err)
 	}
 	var userID user.ID

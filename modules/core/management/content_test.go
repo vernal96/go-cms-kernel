@@ -177,7 +177,7 @@ func TestManagementUsesViewForCatalogEditForOptionsAndReturnsCapabilities(t *tes
 func TestManagementListSitesAppliesDefaultsScopeAndPermissions(t *testing.T) {
 	t.Parallel()
 	repository := &managementSiteRepository{page: site.Page{
-		Items: []site.Site{{ID: 7, Domain: "example.com", ProfileCode: "dev", Locale: "ru-RU"}},
+		Items: []site.Site{{Name: "Test site", ID: 7, Domain: "example.com", ProfileCode: "dev", Locale: "ru-RU"}},
 		Total: 1,
 	}}
 	management := &Sites{

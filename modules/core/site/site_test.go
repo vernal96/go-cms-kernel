@@ -276,6 +276,7 @@ func TestResolveRequiresPermissionAndPublicGuestSite(t *testing.T) {
 	t.Parallel()
 
 	item := Site{
+		Name:        "Test site",
 		ID:          1,
 		ProfileCode: "test",
 		Domain:      "example.com",
@@ -320,6 +321,7 @@ func TestUpdateAtomicallyReplacesDomainSnapshotAndAudit(t *testing.T) {
 	t.Parallel()
 
 	catalog := newCatalogForTest(t, Site{
+		Name:        "Test site",
 		ID:          1,
 		ProfileCode: "test",
 		Domain:      "old.example.com",
@@ -330,6 +332,7 @@ func TestUpdateAtomicallyReplacesDomainSnapshotAndAudit(t *testing.T) {
 		context.Background(),
 		security.User(42),
 		UpdateInput{
+			Name:        "  Обновлённый сайт  ",
 			ID:          1,
 			ProfileCode: "test",
 			Domain:      "NEW.EXAMPLE.COM.",
@@ -341,7 +344,7 @@ func TestUpdateAtomicallyReplacesDomainSnapshotAndAudit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.Site().Domain != "new.example.com" ||
+	if updated.Site().Name != "Обновлённый сайт" || updated.Site().Domain != "new.example.com" ||
 		updated.Site().Locale != "ru-RU" ||
 		!updated.Site().IsPublic ||
 		updated.Site().UpdatedBy == nil ||
@@ -361,9 +364,11 @@ func TestUpdateAtomicallyReplacesDomainSnapshotAndAudit(t *testing.T) {
 func TestCreateAndDeleteAtomicallyUpdateSnapshot(t *testing.T) {
 	t.Parallel()
 	catalog := newCatalogForTest(t, Site{
-		ID: 1, ProfileCode: "test", Domain: "existing.test", Locale: "en-US",
+		Name: "Test site",
+		ID:   1, ProfileCode: "test", Domain: "existing.test", Locale: "en-US",
 	}, testAccess{allow: true})
 	created, err := catalog.Create(context.Background(), security.User(42), CreateInput{
+		Name:        "  Новый сайт  ",
 		ProfileCode: "test",
 		Domain:      "NEW.TEST.",
 		Locale:      "ru-RU",
@@ -372,7 +377,7 @@ func TestCreateAndDeleteAtomicallyUpdateSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.Site().ID != 2 || created.Site().Domain != "new.test" ||
+	if created.Site().ID != 2 || created.Site().Name != "Новый сайт" || created.Site().Domain != "new.test" ||
 		created.Site().CreatedBy == nil || *created.Site().CreatedBy != 42 {
 		t.Fatalf("created site = %#v", created.Site())
 	}
@@ -387,8 +392,30 @@ func TestCreateAndDeleteAtomicallyUpdateSnapshot(t *testing.T) {
 	}
 }
 
+func TestSiteNameIsRequiredOnCreateAndUpdate(t *testing.T) {
+	t.Parallel()
+	catalog := newCatalogForTest(t, Site{
+		ID: 1, ProfileCode: "test", Name: "Исходный сайт", Domain: "existing.test", Locale: "ru-RU",
+	}, testAccess{allow: true})
+	if _, err := catalog.Create(context.Background(), security.User(42), CreateInput{
+		ProfileCode: "test", Name: " \t ", Domain: "new.test", Locale: "ru-RU",
+	}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("create with empty name = %v", err)
+	}
+	if _, err := catalog.Update(context.Background(), security.User(42), UpdateInput{
+		ID: 1, ProfileCode: "test", Name: " \t ", Domain: "existing.test", Locale: "ru-RU",
+	}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("update with empty name = %v", err)
+	}
+	current, exists := catalog.RuntimeByID(1)
+	if !exists || current.Site().Name != "Исходный сайт" {
+		t.Fatalf("invalid update changed runtime: %#v, %t", current, exists)
+	}
+}
+
 func TestReloadPreparesRuntimesBeforeAtomicSnapshotPublication(t *testing.T) {
 	item := Site{
+		Name:        "Test site",
 		ID:          1,
 		ProfileCode: "test",
 		Domain:      "first.example.com",
@@ -467,6 +494,7 @@ func TestReloadPreparesRuntimesBeforeAtomicSnapshotPublication(t *testing.T) {
 	}
 
 	repository.items = []Site{{
+		Name:        "Test site",
 		ID:          2,
 		ProfileCode: "test",
 		Domain:      "second.example.com",
@@ -484,6 +512,7 @@ func TestReloadPreparesRuntimesBeforeAtomicSnapshotPublication(t *testing.T) {
 	}
 
 	repository.items = []Site{{
+		Name:        "Test site",
 		ID:          3,
 		ProfileCode: "test",
 		Domain:      "broken.example.com",
@@ -504,7 +533,7 @@ func TestReloadPreparesRuntimesBeforeAtomicSnapshotPublication(t *testing.T) {
 func TestProfileTransitionAbortsOnRepositoryFailureAndSkipsSameProfileUpdate(t *testing.T) {
 	recorder := &transitionRecorder{}
 	module := transitionModule{code: "transition", recorder: recorder}
-	repository := &memoryRepository{items: []Site{{ID: 1, ProfileCode: "first", Domain: "one.test", Locale: "en-US"}}}
+	repository := &memoryRepository{items: []Site{{Name: "Test site", ID: 1, ProfileCode: "first", Domain: "one.test", Locale: "en-US"}}}
 	catalog, err := NewCatalog(repository, testProfiles{
 		"first":  compileTransitionProfile(t, "first", module),
 		"second": compileTransitionProfile(t, "second", module),
@@ -515,14 +544,14 @@ func TestProfileTransitionAbortsOnRepositoryFailureAndSkipsSameProfileUpdate(t *
 	if err := catalog.Reload(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := catalog.Update(context.Background(), security.User(1), UpdateInput{ID: 1, ProfileCode: "first", Domain: "renamed.test", Locale: "en-US"}); err != nil {
+	if _, err := catalog.Update(context.Background(), security.User(1), UpdateInput{Name: "Test site", ID: 1, ProfileCode: "first", Domain: "renamed.test", Locale: "en-US"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(recorder.started) != 0 {
 		t.Fatalf("same-profile update started transitions: %#v", recorder.started)
 	}
 	repository.updateErr = errors.New("database failed")
-	if _, err := catalog.Update(context.Background(), security.User(1), UpdateInput{ID: 1, ProfileCode: "second", Domain: "renamed.test", Locale: "en-US"}); err == nil {
+	if _, err := catalog.Update(context.Background(), security.User(1), UpdateInput{Name: "Test site", ID: 1, ProfileCode: "second", Domain: "renamed.test", Locale: "en-US"}); err == nil {
 		t.Fatal("repository failure was ignored")
 	}
 	if len(recorder.started) != 1 || recorder.started[0].Reason != kernel.RuntimeTransitionProfileChange || recorder.aborted != 1 || recorder.committed != 0 {
@@ -533,7 +562,7 @@ func TestProfileTransitionAbortsOnRepositoryFailureAndSkipsSameProfileUpdate(t *
 		t.Fatalf("failed profile transition published %q", current.Site().ProfileCode)
 	}
 	repository.updateErr = nil
-	if _, err := catalog.Update(context.Background(), security.User(1), UpdateInput{ID: 1, ProfileCode: "second", Domain: "renamed.test", Locale: "en-US"}); err != nil {
+	if _, err := catalog.Update(context.Background(), security.User(1), UpdateInput{Name: "Test site", ID: 1, ProfileCode: "second", Domain: "renamed.test", Locale: "en-US"}); err != nil {
 		t.Fatal(err)
 	}
 	if recorder.committed != 1 || recorder.aborted != 1 {
@@ -544,7 +573,7 @@ func TestProfileTransitionAbortsOnRepositoryFailureAndSkipsSameProfileUpdate(t *
 func TestLaterTransitionParticipantFailureAbortsEarlierParticipant(t *testing.T) {
 	first := &transitionRecorder{}
 	second := &transitionRecorder{fail: errors.New("later participant failed")}
-	repository := &memoryRepository{items: []Site{{ID: 1, ProfileCode: "first", Domain: "one.test", Locale: "en-US"}}}
+	repository := &memoryRepository{items: []Site{{Name: "Test site", ID: 1, ProfileCode: "first", Domain: "one.test", Locale: "en-US"}}}
 	catalog, err := NewCatalog(repository, testProfiles{
 		"first":  compileTransitionProfile(t, "first", transitionModule{code: "first_participant", recorder: first}, transitionModule{code: "second_participant", recorder: second}),
 		"second": compileTransitionProfile(t, "second"),
@@ -555,7 +584,7 @@ func TestLaterTransitionParticipantFailureAbortsEarlierParticipant(t *testing.T)
 	if err := catalog.Reload(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := catalog.Update(context.Background(), security.User(1), UpdateInput{ID: 1, ProfileCode: "second", Domain: "one.test", Locale: "en-US"}); err == nil {
+	if _, err := catalog.Update(context.Background(), security.User(1), UpdateInput{Name: "Test site", ID: 1, ProfileCode: "second", Domain: "one.test", Locale: "en-US"}); err == nil {
 		t.Fatal("later participant failure was ignored")
 	}
 	if first.aborted != 1 || first.committed != 0 || len(second.started) != 1 {
@@ -566,7 +595,7 @@ func TestLaterTransitionParticipantFailureAbortsEarlierParticipant(t *testing.T)
 func TestBlockedRuntimeTransitionMapsToSiteConflict(t *testing.T) {
 	recorder := &transitionRecorder{fail: fmt.Errorf("active work: %w", kernel.ErrRuntimeTransitionBlocked)}
 	module := transitionModule{code: "transition", recorder: recorder}
-	repository := &memoryRepository{items: []Site{{ID: 1, ProfileCode: "first", Domain: "one.test", Locale: "en-US"}}}
+	repository := &memoryRepository{items: []Site{{Name: "Test site", ID: 1, ProfileCode: "first", Domain: "one.test", Locale: "en-US"}}}
 	catalog, err := NewCatalog(repository, testProfiles{
 		"first":  compileTransitionProfile(t, "first", module),
 		"second": compileTransitionProfile(t, "second"),
@@ -577,7 +606,7 @@ func TestBlockedRuntimeTransitionMapsToSiteConflict(t *testing.T) {
 	if err := catalog.Reload(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	_, err = catalog.Update(context.Background(), security.User(1), UpdateInput{ID: 1, ProfileCode: "second", Domain: "one.test", Locale: "en-US"})
+	_, err = catalog.Update(context.Background(), security.User(1), UpdateInput{Name: "Test site", ID: 1, ProfileCode: "second", Domain: "one.test", Locale: "en-US"})
 	if !errors.Is(err, ErrConflict) || !errors.Is(err, kernel.ErrRuntimeTransitionBlocked) {
 		t.Fatalf("blocked transition error = %v", err)
 	}
@@ -586,7 +615,7 @@ func TestBlockedRuntimeTransitionMapsToSiteConflict(t *testing.T) {
 func TestSiteDeleteTransitionAbortsOnRepositoryFailureAndCommitsOnSuccess(t *testing.T) {
 	recorder := &transitionRecorder{}
 	module := transitionModule{code: "transition", recorder: recorder}
-	repository := &memoryRepository{items: []Site{{ID: 1, ProfileCode: "first", Domain: "one.test", Locale: "en-US"}}, deleteErr: errors.New("delete failed")}
+	repository := &memoryRepository{items: []Site{{Name: "Test site", ID: 1, ProfileCode: "first", Domain: "one.test", Locale: "en-US"}}, deleteErr: errors.New("delete failed")}
 	catalog, err := NewCatalog(repository, testProfiles{"first": compileTransitionProfile(t, "first", module)}, testAccess{allow: true})
 	if err != nil {
 		t.Fatal(err)

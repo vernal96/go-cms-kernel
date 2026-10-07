@@ -314,6 +314,7 @@ func siteDTO(item site.Site, capabilities SiteCapabilities) SiteDTO {
 	return SiteDTO{
 		ID:           item.ID,
 		ProfileCode:  item.ProfileCode,
+		Name:         item.Name,
 		Domain:       item.Domain,
 		Locale:       item.Locale,
 		Settings:     settings,

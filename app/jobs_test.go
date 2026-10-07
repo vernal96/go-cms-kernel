@@ -126,8 +126,8 @@ func TestRuntimeJobRunnerAcknowledgesDeletedAndIntentionallyAbsentScopes(t *test
 		{Code: "with", Modules: []kernel.Module{module}},
 	}
 	catalog, err := site.NewCatalog(&jobsTestRepository{items: []site.Site{
-		{ID: 1, ProfileCode: "without", Domain: "without.test", Locale: "en-US"},
-		{ID: 2, ProfileCode: "with", Domain: "with.test", Locale: "en-US"},
+		{Name: "Test site", ID: 1, ProfileCode: "without", Domain: "without.test", Locale: "en-US"},
+		{Name: "Test site", ID: 2, ProfileCode: "with", Domain: "with.test", Locale: "en-US"},
 	}}, jobsTestProfiles{
 		"without": compileJobsTestProfile(t, profiles[0]),
 		"with":    compileJobsTestProfile(t, profiles[1]),
@@ -156,7 +156,7 @@ func TestRuntimeJobRunnerKeepsAmbiguousHandlersAsErrors(t *testing.T) {
 	called := 0
 	module := jobsTestModule{called: &called, ambiguous: true}
 	profile := kernel.Profile{Code: "with", Modules: []kernel.Module{module}}
-	catalog, err := site.NewCatalog(&jobsTestRepository{items: []site.Site{{ID: 2, ProfileCode: "with", Domain: "with.test", Locale: "en-US"}}}, jobsTestProfiles{"with": compileJobsTestProfile(t, profile)}, jobsTestAccess{})
+	catalog, err := site.NewCatalog(&jobsTestRepository{items: []site.Site{{Name: "Test site", ID: 2, ProfileCode: "with", Domain: "with.test", Locale: "en-US"}}}, jobsTestProfiles{"with": compileJobsTestProfile(t, profile)}, jobsTestAccess{})
 	if err != nil {
 		t.Fatal(err)
 	}

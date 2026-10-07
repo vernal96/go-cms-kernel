@@ -220,6 +220,7 @@ func (r *publicationSiteRepository) set(items ...site.Site) {
 func (r repository) List(context.Context) ([]site.Site, error) {
 	return []site.Site{
 		{
+			Name:        "Test site",
 			ID:          1,
 			ProfileCode: "dev",
 			Domain:      "example.com",
@@ -453,8 +454,8 @@ func (r siteManagementTestRuntime) SiteManagementHTTP() httptransport.SiteManage
 
 func TestOptionalSiteManagementHTTPIsRuntimeContributed(t *testing.T) {
 	sites := &publicationSiteRepository{items: []site.Site{
-		{ID: 1, ProfileCode: "with_feature", Domain: "feature.example.test", Locale: "ru-RU", IsPublic: true},
-		{ID: 2, ProfileCode: "plain", Domain: "plain.example.test", Locale: "ru-RU", IsPublic: true},
+		{Name: "Test site", ID: 1, ProfileCode: "with_feature", Domain: "feature.example.test", Locale: "ru-RU", IsPublic: true},
+		{Name: "Test site", ID: 2, ProfileCode: "plain", Domain: "plain.example.test", Locale: "ru-RU", IsPublic: true},
 	}}
 	runtimeApp, err := appkernel.New(context.Background(), appkernel.Definition{
 		Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{},
@@ -505,7 +506,7 @@ func TestOptionalSiteManagementHTTPIsRuntimeContributed(t *testing.T) {
 }
 
 func TestOptionalSiteManagementHTTPRejectsCorePathCollisionAtCompileTime(t *testing.T) {
-	sites := &publicationSiteRepository{items: []site.Site{{ID: 1, ProfileCode: "collision", Domain: "collision.example.test", Locale: "ru-RU", IsPublic: true}}}
+	sites := &publicationSiteRepository{items: []site.Site{{Name: "Test site", ID: 1, ProfileCode: "collision", Domain: "collision.example.test", Locale: "ru-RU", IsPublic: true}}}
 	runtimeApp, err := appkernel.New(context.Background(), appkernel.Definition{
 		Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{},
 		MainDatabase: appkernel.DatabaseDefinition{Connector: connectorFactory{}, Adapters: []kernel.ModuleDatabaseFactory{databaseFactory{sites: sites, access: privilegedUserAccessRepository{}}}},
@@ -524,7 +525,7 @@ func TestOptionalSiteManagementHTTPRejectsCorePathCollisionAtCompileTime(t *test
 }
 
 func TestOptionalSiteManagementHTTPRejectsDuplicatePathAtCompileTime(t *testing.T) {
-	sites := &publicationSiteRepository{items: []site.Site{{ID: 1, ProfileCode: "duplicate", Domain: "duplicate.example.test", Locale: "ru-RU", IsPublic: true}}}
+	sites := &publicationSiteRepository{items: []site.Site{{Name: "Test site", ID: 1, ProfileCode: "duplicate", Domain: "duplicate.example.test", Locale: "ru-RU", IsPublic: true}}}
 	runtimeApp, err := appkernel.New(context.Background(), appkernel.Definition{
 		Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{},
 		MainDatabase: appkernel.DatabaseDefinition{Connector: connectorFactory{}, Adapters: []kernel.ModuleDatabaseFactory{databaseFactory{sites: sites, access: privilegedUserAccessRepository{}}}},
@@ -1309,6 +1310,7 @@ func TestSiteHTTPPublicationIsAtomicAcrossUpdateCreateAndReload(t *testing.T) {
 	ctx := context.Background()
 	moduleBuilds := 0
 	repository := &publicationSiteRepository{items: []site.Site{{
+		Name:        "Test site",
 		ID:          1,
 		ProfileCode: "dev",
 		Domain:      "first.test",
@@ -1376,6 +1378,7 @@ func TestSiteHTTPPublicationIsAtomicAcrossUpdateCreateAndReload(t *testing.T) {
 	}
 	initialRuntime, _ := application.Sites().RuntimeByID(1)
 	_, err = application.Sites().Update(ctx, security.System(), site.UpdateInput{
+		Name:        "Test site",
 		ID:          1,
 		ProfileCode: "dev",
 		Domain:      "broken.test",
@@ -1396,7 +1399,8 @@ func TestSiteHTTPPublicationIsAtomicAcrossUpdateCreateAndReload(t *testing.T) {
 	assertResponse("first.test", "first.test")
 
 	_, err = application.Sites().Update(ctx, security.System(), site.UpdateInput{
-		ID: 1, ProfileCode: "dev", Domain: "collision.test", Locale: "en-US", IsPublic: true,
+		Name: "Test site",
+		ID:   1, ProfileCode: "dev", Domain: "collision.test", Locale: "en-US", IsPublic: true,
 		Settings: map[string]any{"broken": false, "collision": true},
 	})
 	if err == nil || !strings.Contains(err.Error(), "duplicates") {
@@ -1408,6 +1412,7 @@ func TestSiteHTTPPublicationIsAtomicAcrossUpdateCreateAndReload(t *testing.T) {
 	}
 	assertResponse("first.test", "first.test")
 	updated, err := application.Sites().Update(ctx, security.System(), site.UpdateInput{
+		Name:        "Test site",
 		ID:          1,
 		ProfileCode: "dev",
 		Domain:      "updated.test",
@@ -1427,6 +1432,7 @@ func TestSiteHTTPPublicationIsAtomicAcrossUpdateCreateAndReload(t *testing.T) {
 	}
 
 	created, err := application.Sites().Create(ctx, security.System(), site.CreateInput{
+		Name:        "Test site",
 		ProfileCode: "dev",
 		Domain:      "created.test",
 		Locale:      "en-US",
@@ -1438,6 +1444,7 @@ func TestSiteHTTPPublicationIsAtomicAcrossUpdateCreateAndReload(t *testing.T) {
 	}
 	assertResponse("created.test", "created.test")
 	if _, err := application.Sites().Create(ctx, security.System(), site.CreateInput{
+		Name:        "Test site",
 		ProfileCode: "dev",
 		Domain:      "broken-create.test",
 		Locale:      "en-US",
@@ -1456,7 +1463,8 @@ func TestSiteHTTPPublicationIsAtomicAcrossUpdateCreateAndReload(t *testing.T) {
 
 	repository.set(
 		site.Site{
-			ID: 1, ProfileCode: "dev", Domain: "reloaded.test", Locale: "en-US",
+			Name: "Test site",
+			ID:   1, ProfileCode: "dev", Domain: "reloaded.test", Locale: "en-US",
 			Settings: map[string]any{"broken": false}, IsPublic: true,
 		},
 		created.Site(),
@@ -1468,7 +1476,8 @@ func TestSiteHTTPPublicationIsAtomicAcrossUpdateCreateAndReload(t *testing.T) {
 	reloaded, _ := application.Sites().RuntimeByID(1)
 	repository.set(
 		site.Site{
-			ID: 1, ProfileCode: "dev", Domain: "broken-reload.test", Locale: "en-US",
+			Name: "Test site",
+			ID:   1, ProfileCode: "dev", Domain: "broken-reload.test", Locale: "en-US",
 			Settings: map[string]any{"broken": true}, IsPublic: true,
 		},
 		created.Site(),

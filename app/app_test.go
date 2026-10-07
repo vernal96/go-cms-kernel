@@ -1686,6 +1686,7 @@ func TestAppNewBootConsoleAndRuntimeLifecycle(t *testing.T) {
 	repository := &fakeSiteRepository{
 		sites: []site.Site{
 			{
+				Name:        "Test site",
 				ID:          1,
 				ProfileCode: "dev",
 				Domain:      "Example.COM.",
@@ -1696,6 +1697,7 @@ func TestAppNewBootConsoleAndRuntimeLifecycle(t *testing.T) {
 				},
 			},
 			{
+				Name:        "Test site",
 				ID:          2,
 				ProfileCode: "dev",
 				Domain:      "second.example.com",
@@ -1920,6 +1922,7 @@ func TestAppNewBootConsoleAndRuntimeLifecycle(t *testing.T) {
 		ctx,
 		security.System(),
 		site.UpdateInput{
+			Name:        "Test site",
 			ID:          1,
 			ProfileCode: "dev",
 			Domain:      first.Site().Domain,
@@ -1948,6 +1951,7 @@ func TestAppNewBootConsoleAndRuntimeLifecycle(t *testing.T) {
 		ctx,
 		security.System(),
 		site.UpdateInput{
+			Name:        "Test site",
 			ID:          1,
 			ProfileCode: "dev",
 			Domain:      "renamed.example.com",
@@ -1988,6 +1992,7 @@ func TestAppNewBootConsoleAndRuntimeLifecycle(t *testing.T) {
 		ctx,
 		security.System(),
 		site.UpdateInput{
+			Name:        "Test site",
 			ID:          1,
 			ProfileCode: "dev",
 			Domain:      updated.Site().Domain,
@@ -2013,6 +2018,7 @@ func TestAppNewBootConsoleAndRuntimeLifecycle(t *testing.T) {
 		ctx,
 		security.System(),
 		site.UpdateInput{
+			Name:     "Test site",
 			ID:       999,
 			Domain:   "missing.example.com",
 			Locale:   "en-US",
@@ -2038,7 +2044,7 @@ func TestAppNewBootConsoleAndRuntimeLifecycle(t *testing.T) {
 	}
 
 	repository.set([]site.Site{
-		{ID: 3, ProfileCode: "dev", Domain: "new.example.com", Locale: "en-US"},
+		{Name: "Test site", ID: 3, ProfileCode: "dev", Domain: "new.example.com", Locale: "en-US"},
 	}, nil)
 	if err := application.ReloadSites(ctx); err != nil {
 		t.Fatal(err)
@@ -2054,6 +2060,7 @@ func TestAppNewBootConsoleAndRuntimeLifecycle(t *testing.T) {
 
 	repository.set([]site.Site{
 		{
+			Name:        "Test site",
 			ID:          4,
 			ProfileCode: "dev",
 			Domain:      "invalid.example.com",
@@ -2108,8 +2115,8 @@ func TestAppRunsBackgroundTasksPerSiteAndReplacesStaleRuntimeTasks(t *testing.T)
 	ctx := context.Background()
 	events := make(chan string, 32)
 	repository := &fakeSiteRepository{sites: []site.Site{
-		{ID: 1, ProfileCode: "dev", Domain: "one.example.com", Locale: "en-US", Settings: map[string]any{"generation": "a1"}},
-		{ID: 2, ProfileCode: "dev", Domain: "two.example.com", Locale: "en-US", Settings: map[string]any{"generation": "b1"}},
+		{Name: "Test site", ID: 1, ProfileCode: "dev", Domain: "one.example.com", Locale: "en-US", Settings: map[string]any{"generation": "a1"}},
+		{Name: "Test site", ID: 2, ProfileCode: "dev", Domain: "two.example.com", Locale: "en-US", Settings: map[string]any{"generation": "b1"}},
 	}}
 	application, err := appkernel.New(ctx, appkernel.Definition{
 		Logger: fakeLoggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: fakeEventBusFactory{},
@@ -2128,7 +2135,8 @@ func TestAppRunsBackgroundTasksPerSiteAndReplacesStaleRuntimeTasks(t *testing.T)
 	waitBackgroundEvents(t, events, "1:a1:start", "2:b1:start")
 
 	if _, err := application.Sites().Update(ctx, security.System(), site.UpdateInput{
-		ID: 1, ProfileCode: "dev", Domain: "one.example.com", Locale: "en-US", Settings: map[string]any{"generation": "a2"},
+		Name: "Test site",
+		ID:   1, ProfileCode: "dev", Domain: "one.example.com", Locale: "en-US", Settings: map[string]any{"generation": "a2"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -2173,6 +2181,7 @@ func TestAppResourceServices(t *testing.T) {
 	coreDatabase := &fakeCoreDatabase{
 		repository: &fakeSiteRepository{
 			sites: []site.Site{{
+				Name:        "Test site",
 				ID:          1,
 				ProfileCode: "dev",
 				Domain:      "example.com",
@@ -2291,11 +2300,13 @@ func TestAppResourceWriteInvalidatesSiteRuntimeRepositoryCache(t *testing.T) {
 	resourceRepository := newAppResourceRepository()
 	coreDatabase := &fakeCoreDatabase{
 		repository: &fakeSiteRepository{sites: []site.Site{{
+			Name:        "Test site",
 			ID:          1,
 			ProfileCode: "dev",
 			Domain:      "example.com",
 			Locale:      "en-US",
 		}, {
+			Name:        "Test site",
 			ID:          2,
 			ProfileCode: "dev",
 			Domain:      "second.example.com",
@@ -2420,6 +2431,7 @@ func TestAppResourceWriteInvalidatesSiteRuntimeRepositoryCache(t *testing.T) {
 		ctx,
 		security.System(),
 		site.UpdateInput{
+			Name:        "Test site",
 			ID:          1,
 			ProfileCode: "dev",
 			Domain:      "renamed.example.com",
@@ -2570,6 +2582,7 @@ func TestAppMediaServices(t *testing.T) {
 	coreDatabase := &fakeCoreDatabase{
 		repository: &fakeSiteRepository{
 			sites: []site.Site{{
+				Name:        "Test site",
 				ID:          1,
 				ProfileCode: "dev",
 				Domain:      "example.com",

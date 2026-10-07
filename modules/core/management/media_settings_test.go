@@ -78,7 +78,7 @@ func TestMediaSettingsHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := site.NewRuntimeFromBlueprint(ctx, site.Site{ID: 7, ProfileCode: "test", Domain: "settings.test", Locale: "ru-RU", Settings: map[string]any{}}, blueprint)
+	runtime, err := site.NewRuntimeFromBlueprint(ctx, site.Site{Name: "Test site", ID: 7, ProfileCode: "test", Domain: "settings.test", Locale: "ru-RU", Settings: map[string]any{}}, blueprint)
 	if err != nil {
 		t.Fatal(err)
 	}

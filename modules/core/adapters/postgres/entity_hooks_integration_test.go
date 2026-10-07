@@ -128,7 +128,7 @@ func TestPostgresEntityHooksResources(t *testing.T) {
 	}
 	sites := hookTestSites{}
 	for i := 0; i < 2; i++ {
-		stored, err := database.Sites().(site.ManagementRepository).Create(ctx, nil, site.Site{ProfileCode: "hooks", Domain: fmt.Sprintf("hooks-%d-%d.test", time.Now().UnixNano(), i), Locale: "en-US", Settings: map[string]any{}})
+		stored, err := database.Sites().(site.ManagementRepository).Create(ctx, nil, site.Site{Name: "Test site", ProfileCode: "hooks", Domain: fmt.Sprintf("hooks-%d-%d.test", time.Now().UnixNano(), i), Locale: "en-US", Settings: map[string]any{}})
 		if err != nil {
 			t.Fatal(err)
 		}

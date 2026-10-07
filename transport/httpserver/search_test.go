@@ -49,10 +49,10 @@ func (e *siteRecordingEngine) Search(_ context.Context, query search.Query) (sea
 func TestSearchHTTPUsesHostScopedRuntime(t *testing.T) {
 	engine := &siteRecordingEngine{}
 	sites := &publicationSiteRepository{items: []site.Site{
-		{ID: 1, ProfileCode: "searching", Domain: "first.example.test", Locale: "ru-RU", IsPublic: true},
-		{ID: 2, ProfileCode: "searching", Domain: "second.example.test", Locale: "ru-RU", IsPublic: true},
-		{ID: 3, ProfileCode: "searching", Domain: "private.example.test", Locale: "ru-RU", IsPublic: false},
-		{ID: 4, ProfileCode: "plain", Domain: "plain.example.test", Locale: "ru-RU", IsPublic: true},
+		{Name: "Test site", ID: 1, ProfileCode: "searching", Domain: "first.example.test", Locale: "ru-RU", IsPublic: true},
+		{Name: "Test site", ID: 2, ProfileCode: "searching", Domain: "second.example.test", Locale: "ru-RU", IsPublic: true},
+		{Name: "Test site", ID: 3, ProfileCode: "searching", Domain: "private.example.test", Locale: "ru-RU", IsPublic: false},
+		{Name: "Test site", ID: 4, ProfileCode: "plain", Domain: "plain.example.test", Locale: "ru-RU", IsPublic: true},
 	}}
 	app, err := appkernel.New(context.Background(), appkernel.Definition{
 		Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{},

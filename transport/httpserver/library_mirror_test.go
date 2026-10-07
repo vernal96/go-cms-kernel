@@ -81,7 +81,7 @@ func TestLibraryMirrorHTTPSourceProfileWidgetsSEOAndPublication(t *testing.T) {
 		20: {ID: 20, SiteID: 2, Type: resourcetype.LibraryMirror, Template: &mountTemplate, Title: "Own mirror", Content: "Own content", Path: stringPointer("/mirror"), IsPublic: true, TypeSettings: map[string]any{"source_library_id": int64(10)}},
 	}}, item: resource.LibraryItem{ID: 100, SiteID: 1, LibraryID: 10, Template: &sourceTemplate, Title: "Story", Slug: "story", IsPublic: true, Content: `<a href="https://source.test/raw">original HTML</a>`}}
 	repo.byPath = map[string]resource.Resource{"/mirror": repo.byID[20]}
-	sites := &publicationSiteRepository{items: []site.Site{{ID: 1, ProfileCode: "source", Domain: "source.test", Locale: "ru-RU", IsPublic: true}, {ID: 2, ProfileCode: "destination", Domain: "mirror.test", Locale: "en-US", IsPublic: true}}}
+	sites := &publicationSiteRepository{items: []site.Site{{Name: "Test site", ID: 1, ProfileCode: "source", Domain: "source.test", Locale: "ru-RU", IsPublic: true}, {Name: "Test site", ID: 2, ProfileCode: "destination", Domain: "mirror.test", Locale: "en-US", IsPublic: true}}}
 	var order []string
 	probe := widget.NewRef("probe")
 	module := transportModule{code: "source_widgets", resourceType: transportResourceType{code: "probe_type"}, order: &order, widgets: []widget.Widget{handlerWidget{definition: widget.Definition{Reference: probe, Label: "Probe", Description: "Source runtime probe"}, new: func(map[string]any) (widget.Instance, error) {

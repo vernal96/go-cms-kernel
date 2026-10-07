@@ -192,6 +192,7 @@ func (h *contentHTTP) listSiteOptions(response http.ResponseWriter, request *htt
 
 type createSiteRequest struct {
 	ProfileCode kernel.ProfileCode `json:"profile_code"`
+	Name        string             `json:"name"`
 	Domain      string             `json:"domain"`
 	Locale      string             `json:"locale"`
 	Settings    map[string]any     `json:"settings"`
@@ -208,6 +209,7 @@ func (h *contentHTTP) createSite(response http.ResponseWriter, request *http.Req
 	}
 	result, err := h.sites.CreateSite(request.Context(), actor(request), SiteCreateInput{
 		ProfileCode: payload.ProfileCode,
+		Name:        payload.Name,
 		Domain:      payload.Domain,
 		Locale:      payload.Locale,
 		Settings:    payload.Settings,
@@ -227,6 +229,7 @@ func (h *contentHTTP) getSite(response http.ResponseWriter, request *http.Reques
 
 type updateSiteRequest struct {
 	ProfileCode kernel.ProfileCode `json:"profile_code"`
+	Name        string             `json:"name"`
 	Domain      string             `json:"domain"`
 	Locale      string             `json:"locale"`
 	Settings    map[string]any     `json:"settings"`
@@ -252,6 +255,7 @@ func (h *contentHTTP) updateSite(response http.ResponseWriter, request *http.Req
 	}
 	result, err := h.sites.UpdateSite(request.Context(), actor(request), id, SiteUpdateInput{
 		ProfileCode: payload.ProfileCode,
+		Name:        payload.Name,
 		Domain:      payload.Domain,
 		Locale:      payload.Locale,
 		Settings:    payload.Settings,

@@ -172,10 +172,13 @@ func TestProfileRuntimePassesImmutableSiteScopeToEveryModuleBuild(t *testing.T) 
 		"theme": "light",
 		"roles": []string{"author", "editor"},
 	}
-	firstScope := kernel.NewRuntimeScope(
+	firstScope := kernel.NewSiteRuntimeScope(
 		"1",
+		"scoped",
+		"Первый сайт",
 		"first.example.com",
 		"en-US",
+		true,
 		firstSettings,
 	)
 	firstSettings["theme"] = "changed by caller"
@@ -202,7 +205,7 @@ func TestProfileRuntimePassesImmutableSiteScopeToEveryModuleBuild(t *testing.T) 
 	}
 	first := module.scopes[0]
 	second := module.scopes[1]
-	if first.SiteID() != "1" || first.Domain() != "first.example.com" ||
+	if first.SiteID() != "1" || first.Name() != "Первый сайт" || first.Domain() != "first.example.com" ||
 		first.Locale() != "en-US" || second.SiteID() != "2" ||
 		second.Domain() != "second.example.com" || second.Locale() != "ru-RU" {
 		t.Fatalf("module scopes = %#v, %#v", first, second)

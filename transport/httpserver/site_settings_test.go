@@ -21,10 +21,10 @@ import (
 func TestSiteSettingsHTTPPrivacyAndUpdates(t *testing.T) {
 	ctx := context.Background()
 	repo := &publicationSiteRepository{items: []site.Site{
-		{ID: 1, ProfileCode: "dev", Domain: "first.test", Locale: "en-US", IsPublic: true, Settings: map[string]any{"name": "First", "secret": "hidden"}},
-		{ID: 2, ProfileCode: "dev", Domain: "second.test", Locale: "en-US", IsPublic: true, Settings: map[string]any{"name": "Second", "secret": "other"}},
-		{ID: 3, ProfileCode: "dev", Domain: "empty.test", Locale: "en-US", IsPublic: true, Settings: map[string]any{"secret": "hidden"}},
-		{ID: 4, ProfileCode: "dev", Domain: "private.test", Locale: "en-US", IsPublic: false},
+		{Name: "Test site", ID: 1, ProfileCode: "dev", Domain: "first.test", Locale: "en-US", IsPublic: true, Settings: map[string]any{"name": "First", "secret": "hidden"}},
+		{Name: "Test site", ID: 2, ProfileCode: "dev", Domain: "second.test", Locale: "en-US", IsPublic: true, Settings: map[string]any{"name": "Second", "secret": "other"}},
+		{Name: "Test site", ID: 3, ProfileCode: "dev", Domain: "empty.test", Locale: "en-US", IsPublic: true, Settings: map[string]any{"secret": "hidden"}},
+		{Name: "Test site", ID: 4, ProfileCode: "dev", Domain: "private.test", Locale: "en-US", IsPublic: false},
 	}}
 	application, err := appkernel.New(ctx, appkernel.Definition{
 		Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{},
@@ -94,7 +94,7 @@ func TestSiteSettingsHTTPPrivacyAndUpdates(t *testing.T) {
 			t.Fatalf("private site: %d", res.Code)
 		}
 	}
-	_, err = application.Sites().Update(ctx, security.System(), site.UpdateInput{ID: 1, ProfileCode: "dev", Domain: "first.test", Locale: "en-US", IsPublic: true, Settings: map[string]any{"name": "Updated", "secret": "still hidden"}})
+	_, err = application.Sites().Update(ctx, security.System(), site.UpdateInput{Name: "Test site", ID: 1, ProfileCode: "dev", Domain: "first.test", Locale: "en-US", IsPublic: true, Settings: map[string]any{"name": "Updated", "secret": "still hidden"}})
 	if err != nil {
 		t.Fatal(err)
 	}

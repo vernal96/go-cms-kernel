@@ -23,7 +23,7 @@ func TestPostgresDynamicWidgetAreasLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stored, err := database.Sites().(site.ManagementRepository).Create(ctx, nil, site.Site{ProfileCode: "zones", Domain: fmt.Sprintf("zones-%d.example", time.Now().UnixNano()), Locale: "ru", Settings: map[string]any{}})
+	stored, err := database.Sites().(site.ManagementRepository).Create(ctx, nil, site.Site{Name: "Test site", ProfileCode: "zones", Domain: fmt.Sprintf("zones-%d.example", time.Now().UnixNano()), Locale: "ru", Settings: map[string]any{}})
 	if err != nil {
 		t.Fatal(err)
 	}
