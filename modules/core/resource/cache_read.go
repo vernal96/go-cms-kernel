@@ -13,6 +13,7 @@ type RouteTarget struct {
 	SiteID    site.ID
 	Kind      StorageKind
 	LibraryID ID
+	Mirrored  bool
 }
 
 // CacheReadRepository supports independent URL and widget cache misses without

@@ -127,6 +127,8 @@ type ResourceSnapshot struct {
 type RenderInput struct {
 	Site     SiteSnapshot
 	Resource ResourceSnapshot
+	Key      string
+	Cursor   string
 }
 
 type Instance interface {

@@ -303,7 +303,8 @@ func (s *Service) Update(
 	if !exists {
 		return Resource{}, fmt.Errorf("resource references unknown current type %q", current.Type)
 	}
-	if current.Type != input.Type && (!currentType.Metadata().Capabilities.MutableType || input.Type == resourcetype.Library) {
+	nextType, nextExists := siteRuntime.Profile().Registry().ResourceType(input.Type)
+	if current.Type != input.Type && (!currentType.Metadata().Capabilities.MutableType || !nextExists || !nextType.Metadata().Capabilities.MutableType) {
 		return Resource{}, fmt.Errorf("%w: resource type %q is immutable", ErrInvalid, current.Type)
 	}
 

@@ -328,6 +328,19 @@ func resourceFields(value any) ([]resource.FieldPath, error) {
 	return result, nil
 }
 func resourceFilters(value any) ([]resource.FilterCondition, error) {
+	conditions, err := parseResourceFilters(value)
+	if err != nil {
+		return nil, err
+	}
+	for _, condition := range conditions {
+		if err := condition.Validate(); err != nil {
+			return nil, err
+		}
+	}
+	return conditions, nil
+}
+
+func parseResourceFilters(value any) ([]resource.FilterCondition, error) {
 	if value == nil {
 		return nil, nil
 	}
@@ -345,9 +358,6 @@ func resourceFilters(value any) ([]resource.FilterCondition, error) {
 		operator, _ := object["operator"].(string)
 		kind, _ := object["value_kind"].(string)
 		result[index] = resource.FilterCondition{Field: resource.FieldPath(fieldValue), Operator: resource.FilterOperator(operator), Value: object["value"], Kind: field.StorageKind(kind)}
-		if err := result[index].Validate(); err != nil {
-			return nil, err
-		}
 	}
 	return result, nil
 }

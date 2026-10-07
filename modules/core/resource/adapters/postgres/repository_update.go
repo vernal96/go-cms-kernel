@@ -203,6 +203,9 @@ WHERE id = $1;
 		}
 	}
 
+	if err := validateMirrorNamespaces(ctx, transaction, !sameOptionalText(current.Path, item.Path) || !reflect.DeepEqual(current.TypeSettings, item.TypeSettings)); err != nil {
+		return resource.Resource{}, err
+	}
 	if err := transaction.Commit(ctx); err != nil {
 		return resource.Resource{}, translateError(err)
 	}

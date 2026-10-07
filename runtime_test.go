@@ -1666,7 +1666,7 @@ func TestCoreModuleRegistersAllStandardFieldTypes(t *testing.T) {
 		}
 	}
 
-	if len(registry.ResourceTypes) != 4 {
+	if len(registry.ResourceTypes) != 5 {
 		t.Fatalf(
 			"standard resource types = %d",
 			len(registry.ResourceTypes),
@@ -1684,6 +1684,7 @@ func TestCoreModuleRegistersAllStandardFieldTypes(t *testing.T) {
 		resourcetype.Link,
 		resourcetype.ResourceLink,
 		resourcetype.Library,
+		resourcetype.LibraryMirror,
 	} {
 		if !resourceTypes[code] {
 			t.Fatalf("standard resource type %q is missing", code)

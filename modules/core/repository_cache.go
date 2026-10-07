@@ -479,6 +479,14 @@ func (r *cachedResourceRepository) ResolveLibraryItemRoute(ctx context.Context, 
 		if target.Kind != resource.StorageLibraryItem || target.SiteID != siteID {
 			return resolved{}, resource.ErrNotFound
 		}
+		if target.Mirrored {
+			repository, err := r.libraryItems()
+			if err != nil {
+				return resolved{}, err
+			}
+			item, mount, err := repository.ResolveLibraryItemRoute(ctx, siteID, path)
+			return resolved{item, mount}, err
+		}
 		item, err := r.readLibraryItem(ctx, target.ID)
 		if err != nil {
 			return resolved{}, err

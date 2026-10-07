@@ -13,10 +13,11 @@ import (
 type Code string
 
 const (
-	Page         Code = "page"
-	Link         Code = "link"
-	ResourceLink Code = "resource_link"
-	Library      Code = "library"
+	Page          Code = "page"
+	Link          Code = "link"
+	ResourceLink  Code = "resource_link"
+	Library       Code = "library"
+	LibraryMirror Code = "library_mirror"
 )
 
 type Capabilities struct {
@@ -28,6 +29,7 @@ type Capabilities struct {
 	SupportsTargetResource bool
 	MutableType            bool
 	OwnsLibraryItems       bool
+	MirrorsLibraryItems    bool
 	DefaultIcon            string
 }
 
@@ -75,6 +77,7 @@ func StandardTypes() []Type {
 		linkType{},
 		resourceLinkType{},
 		libraryType{},
+		libraryMirrorType{},
 	}
 }
 

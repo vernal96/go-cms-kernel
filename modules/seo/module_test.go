@@ -101,7 +101,7 @@ func TestRuntimeEditorAndPublicContracts(t *testing.T) {
 	runtime := &Runtime{service: service, renderer: renderer}
 	metadata := runtime.Metadata()
 	if metadata.Code != "seo" || metadata.Title != "SEO" ||
-		len(metadata.AppliesTo) != 2 || metadata.AppliesTo[0] != resourcetype.Page || metadata.AppliesTo[1] != resourcetype.Library ||
+		len(metadata.AppliesTo) != 3 || metadata.AppliesTo[0] != resourcetype.Page || metadata.AppliesTo[1] != resourcetype.Library ||
 		len(metadata.Fields) != 8 || len(metadata.Variables) == 0 {
 		t.Fatalf("metadata = %#v", metadata)
 	}

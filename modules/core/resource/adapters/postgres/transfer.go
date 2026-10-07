@@ -200,6 +200,9 @@ WHERE entity.site_id=$2 AND entity.id IN (SELECT id FROM owned_entities);`, id, 
 	if err := r.finishRelated(ctx, tx, hookSiblings, actorID); err != nil {
 		return resource.SiteTransferResult{}, err
 	}
+	if err := validateMirrorNamespaces(ctx, tx, true); err != nil {
+		return resource.SiteTransferResult{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return resource.SiteTransferResult{}, translateError(err)
 	}

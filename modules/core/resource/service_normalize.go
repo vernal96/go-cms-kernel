@@ -137,6 +137,15 @@ func (s *Service) normalizeResourcePayload(
 			}
 		}
 	}
+	if item.Type == resourcetype.LibraryMirror {
+		source, err := s.repository.ByID(ctx, ID(resourcetype.SourceLibraryID(payload.TypeSettings)))
+		if err != nil {
+			return nil, nil, resourcetype.Payload{}, err
+		}
+		if source.Type != resourcetype.Library || (source.DeletedAt != nil && item.ID == 0) || source.ID == item.ID {
+			return nil, nil, resourcetype.Payload{}, ErrInvalidReference
+		}
+	}
 	if payload.TargetResourceID != nil {
 		targetID := ID(*payload.TargetResourceID)
 		if targetID == item.ID && item.ID != 0 {

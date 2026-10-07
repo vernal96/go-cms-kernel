@@ -69,7 +69,7 @@ Content-Type: application/json
 | `GET/PATCH /api/sites/{siteID}/resources/{resourceID}/extensions/{extensionCode}` | Код расширения — часть пути. PATCH передаёт JSON, форму которого определяет конкретное расширение. |
 | `POST /api/sites/{siteID}/resources/{resourceID}/extensions/{extensionCode}/preview` | JSON с параметрами расширения для предпросмотра; схема также определяется расширением. |
 
-### Элементы библиотеки
+### Ресурсы библиотеки и зеркала
 
 | Маршруты | Параметры |
 | --- | --- |
@@ -125,3 +125,38 @@ GET /api/sites?search=example&page=2&per_page=10
 ```
 
 Неизвестные JSON-поля отклоняются. Управляющие операции, включая окончательное удаление и очистку истории, требуют соответствующих прав; для mutation API используйте актуальные версии сущностей, когда это поле предусмотрено контрактом.
+
+## Настройка зеркала библиотеки
+
+Создание использует обычный `POST /api/sites/{siteID}/resources`:
+
+```json
+{"type":"library_mirror","title":"Пресс-центр","slug":"press","content_type":"html","content":"<p>Материалы редакции</p>","fields":{},"type_settings":{"source_library_id":123}}
+```
+
+Metadata типа включает `capabilities.mirrors_library_items: true`,
+`mutable_type: false` и обязательное целое поле `source_library_id` с редактором
+`library-source-picker`. `owns_library_items` остаётся false. Настройки возвращаются
+в DTO ресурса и сохраняются обычным PATCH с `expected_version`.
+
+`GET /api/sites/{siteID}/resources/library-sources` — выбор источника в админке.
+Параметры: `source_site_id`, `search`, `page`, `per_page` (стандартная пагинация).
+Для восстановления сохранённого выбора используется `selected_id` вместо
+`source_site_id`. Ответ: `items: [{id, site_id, domain, title, path}]`,
+`pagination: {page, per_page, total}`. В список входят только неудалённые библиотеки.
+Требуются чтение ресурсов и доступ редактирования принимающего сайта, а также
+доступ просмотра сайта-источника. Создание, смена источника и восстановление
+ревизии зеркала проверяют доступ к источнику.
+
+`GET /api/sites/{siteID}/resources/{mirrorID}/items` возвращает опубликованные
+ресурсы источника и cursor-пагинацию. `effective_url` локален для зеркала;
+`id`, `site_id`, `library_id` сохраняют владельца-источника. Мутации ресурсов
+через зеркало запрещены. Публичная выдача списков выполняется через
+[два виджета Core](widgets.md#постраничные-списки-ресурсов).
+
+Дубликат зеркала на сайте возвращает `409 conflict`, конфликт URL —
+`409 route_conflict`, потенциальное пересечение непустых пространств при изменении
+маршрутов — `409 route_mutation_requires_maintenance`. Окончательное удаление
+используемой библиотеки возвращает `409 resource_referenced`, удаление её сайта —
+`409 site_referenced`. Публичная выдача неопубликованного источника/зеркала/ресурса
+возвращает `404`; временно устаревший runtime — `503`.

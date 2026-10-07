@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
+	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/core/widget"
 )
@@ -25,7 +26,7 @@ func (r *Repository) LookupRoute(ctx context.Context, siteID site.ID, path strin
 	if err != nil {
 		return resource.RouteTarget{}, err
 	}
-	return resource.RouteTarget{SiteID: siteID, ID: item.ID, Kind: resource.StorageLibraryItem, LibraryID: library.ID}, nil
+	return resource.RouteTarget{SiteID: siteID, ID: item.ID, Kind: resource.StorageLibraryItem, LibraryID: library.ID, Mirrored: library.Type == resourcetype.LibraryMirror}, nil
 }
 
 func (r *Repository) WidgetsByID(ctx context.Context, owner resource.ID, ids []widget.BindingID) ([]widget.Binding, error) {

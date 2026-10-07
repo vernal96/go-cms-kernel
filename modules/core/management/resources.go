@@ -146,6 +146,7 @@ type ResourceTypeCapabilities struct {
 	SupportsTargetResource bool   `json:"supports_target_resource"`
 	MutableType            bool   `json:"mutable_type"`
 	OwnsLibraryItems       bool   `json:"owns_library_items"`
+	MirrorsLibraryItems    bool   `json:"mirrors_library_items"`
 	DefaultIcon            string `json:"default_icon"`
 }
 
@@ -230,7 +231,7 @@ func (m *Resources) ResourceMetadata(
 		capabilities := metadata.Capabilities
 		types = append(types, ResourceType{
 			Code: code, Label: metadata.Label,
-			Capabilities:   ResourceTypeCapabilities{SupportsTemplate: capabilities.SupportsTemplate, SupportsContent: capabilities.SupportsContent, SupportsWidgets: capabilities.SupportsWidgets, SupportsFields: capabilities.SupportsFields, SupportsExternalURL: capabilities.SupportsExternalURL, SupportsTargetResource: capabilities.SupportsTargetResource, MutableType: capabilities.MutableType, OwnsLibraryItems: capabilities.OwnsLibraryItems, DefaultIcon: capabilities.DefaultIcon},
+			Capabilities:   ResourceTypeCapabilities{SupportsTemplate: capabilities.SupportsTemplate, SupportsContent: capabilities.SupportsContent, SupportsWidgets: capabilities.SupportsWidgets, SupportsFields: capabilities.SupportsFields, SupportsExternalURL: capabilities.SupportsExternalURL, SupportsTargetResource: capabilities.SupportsTargetResource, MutableType: capabilities.MutableType, OwnsLibraryItems: capabilities.OwnsLibraryItems, MirrorsLibraryItems: capabilities.MirrorsLibraryItems, DefaultIcon: capabilities.DefaultIcon},
 			SettingsFields: settingsFields, SettingsDefaults: cloneAnyMap(metadata.SettingsDefaults), ContentTypes: contentTypes,
 		})
 	}
@@ -408,6 +409,11 @@ func (m *Resources) CreateResource(
 		}
 		if !exists {
 			return ResourceTreeItem{}, resource.ErrNotFound
+		}
+	}
+	if input.Type == resourcetype.LibraryMirror {
+		if err := m.checkLibrarySource(ctx, actor, input.TypeSettings); err != nil {
+			return ResourceTreeItem{}, err
 		}
 	}
 	created, err := m.resources.Create(ctx, actor, resource.CreateInput{
@@ -594,6 +600,15 @@ func (m *Resources) RestoreRevision(ctx context.Context, actor security.Actor, s
 	if err := m.requireSite(ctx, actor, siteID, ResourceUpdatePermission, SiteAccessEdit); err != nil {
 		return ResourceDetails{}, err
 	}
+	revision, err := m.revisions.Get(ctx, actor, siteID, resourceID, version)
+	if err != nil {
+		return ResourceDetails{}, err
+	}
+	if revision.Snapshot != nil && revision.Snapshot.Type == resourcetype.LibraryMirror {
+		if err := m.checkLibrarySource(ctx, actor, revision.Snapshot.TypeSettings); err != nil {
+			return ResourceDetails{}, err
+		}
+	}
 	updated, err := m.revisions.Restore(ctx, actor, siteID, resourceID, version, expectedVersion)
 	if err != nil {
 		return ResourceDetails{}, validationError(err)
@@ -641,6 +656,11 @@ func (m *Resources) UpdateResource(
 	}
 	if _, exists := runtime.Profile().Registry().ResourceType(input.Type); !exists {
 		return ResourceDetails{}, fmt.Errorf("%w: unsupported resource type", ErrValidation)
+	}
+	if input.Type == resourcetype.LibraryMirror && resourcetype.SourceLibraryID(input.TypeSettings) != resourcetype.SourceLibraryID(current.TypeSettings) {
+		if err := m.checkLibrarySource(ctx, actor, input.TypeSettings); err != nil {
+			return ResourceDetails{}, err
+		}
 	}
 	updated, err := m.resources.Update(ctx, actor, resource.UpdateInput{
 		ID:               resourceID,

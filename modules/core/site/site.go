@@ -20,6 +20,7 @@ type ID int64
 var (
 	ErrNotFound    = errors.New("site not found")
 	ErrConflict    = errors.New("site conflict")
+	ErrReferenced  = errors.New("site is referenced by library mirrors")
 	ErrInvalid     = errors.New("invalid site")
 	ErrUnavailable = errors.New("site runtime is stale or unavailable")
 

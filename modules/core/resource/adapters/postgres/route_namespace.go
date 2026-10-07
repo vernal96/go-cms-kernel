@@ -19,6 +19,9 @@ type routeQueryer interface {
 }
 
 func lockRouteNamespace(ctx context.Context, tx pgx.Tx, siteID site.ID) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('core.route-topology', 0));`); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('core.routes:' || $1::bigint::text, 0));`, siteID); err != nil {
 		return fmt.Errorf("lock site route namespace: %w", err)
 	}
@@ -57,7 +60,7 @@ func ensureLibraryItemRouteAvailable(ctx context.Context, queryer routeQueryer, 
 	if conflict {
 		return resource.ErrRouteConflict
 	}
-	return nil
+	return ensureMirroredItemRoutesAvailable(ctx, queryer, library, item)
 }
 
 func ensureTreePathsAvailable(ctx context.Context, queryer routeQueryer, siteID site.ID, paths []string, override *resource.Resource) error {
@@ -86,7 +89,7 @@ SELECT id, site_id, parent_id, type, template, content_type, title, menu_title, 
  in_menu, in_sitemap, sort, published_at, unpublished_at, type_settings, created_at, updated_at,
  created_by, updated_by, deleted_at, deleted_by
 FROM core.resources
-WHERE site_id=$1 AND type='library' AND id<>$2 AND path IS NOT NULL
+WHERE site_id=$1 AND type IN ('library','library_mirror') AND id<>$2 AND path IS NOT NULL
   AND (path='/' OR $3='/' OR path=$3 OR path LIKE $3||'/%' OR $3 LIKE path||'/%')
 ORDER BY length(path), id;`, library.SiteID, library.ID, *library.Path)
 	if err != nil {
@@ -105,15 +108,23 @@ ORDER BY length(path), id;`, library.SiteID, library.ID, *library.Path)
 		return translateError(err)
 	}
 	potentialPeers := peers[:0]
+	effective, err := effectiveRouteLibrary(ctx, queryer, library, nil)
+	if err != nil {
+		return err
+	}
 	for _, peer := range peers {
-		if libraryNamespacesMayOverlap(library, peer) {
+		peer, err = effectiveRouteLibrary(ctx, queryer, peer, nil)
+		if err != nil {
+			return err
+		}
+		if libraryNamespacesMayOverlap(effective, peer) {
 			potentialPeers = append(potentialPeers, peer)
 		}
 	}
 	if len(potentialPeers) == 0 {
 		return nil
 	}
-	hasItems, err := libraryHasItems(ctx, queryer, library.ID)
+	hasItems, err := libraryHasItems(ctx, queryer, effective.ID)
 	if err != nil || !hasItems {
 		return err
 	}
@@ -264,7 +275,7 @@ SELECT id, site_id, parent_id, type, template, content_type, title, menu_title, 
  in_menu, in_sitemap, sort, published_at, unpublished_at, type_settings, created_at, updated_at,
  created_by, updated_by, deleted_at, deleted_by
 FROM core.resources
-WHERE site_id=$1 AND type='library' AND path IS NOT NULL
+WHERE site_id=$1 AND type IN ('library','library_mirror') AND path IS NOT NULL
   AND (path='/' OR $2=path OR $2 LIKE path||'/%')
 ORDER BY length(path) DESC, id;`, siteID, path)
 	if err != nil {
@@ -282,7 +293,7 @@ ORDER BY length(path) DESC, id;`, siteID, path)
 	if err := rows.Err(); err != nil {
 		return false, translateError(err)
 	}
-	if override != nil && override.SiteID == siteID && override.Type == resourcetype.Library {
+	if override != nil && override.SiteID == siteID && (override.Type == resourcetype.Library || override.Type == resourcetype.LibraryMirror) {
 		filtered := libraries[:0]
 		for _, library := range libraries {
 			if library.ID != override.ID {
@@ -294,7 +305,11 @@ ORDER BY length(path) DESC, id;`, siteID, path)
 			libraries = append(libraries, resource.Clone(*override))
 		}
 	}
-	for _, library := range libraries {
+	for _, mount := range libraries {
+		library, err := effectiveRouteLibrary(ctx, queryer, mount, override)
+		if err != nil {
+			return false, err
+		}
 		pattern, _ := library.TypeSettings["item_url_pattern"].(string)
 		if pattern == "" {
 			pattern = resourcetype.DefaultItemURLPattern

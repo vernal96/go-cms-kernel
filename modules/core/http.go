@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"github.com/vernal96/go-cms-kernel"
 	"github.com/vernal96/go-cms-kernel/cache"
@@ -68,6 +69,10 @@ func (r *Runtime) HTTP() httptransport.Builder {
 			ResourceHandlers: []httptransport.ResourceHandler{
 				{
 					Type:    httptransport.ResourceHandlerCode(resourcetype.Page),
+					Handler: pageResourceHandler{logger: r.logger, files: r.Files(), resultStore: r.resultStore, generation: generation},
+				},
+				{
+					Type:    httptransport.ResourceHandlerCode(resourcetype.LibraryMirror),
 					Handler: pageResourceHandler{logger: r.logger, files: r.Files(), resultStore: r.resultStore, generation: generation},
 				},
 				{
@@ -143,9 +148,18 @@ func (h *terminalResourceHandler) ServeHTTP(
 		},
 	)
 	if errors.Is(err, resource.ErrNotFound) && h.libraryItems != nil {
-		libraryItem, _, itemErr := h.libraryItems.ResolvePublished(request.Context(), actor, site.ID(siteRuntime.Site().ID), path)
+		resolved, itemErr := h.libraryItems.ResolvePublished(request.Context(), actor, site.ID(siteRuntime.Site().ID), path)
 		if itemErr == nil {
-			itemPath := path
+			libraryItem := resolved.Item
+			itemPath, pathErr := resource.EffectiveLibraryItemURL(resolved.Collection.Source, libraryItem)
+			if pathErr != nil {
+				writeResourceRouteError(response, request, pathErr)
+				return
+			}
+			if resolved.Collection.Mount.Type == resourcetype.LibraryMirror {
+				ctx := WithSiteRuntime(request.Context(), resolved.Collection.Runtime)
+				request = request.WithContext(context.WithValue(ctx, publicResourcePathContextKey, path))
+			}
 			item = resource.Resource{ID: libraryItem.ID, SiteID: libraryItem.SiteID, Type: resourcetype.Page, Template: libraryItem.Template, ContentType: libraryItem.ContentType, Title: libraryItem.Title, Slug: libraryItem.Slug, Path: &itemPath, Annotation: libraryItem.Annotation, Content: libraryItem.Content, ImageMediaID: libraryItem.ImageMediaID, IsPublic: libraryItem.IsPublic, IsSearchable: libraryItem.IsSearchable, PublishedAt: libraryItem.PublishedAt, UnpublishedAt: libraryItem.UnpublishedAt, Fields: libraryItem.Fields, Widgets: libraryItem.Widgets, CreatedAt: libraryItem.CreatedAt, UpdatedAt: libraryItem.UpdatedAt}
 			err = nil
 		} else {
@@ -157,6 +171,12 @@ func (h *terminalResourceHandler) ServeHTTP(
 		return
 	}
 
+	if item.Type == resourcetype.LibraryMirror && h.libraryItems != nil {
+		if _, err := h.libraryItems.Collection(request.Context(), actor, item.SiteID, item.ID, true); err != nil {
+			writeResourceRouteError(response, request, err)
+			return
+		}
+	}
 	handler, exists := h.handlers.Handler(
 		httptransport.ResourceHandlerCode(item.Type),
 	)
@@ -249,6 +269,9 @@ func (h pageResourceHandler) ServeHTTP(
 		},
 		Widgets: pageWidgetsResponse{},
 	}
+	if publicPath, mirrored := ctx.Value(publicResourcePathContextKey).(string); mirrored {
+		result.Resource.Path = &publicPath
+	}
 	if item.Template != nil {
 		templateRuntime, exists := siteRuntime.Profile().Template(*item.Template)
 		if !exists {
@@ -262,7 +285,7 @@ func (h pageResourceHandler) ServeHTTP(
 			return
 		}
 		for area, items := range placements {
-			result.Widgets[area] = h.renderWidgets(ctx, siteRuntime, item, items)
+			result.Widgets[area] = h.renderWidgets(ctx, siteRuntime, item, items, request.URL.Query())
 			if ctx.Err() != nil {
 				return
 			}
@@ -289,7 +312,7 @@ func (h pageResourceHandler) ServeHTTP(
 	_, _ = response.Write(append(raw, '\n'))
 }
 
-func (h pageResourceHandler) renderWidgets(ctx context.Context, siteRuntime *site.Runtime, item resource.Resource, placements []widget.Placement) []pageWidgetResponse {
+func (h pageResourceHandler) renderWidgets(ctx context.Context, siteRuntime *site.Runtime, item resource.Resource, placements []widget.Placement, query url.Values) []pageWidgetResponse {
 	result := make([]pageWidgetResponse, 0, len(placements))
 	jobs := make([]widget.RenderJob, 0, len(placements))
 	indexes := make([]int, 0, len(placements))
@@ -330,14 +353,15 @@ func (h pageResourceHandler) renderWidgets(ctx context.Context, siteRuntime *sit
 				Bindings widget.ParamBindings
 				Values   widget.ResourceValues
 			}{placement.Params, placement.ParamBindings, item.WidgetValues()},
-			Input: widget.RenderInput{Site: widget.SiteSnapshot{ID: int64(item.SiteID), Domain: siteRuntime.Site().Domain, Locale: siteRuntime.Site().Locale}, Resource: widget.ResourceSnapshot{ID: int64(item.ID), Title: item.Title, Content: item.Content}},
+			Input: widget.RenderInput{Key: placement.Key, Cursor: query.Get("cursor." + placement.Key), Site: widget.SiteSnapshot{ID: int64(item.SiteID), Domain: siteRuntime.Site().Domain, Locale: siteRuntime.Site().Locale}, Resource: widget.ResourceSnapshot{ID: int64(item.ID), Title: item.Title, Content: item.Content}},
 		})
 		indexes = append(indexes, len(result))
 		bindings = append(bindings, binding)
 		result = append(result, rendered)
 	}
 	store := h.resultStore
-	if httptransport.PreviewFromContext(ctx) {
+	_, mirrored := ctx.Value(publicResourcePathContextKey).(string)
+	if mirrored || httptransport.PreviewFromContext(ctx) {
 		store = nil
 	}
 	outputs := widget.RenderBatch(ctx, store, h.generation, jobs)
@@ -542,6 +566,8 @@ func writeResourceRouteError(
 	err error,
 ) {
 	switch {
+	case errors.Is(err, site.ErrUnavailable):
+		http.Error(response, "site runtime unavailable", http.StatusServiceUnavailable)
 	case errors.Is(err, resource.ErrNotFound),
 		errors.Is(err, security.ErrForbidden),
 		errors.Is(err, security.ErrUnauthenticated):

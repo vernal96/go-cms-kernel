@@ -253,7 +253,11 @@ func (r *cachedResourceRepository) lookupRoute(ctx context.Context, siteID site.
 	if err != nil {
 		return target, err
 	}
-	cache.WritePreparedJSON(ctx, r.store, prepared, key, target, r.ttl)
+	// A mirror route depends on two changing namespaces. Resolve it through the
+	// authoritative source index; source mutations must be visible immediately.
+	if !target.Mirrored {
+		cache.WritePreparedJSON(ctx, r.store, prepared, key, target, r.ttl)
+	}
 	return target, nil
 }
 

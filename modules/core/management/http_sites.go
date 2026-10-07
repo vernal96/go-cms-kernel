@@ -37,6 +37,7 @@ func registerContentRoutes(router chi.Router, sites *Sites, resources *Resources
 	router.Get("/sites/{siteID}/resources/metadata", handler.resourceMetadata)
 	router.Get("/sites/{siteID}/resources/options", handler.resourceOptions)
 	router.Get("/sites/{siteID}/resources/lookup", handler.resourceLookup)
+	router.Get("/sites/{siteID}/resources/library-sources", handler.librarySources)
 	router.Get("/sites/{siteID}/resources/{resourceID}", handler.getResource)
 	router.Patch("/sites/{siteID}/resources/{resourceID}", handler.updateResource)
 	router.Post("/sites/{siteID}/resources/{resourceID}/widgets", handler.createResourceWidget)

@@ -143,3 +143,51 @@ func TestSplitCacheDoesNotPersistFailedRouteLoads(t *testing.T) {
 		t.Fatalf("new route masked by previous 404: %+v %v", item, err)
 	}
 }
+
+type mirrorCacheRepository struct {
+	*splitRepository
+	resource.LibraryItemRepository
+	item  resource.LibraryItem
+	mount resource.Resource
+}
+
+func (r *mirrorCacheRepository) LookupRoute(_ context.Context, id site.ID, path string) (resource.RouteTarget, error) {
+	r.routeLoads++
+	if id != r.mount.SiteID || r.mount.Path == nil || path != *r.mount.Path+"/"+r.item.Slug {
+		return resource.RouteTarget{}, resource.ErrNotFound
+	}
+	return resource.RouteTarget{ID: r.item.ID, SiteID: id, Kind: resource.StorageLibraryItem, LibraryID: r.mount.ID, Mirrored: true}, nil
+}
+func (r *mirrorCacheRepository) ResolveLibraryItemRoute(_ context.Context, id site.ID, path string) (resource.LibraryItem, resource.Resource, error) {
+	if id != r.mount.SiteID || r.mount.Path == nil || path != *r.mount.Path+"/"+r.item.Slug {
+		return resource.LibraryItem{}, resource.Resource{}, resource.ErrNotFound
+	}
+	return r.item, r.mount, nil
+}
+
+func TestMirrorRouteCacheReflectsSourceChangesWithoutTargetInvalidation(t *testing.T) {
+	path := "/mirror"
+	ctx := context.Background()
+	store := newMemoryCacheStore()
+	base := &mirrorCacheRepository{splitRepository: &splitRepository{resourceRepositoryStub: &resourceRepositoryStub{}}, item: resource.LibraryItem{ID: 100, SiteID: 1, LibraryID: 10, Slug: "old", Title: "Before"}, mount: resource.Resource{ID: 20, SiteID: 2, Path: &path}}
+	repo := &cachedResourceRepository{siteID: 2, base: base, store: store, ttl: time.Hour}
+	first, _, err := repo.ResolveLibraryItemRoute(ctx, 2, "/mirror/old")
+	if err != nil || first.Title != "Before" {
+		t.Fatalf("%+v %v", first, err)
+	}
+	base.item.Title = "After"
+	second, _, err := repo.ResolveLibraryItemRoute(ctx, 2, "/mirror/old")
+	if err != nil || second.Title != "After" {
+		t.Fatalf("stale content: %+v %v", second, err)
+	}
+	base.item.Slug = "new"
+	if _, _, err := repo.ResolveLibraryItemRoute(ctx, 2, "/mirror/old"); !errors.Is(err, resource.ErrNotFound) {
+		t.Fatalf("stale route: %v", err)
+	}
+	if item, _, err := repo.ResolveLibraryItemRoute(ctx, 2, "/mirror/new"); err != nil || item.ID != 100 {
+		t.Fatalf("new route: %+v %v", item, err)
+	}
+	if len(store.values) != 0 {
+		t.Fatal("mirror route was cached")
+	}
+}

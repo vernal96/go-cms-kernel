@@ -147,6 +147,9 @@ WHERE id = $1;`, id, actorID); err != nil {
 	if err := r.finishLifecycle(ctx, tx, hookStates, false, actorID, false); err != nil {
 		return err
 	}
+	if err := validateMirrorNamespaces(ctx, tx, false); err != nil {
+		return err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return translateError(err)
 	}
@@ -189,6 +192,17 @@ func (r *Repository) Delete(
 	}
 	if _, err := transaction.Exec(ctx, `LOCK TABLE core.resources IN SHARE ROW EXCLUSIVE MODE;`); err != nil {
 		return fmt.Errorf("lock resources for permanent delete: %w", err)
+	}
+
+	var referenced bool
+	if err := transaction.QueryRow(ctx, `WITH RECURSIVE tree AS (
+ SELECT id FROM core.resources WHERE id=$1 UNION ALL
+ SELECT child.id FROM core.resources child JOIN tree ON child.parent_id=tree.id
+ ) SELECT EXISTS(SELECT 1 FROM core.resources mirror JOIN tree ON tree.id=mirror.source_library_id)`, id).Scan(&referenced); err != nil {
+		return err
+	}
+	if referenced {
+		return resource.ErrReferenced
 	}
 
 	hookSiblings, err := r.relatedStates(ctx, transaction, id, deletedSiteID, resourceIDFromInt64(deletedParentID), resourceIDFromInt64(deletedParentID), false, true)

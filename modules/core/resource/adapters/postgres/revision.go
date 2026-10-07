@@ -295,6 +295,9 @@ UPDATE core.resources item SET path=tree.path,updated_at=now(),updated_by=$2 FRO
 	if err := r.appendResourceEvent(ctx, tx, resource.EventUpdated, candidate.ID, candidate.SiteID, resource.StorageTree, candidate.Version, actorID); err != nil {
 		return resource.Resource{}, err
 	}
+	if err := validateMirrorNamespaces(ctx, tx, !sameOptionalText(current.Path, candidate.Path) || !reflect.DeepEqual(current.TypeSettings, candidate.TypeSettings)); err != nil {
+		return resource.Resource{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return resource.Resource{}, translateError(err)
 	}
@@ -328,7 +331,7 @@ func (r *Repository) restoreLibraryItemRevisionOnce(ctx context.Context, actorID
 	if err != nil {
 		return resource.LibraryItem{}, err
 	}
-	if err := lockRouteNamespace(ctx, tx, candidate.SiteID); err != nil {
+	if err := lockLibraryRouteNamespace(ctx, tx, candidate.SiteID); err != nil {
 		return resource.LibraryItem{}, err
 	}
 	if err := lockRevisionMedia(ctx, tx, locked.ImageMediaID, candidate.ImageMediaID, candidate.ID); err != nil {

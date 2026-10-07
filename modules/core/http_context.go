@@ -12,6 +12,7 @@ type requestContextKey uint8
 const (
 	siteRuntimeContextKey requestContextKey = iota + 1
 	resourceContextKey
+	publicResourcePathContextKey
 )
 
 func WithSiteRuntime(

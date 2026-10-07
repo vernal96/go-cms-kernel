@@ -24,6 +24,14 @@ type apiResourceRepository struct {
 	lookups []string
 }
 
+func (r *apiResourceRepository) ByID(ctx context.Context, id resource.ID) (resource.Resource, error) {
+	if id == 11 {
+		_, library, err := r.ResolveLibraryItemRoute(ctx, 1, "/news/release")
+		return library, err
+	}
+	return r.resourceRepository.ByID(ctx, id)
+}
+
 func (r *apiResourceRepository) ByPath(ctx context.Context, siteID site.ID, path string) (resource.Resource, error) {
 	r.lookups = append(r.lookups, path)
 	return r.resourceRepository.ByPath(ctx, siteID, path)
@@ -33,8 +41,8 @@ func (r *apiResourceRepository) ResolveLibraryItemRoute(_ context.Context, siteI
 	if siteID != 1 || path != "/news/release" {
 		return resource.LibraryItem{}, resource.Resource{}, resource.ErrNotFound
 	}
-	return resource.LibraryItem{ID: 12, SiteID: 1, LibraryID: 11, Title: "Release", IsPublic: true},
-		resource.Resource{ID: 11, SiteID: 1, Type: resourcetype.Library, IsPublic: true}, nil
+	return resource.LibraryItem{ID: 12, SiteID: 1, LibraryID: 11, Title: "Release", Slug: "release", IsPublic: true},
+		resource.Resource{ID: 11, SiteID: 1, Type: resourcetype.Library, Path: stringPointer("/news"), IsPublic: true, TypeSettings: map[string]any{"item_url_pattern": "/{slug}"}}, nil
 }
 
 func TestAPIPrefixKeepsContentPathsAndLibraryResolution(t *testing.T) {

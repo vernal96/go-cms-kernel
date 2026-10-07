@@ -39,7 +39,7 @@ func (r *Repository) CreateLibraryItem(ctx context.Context, actorID *security.Us
 			_ = tx.Rollback(context.Background())
 		}
 	}()
-	if err := lockRouteNamespace(ctx, tx, item.SiteID); err != nil {
+	if err := lockLibraryRouteNamespace(ctx, tx, item.SiteID); err != nil {
 		return resource.LibraryItem{}, err
 	}
 	if err := ensureLibraryTarget(ctx, tx, item.SiteID, item.LibraryID); err != nil {
@@ -180,7 +180,7 @@ func (r *Repository) updateLibraryItemOnce(ctx context.Context, actorID *securit
 	if err != nil {
 		return resource.LibraryItem{}, err
 	}
-	if err := lockRouteNamespace(ctx, tx, locked.SiteID); err != nil {
+	if err := lockLibraryRouteNamespace(ctx, tx, locked.SiteID); err != nil {
 		return resource.LibraryItem{}, err
 	}
 	library, err := routeResourceByID(ctx, tx, locked.LibraryID)
@@ -299,7 +299,7 @@ func (r *Repository) RestoreLibraryItem(ctx context.Context, actorID *security.U
 	if err != nil {
 		return err
 	}
-	if err := lockRouteNamespace(ctx, tx, item.SiteID); err != nil {
+	if err := lockLibraryRouteNamespace(ctx, tx, item.SiteID); err != nil {
 		return err
 	}
 	library, err := routeResourceByID(ctx, tx, item.LibraryID)
@@ -336,7 +336,7 @@ func (r *Repository) DeleteLibraryItem(ctx context.Context, id resource.ID) erro
 	if err != nil {
 		return err
 	}
-	if err := lockRouteNamespace(ctx, tx, item.SiteID); err != nil {
+	if err := lockLibraryRouteNamespace(ctx, tx, item.SiteID); err != nil {
 		return err
 	}
 	if err := r.appendStateEvent(ctx, tx, resource.EventDeleted, resource.StateFromLibraryItem(item), nil); err != nil {
@@ -409,7 +409,7 @@ func (r *Repository) moveLibraryItemOnce(ctx context.Context, actorID *security.
 		return resource.LibraryItem{}, err
 	}
 	targetLibraryID = hookCandidate.LibraryID
-	if err := lockRouteNamespace(ctx, tx, item.SiteID); err != nil {
+	if err := lockLibraryRouteNamespace(ctx, tx, item.SiteID); err != nil {
 		return resource.LibraryItem{}, err
 	}
 	if err := tx.QueryRow(ctx, `UPDATE core.resource_entities SET version=version+1 WHERE id=$1 AND version=$2 RETURNING version;`, id, expectedVersion).Scan(&item.Version); errors.Is(err, pgx.ErrNoRows) {

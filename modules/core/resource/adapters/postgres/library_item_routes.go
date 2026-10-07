@@ -15,7 +15,7 @@ import (
 )
 
 func (r *Repository) lookupLibraryItemRoute(ctx context.Context, siteID site.ID, path string) (resource.LibraryItem, resource.Resource, error) {
-	rows, err := r.connector.Pool().Query(ctx, `SELECT id, site_id, parent_id, type, template, content_type, title, menu_title, slug, path, annotation, content, image_media_id, target_resource_id, external_url, is_public, is_searchable, in_menu, in_sitemap, sort, published_at, unpublished_at, type_settings, created_at, updated_at, created_by, updated_by, deleted_at, deleted_by FROM core.resources WHERE site_id=$1 AND type='library' AND path IS NOT NULL AND (path='/' OR $2=path OR $2 LIKE path||'/%') ORDER BY length(path) DESC, id;`, siteID, path)
+	rows, err := r.connector.Pool().Query(ctx, `SELECT id, site_id, parent_id, type, template, content_type, title, menu_title, slug, path, annotation, content, image_media_id, target_resource_id, external_url, is_public, is_searchable, in_menu, in_sitemap, sort, published_at, unpublished_at, type_settings, created_at, updated_at, created_by, updated_by, deleted_at, deleted_by FROM core.resources WHERE site_id=$1 AND type IN ('library','library_mirror') AND path IS NOT NULL AND (path='/' OR $2=path OR $2 LIKE path||'/%') ORDER BY length(path) DESC, id;`, siteID, path)
 	if err != nil {
 		return resource.LibraryItem{}, resource.Resource{}, err
 	}
@@ -32,7 +32,11 @@ func (r *Repository) lookupLibraryItemRoute(ctx context.Context, siteID site.ID,
 		return resource.LibraryItem{}, resource.Resource{}, err
 	}
 	rows.Close()
-	for _, library := range libraries {
+	for _, mount := range libraries {
+		library, err := effectiveRouteLibrary(ctx, r.connector.Pool(), mount, nil)
+		if err != nil {
+			return resource.LibraryItem{}, resource.Resource{}, err
+		}
 		pattern, _ := library.TypeSettings["item_url_pattern"].(string)
 		if pattern == "" {
 			pattern = resourcetype.DefaultItemURLPattern
@@ -67,7 +71,7 @@ func (r *Repository) lookupLibraryItemRoute(ctx context.Context, siteID site.ID,
 		if effectiveURL != path {
 			continue
 		}
-		return item, library, nil
+		return item, mount, nil
 	}
 	return resource.LibraryItem{}, resource.Resource{}, resource.ErrNotFound
 }

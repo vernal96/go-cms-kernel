@@ -88,20 +88,20 @@ func (m *Resources) LibraryItems(ctx context.Context, actor security.Actor, site
 	if err := m.requireSite(ctx, actor, siteID, ResourceReadPermission, SiteAccessEdit); err != nil {
 		return LibraryItemsPage{}, err
 	}
-	page, err := m.libraryItems.Query(ctx, actor, resource.LibraryItemQuery{
+	page, collection, err := m.libraryItems.QueryCollection(ctx, actor, resource.LibraryItemQuery{
 		SiteID: siteID, LibraryID: libraryID, Cursor: input.Cursor, Limit: input.Limit,
 		Search: input.Search, Filters: input.Filters, Sort: input.Sort,
 	})
 	if err != nil {
 		return LibraryItemsPage{}, validationError(err)
 	}
-	library, err := m.resources.Get(ctx, actor, libraryID)
-	if err != nil {
-		return LibraryItemsPage{}, err
-	}
 	result := LibraryItemsPage{Items: make([]LibraryItemDTO, len(page.Items)), NextCursor: page.NextCursor}
 	for index, item := range page.Items {
-		result.Items[index] = libraryItemDTO(library, item)
+		result.Items[index] = libraryItemDTO(collection.Source, item)
+		result.Items[index].EffectiveURL, err = collection.URL(item)
+		if err != nil {
+			return LibraryItemsPage{}, err
+		}
 	}
 	return result, nil
 }

@@ -269,6 +269,16 @@ func (r *Repository) Delete(ctx context.Context, id site.ID) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('core.route-topology', 0))`); err != nil {
+		return err
+	}
+	var referenced bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.resources mirror JOIN core.resources source ON source.id=mirror.source_library_id WHERE source.site_id=$1)`, id).Scan(&referenced); err != nil {
+		return err
+	}
+	if referenced {
+		return site.ErrReferenced
+	}
 	if _, err := tx.Exec(ctx, `
 DELETE FROM core.file_field_references
 WHERE owner_kind = 'resource'
@@ -281,6 +291,10 @@ WHERE owner_kind = 'resource'
 	}
 	result, err := tx.Exec(ctx, `DELETE FROM core.sites WHERE id = $1;`, id)
 	if err != nil {
+		var postgresError *pgconn.PgError
+		if errors.As(err, &postgresError) && postgresError.Code == pgerrcode.ForeignKeyViolation && postgresError.ConstraintName == "fk_library_mirror_source" {
+			return fmt.Errorf("%w: %v", site.ErrReferenced, err)
+		}
 		return fmt.Errorf("delete core site %d: %w", id, err)
 	}
 	if result.RowsAffected() == 0 {

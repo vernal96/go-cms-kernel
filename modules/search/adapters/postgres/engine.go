@@ -60,6 +60,27 @@ const matchesSQL = `WITH matches AS (
    AND (library.unpublished_at IS NULL OR library.unpublished_at>now())
    AND (lower(i.title) LIKE lower($3) OR lower(i.annotation) LIKE lower($3) OR lower(i.content) LIKE lower($3)
      OR lower(i.title) %> lower($2) OR lower(i.annotation) %> lower($2) OR lower(i.content) %> lower($2))
+ UNION ALL
+ SELECT i.id, 'library_item'::text, i.title, i.annotation, i.content,
+        mirror.path, coalesce(library.type_settings->>'item_url_pattern',''), i.slug, i.created_at, i.published_at
+ FROM core.library_items i
+ JOIN core.resources library ON library.id=i.library_id AND library.site_id=i.site_id
+ JOIN core.resources mirror ON mirror.source_library_id=library.id AND mirror.site_id=$1
+ JOIN core.sites source_site ON source_site.id=library.site_id AND source_site.is_public
+ WHERE mirror.type='library_mirror' AND mirror.path IS NOT NULL
+   AND mirror.deleted_at IS NULL AND mirror.is_public
+   AND (mirror.published_at IS NULL OR mirror.published_at<=now())
+   AND (mirror.unpublished_at IS NULL OR mirror.unpublished_at>now()) AND i.deleted_at IS NULL AND i.is_public AND i.is_searchable
+   AND (i.published_at IS NULL OR i.published_at<=now())
+   AND (i.unpublished_at IS NULL OR i.unpublished_at>now())
+   AND (lower(i.title || E'\n' || i.annotation || E'\n' || i.content) LIKE lower($3)
+     OR lower(i.title || E'\n' || i.annotation || E'\n' || i.content) %> lower($2))
+   AND library.type='library' AND mirror.type=ANY($4::text[]) AND library.path IS NOT NULL
+   AND library.deleted_at IS NULL AND library.is_public
+   AND (library.published_at IS NULL OR library.published_at<=now())
+   AND (library.unpublished_at IS NULL OR library.unpublished_at>now())
+   AND (lower(i.title) LIKE lower($3) OR lower(i.annotation) LIKE lower($3) OR lower(i.content) LIKE lower($3)
+     OR lower(i.title) %> lower($2) OR lower(i.annotation) %> lower($2) OR lower(i.content) %> lower($2))
 )
 `
 
@@ -69,7 +90,7 @@ const pageSQL = matchesSQL + `SELECT id, storage_kind, title, annotation, path, 
  FROM matches
  ORDER BY CASE WHEN lower(title)=lower($2) THEN 0
    WHEN lower(title) LIKE lower($3) OR lower(annotation) LIKE lower($3) OR lower(content) LIKE lower($3) THEN 1 ELSE 2 END,
- score DESC, id
+ score DESC, id, path
  LIMIT $5 OFFSET $6`
 
 func (e *Engine) Search(ctx context.Context, query search.Query) (search.Page, error) {

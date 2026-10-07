@@ -10,6 +10,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres/medialock"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
+	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
 	"github.com/vernal96/go-cms-kernel/security"
 )
 
@@ -203,6 +204,9 @@ RETURNING
 		return resource.Resource{}, err
 	}
 
+	if err := validateMirrorNamespaces(ctx, transaction, item.Type == resourcetype.LibraryMirror); err != nil {
+		return resource.Resource{}, err
+	}
 	if err := transaction.Commit(ctx); err != nil {
 		return resource.Resource{}, translateError(err)
 	}

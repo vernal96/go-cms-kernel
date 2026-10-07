@@ -106,6 +106,8 @@ func writeManagementError(response http.ResponseWriter, err error) {
 		httptransport.WriteJSONError(response, http.StatusForbidden, "forbidden", "operation is forbidden")
 	case errors.Is(err, site.ErrNotFound), errors.Is(err, resource.ErrNotFound), errors.Is(err, resource.ErrRevisionNotFound), errors.Is(err, file.ErrNotFound), errors.Is(err, file.ErrFolderNotFound), errors.Is(err, file.ErrStorageNotFound):
 		httptransport.WriteJSONError(response, http.StatusNotFound, "not_found", "requested object was not found")
+	case errors.Is(err, site.ErrReferenced):
+		httptransport.WriteJSONError(response, http.StatusConflict, "site_referenced", "site contains libraries used by mirrors")
 	case errors.Is(err, site.ErrUnavailable):
 		httptransport.WriteJSONError(response, http.StatusServiceUnavailable, "unavailable", "site runtime is updating")
 	case errors.Is(err, site.ErrConflict), errors.Is(err, resource.ErrConflict), errors.Is(err, file.ErrConflict):

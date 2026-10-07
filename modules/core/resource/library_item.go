@@ -443,23 +443,6 @@ func (s *LibraryService) Restore(ctx context.Context, actor security.Actor, id I
 	return s.repository.RestoreLibraryItem(ctx, actor.AuditUserID(), id)
 }
 
-func (s *LibraryService) ResolvePublished(ctx context.Context, actor security.Actor, siteID site.ID, path string) (LibraryItem, Resource, error) {
-	if err := s.common.authorizer.Check(ctx, actor, readPermission); err != nil {
-		return LibraryItem{}, Resource{}, err
-	}
-	item, library, err := s.repository.ResolveLibraryItemRoute(ctx, siteID, path)
-	if err != nil {
-		return LibraryItem{}, Resource{}, err
-	}
-	now := time.Now().UTC()
-	if library.DeletedAt != nil || item.DeletedAt != nil || !library.IsPublic || !item.IsPublic ||
-		(library.PublishedAt != nil && now.Before(*library.PublishedAt)) || (library.UnpublishedAt != nil && !now.Before(*library.UnpublishedAt)) ||
-		(item.PublishedAt != nil && now.Before(*item.PublishedAt)) || (item.UnpublishedAt != nil && !now.Before(*item.UnpublishedAt)) {
-		return LibraryItem{}, Resource{}, ErrNotFound
-	}
-	return cloneLibraryItem(item), Clone(library), nil
-}
-
 func (s *LibraryService) library(ctx context.Context, siteID site.ID, id ID) (Resource, *site.Runtime, error) {
 	item, err := s.common.repository.ByID(ctx, id)
 	if err != nil {
