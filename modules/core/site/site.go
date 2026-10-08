@@ -225,7 +225,7 @@ func normalizeRuntimeSite(
 	if paramSchema == nil {
 		return Site{}, nil, errors.New("profile param schema is nil")
 	}
-	settings, err := paramSchema.Validate(item.Settings)
+	settings, err := paramSchema.ValidateIncomplete(item.Settings)
 	if err != nil {
 		return Site{}, nil, fmt.Errorf("validate site settings: %w", err)
 	}

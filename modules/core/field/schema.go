@@ -311,11 +311,18 @@ func (s *Schema) ValidatePartial(
 	return s.validate(values, false)
 }
 
+// ValidateIncomplete normalizes only populated fields. Missing and empty fields
+// are omitted, while populated values (including false and zero) retain all
+// validation rules. Populated composite values validate their children fully.
+func (s *Schema) ValidateIncomplete(values map[string]any) (map[string]any, error) {
+	return s.validateDeferred(values, false, nil, true)
+}
+
 func (s *Schema) validate(
 	values map[string]any,
 	requireAll bool,
 ) (map[string]any, error) {
-	return s.validateDeferred(values, requireAll, nil)
+	return s.validateDeferred(values, requireAll, nil, false)
 }
 
 // ValidateDeferred validates literal values while leaving explicitly deferred
@@ -332,10 +339,10 @@ func (s *Schema) ValidateDeferred(values map[string]any, deferred map[string]str
 			return nil, fmt.Errorf("field %q has both a literal and a deferred value", key)
 		}
 	}
-	return s.validateDeferred(values, true, deferred)
+	return s.validateDeferred(values, true, deferred, false)
 }
 
-func (s *Schema) validateDeferred(values map[string]any, requireAll bool, deferred map[string]struct{}) (map[string]any, error) {
+func (s *Schema) validateDeferred(values map[string]any, requireAll bool, deferred map[string]struct{}, incomplete bool) (map[string]any, error) {
 	if s == nil {
 		return nil, errors.New("field schema is nil")
 	}
@@ -363,6 +370,9 @@ func (s *Schema) validateDeferred(values map[string]any, requireAll bool, deferr
 		}
 		compiled := s.fields[definition.Key]
 		value, exists := values[definition.Key]
+		if incomplete && (!exists || inputEmpty(value)) {
+			continue
+		}
 		_, isList := compiled.valueType.(listValue)
 		if isList && exists && value == nil {
 			value = []any{}
@@ -407,6 +417,9 @@ func (s *Schema) validateDeferred(values map[string]any, requireAll bool, deferr
 		}
 
 		if compiled.valueType.Empty(normalized) {
+			if incomplete {
+				continue
+			}
 			if compiled.required {
 				validationErrors = append(
 					validationErrors,

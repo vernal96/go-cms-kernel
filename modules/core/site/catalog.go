@@ -385,12 +385,16 @@ func (c *Catalog) Update(
 	if !exists {
 		return nil, fmt.Errorf("%w: profile %q is unknown", ErrInvalid, input.ProfileCode)
 	}
+	settings, err := blueprint.ParamSchema().Validate(input.Settings)
+	if err != nil {
+		return nil, fmt.Errorf("%w: validate site settings: %w", ErrInvalid, err)
+	}
 	item := current.Site()
 	item.ProfileCode = input.ProfileCode
 	item.Name = input.Name
 	item.Domain = input.Domain
 	item.Locale = strings.TrimSpace(input.Locale)
-	item.Settings = cloneSettings(input.Settings)
+	item.Settings = settings
 	item.IsPublic = input.IsPublic
 
 	nextRuntime, err := NewRuntimeFromBlueprint(ctx, item, blueprint)
