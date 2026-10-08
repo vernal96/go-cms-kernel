@@ -94,7 +94,7 @@ func (pageType) PathMode() PathMode {
 func (pageType) Metadata() Metadata {
 	return Metadata{
 		Label:            "Страница",
-		Capabilities:     Capabilities{SupportsTemplate: true, SupportsContent: true, SupportsWidgets: true, SupportsFields: true, MutableType: true, DefaultIcon: "Document"},
+		Capabilities:     Capabilities{SupportsTemplate: true, SupportsContent: true, SupportsWidgets: true, SupportsFields: true, MutableType: true, DefaultIcon: "fa-solid fa-file-lines"},
 		SettingsDefaults: map[string]any{},
 		ContentTypes:     []ContentTypeOption{{Code: "html", Label: "HTML", Editor: "html"}},
 	}
@@ -143,7 +143,7 @@ func (linkType) PathMode() PathMode {
 func (linkType) Metadata() Metadata {
 	return Metadata{
 		Label:            "Ссылка",
-		Capabilities:     Capabilities{SupportsExternalURL: true, MutableType: true, DefaultIcon: "Link"},
+		Capabilities:     Capabilities{SupportsExternalURL: true, MutableType: true, DefaultIcon: "fa-solid fa-link"},
 		SettingsDefaults: map[string]any{},
 	}
 }
@@ -192,7 +192,7 @@ func (resourceLinkType) PathMode() PathMode {
 func (resourceLinkType) Metadata() Metadata {
 	return Metadata{
 		Label:            "Ссылка на ресурс",
-		Capabilities:     Capabilities{SupportsTargetResource: true, MutableType: true, DefaultIcon: "Link"},
+		Capabilities:     Capabilities{SupportsTargetResource: true, MutableType: true, DefaultIcon: "fa-solid fa-link"},
 		SettingsDefaults: map[string]any{},
 	}
 }
@@ -245,7 +245,7 @@ func (libraryType) PathMode() PathMode { return PathRoute }
 func (libraryType) Metadata() Metadata {
 	return Metadata{
 		Label:        "Библиотека",
-		Capabilities: Capabilities{SupportsTemplate: true, SupportsContent: true, SupportsWidgets: true, SupportsFields: true, MutableType: false, OwnsLibraryItems: true, DefaultIcon: "Collection"},
+		Capabilities: Capabilities{SupportsTemplate: true, SupportsContent: true, SupportsWidgets: true, SupportsFields: true, MutableType: false, OwnsLibraryItems: true, DefaultIcon: "fa-solid fa-box-archive"},
 		SettingsFields: []field.Definition{
 			{Key: "item_url_pattern", Type: field.TypeString, Label: "Шаблон URL ресурса", Required: true},
 			{Key: "default_item_template", Type: field.TypeString, Label: "Шаблон ресурса по умолчанию", Editor: "resource-template"},

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 )
@@ -119,9 +120,13 @@ type SiteSnapshot struct {
 }
 
 type ResourceSnapshot struct {
-	ID      int64
-	Title   string
-	Content string
+	ID           int64
+	Title        string
+	Content      string
+	Path         string
+	PublishedAt  *time.Time
+	ImageMediaID *int64
+	Fields       map[string]any
 }
 
 type RenderInput struct {

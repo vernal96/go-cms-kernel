@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 
 	kernel "github.com/vernal96/go-cms-kernel"
@@ -66,11 +67,11 @@ func TestSiteSettingsRequiredOnlyOnUpdate(t *testing.T) {
 			t.Fatal("failed update changed runtime or stored site")
 		}
 		input.Settings = map[string]any{"logo": 3}
-		if _, err := catalog.Update(ctx, security.System(), input); err == nil {
-			t.Fatal("update accepted JPEG")
+		if _, err := catalog.Update(ctx, security.System(), input); err == nil || !strings.Contains(err.Error(), "image/jpeg") || !strings.Contains(err.Error(), "image/png") {
+			t.Fatalf("update MIME mismatch error = %v", err)
 		}
-		if _, err := catalog.Create(ctx, security.System(), CreateInput{ProfileCode: "settings", Name: "Invalid", Domain: "invalid.test", Locale: "ru-RU", Settings: input.Settings}); err == nil {
-			t.Fatal("create accepted JPEG")
+		if _, err := catalog.Create(ctx, security.System(), CreateInput{ProfileCode: "settings", Name: "Invalid", Domain: "invalid.test", Locale: "ru-RU", Settings: input.Settings}); err == nil || !strings.Contains(err.Error(), "image/jpeg") || !strings.Contains(err.Error(), "image/png") {
+			t.Fatalf("create MIME mismatch error = %v", err)
 		}
 		for _, id := range []int{1, 2} {
 			input.Settings = map[string]any{"logo": id}

@@ -69,3 +69,63 @@ Content-Type: application/json
 Ссылки не содержат `/api`: этот префикс добавляется только при запросе JSON.
 Ошибки конфигурации или курсора возвращаются стандартной ошибкой конкретного
 виджета в публичном ответе страницы.
+
+## Контекст пользовательских виджетов
+
+Core передаёт виджету нейтральные снимки текущего сайта и ресурса через
+`widget.RenderInput`. `ResourceSnapshot` содержит `ID`, `Title`, `Content`,
+`Path`, `PublishedAt`, `ImageMediaID` и `Fields` (поля шаблона ресурса). Эти
+значения относятся к ресурсу, для которого строится ответ; не сохраняйте снимок
+между запросами.
+
+Модуль, которому для рендеринга нужно найти другие ресурсы, может получить
+сервис запросов через `(*core.Runtime).ResourceQuery()`. Он создаётся в runtime
+конкретного сайта и выполняет запросы с `context.Context`; для публичных данных
+задавайте `PublicOnly: true` и `SiteID` текущего сайта. Например:
+
+```go
+package example
+
+import (
+    "context"
+    "errors"
+
+    "github.com/vernal96/go-cms-kernel/modules/core"
+    "github.com/vernal96/go-cms-kernel/modules/core/resource"
+    "github.com/vernal96/go-cms-kernel/modules/core/site"
+    "github.com/vernal96/go-cms-kernel/modules/core/widget"
+)
+
+func loadPublicResource(
+    ctx context.Context,
+    coreRuntime *core.Runtime,
+    input widget.RenderInput,
+    id resource.ID,
+) (resource.Resource, error) {
+    query := coreRuntime.ResourceQuery()
+    if query == nil {
+        return resource.Resource{}, errors.New("resource query service is unavailable")
+    }
+    page, err := query.Query(ctx, resource.Query{
+        SiteID: site.ID(input.Site.ID),
+        IDs: []resource.ID{id},
+        Limit: 1,
+        PublicOnly: true,
+    })
+    if err != nil {
+        return resource.Resource{}, err
+    }
+    if len(page.Items) == 0 {
+        return resource.Resource{}, resource.ErrNotFound
+    }
+    return page.Items[0], nil
+}
+```
+
+Публичные настройки сайта формируются отдельно от снимка ресурса. Core
+включает только определения `Profile.Params` с `Public: true`; для repeater
+рекурсивно включает только публичные вложенные поля. Файловые и media-ссылки
+публикуются как объекты `{ "id": ..., "url": ... }`, а множественные ссылки —
+как массив таких объектов. Закрытые поля и вложенные поля опускаются. Ошибка
+разрешения файла, который отсутствует или недоступен гостю, даёт `null` для
+этой ссылки; другие ошибки получения URL прерывают подготовку site settings.

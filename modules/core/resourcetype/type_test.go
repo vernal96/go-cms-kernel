@@ -59,6 +59,25 @@ func TestPageTypeNormalizesDefaultsAndRejectsIncompatibleFields(
 	}
 }
 
+func TestStandardResourceTypeDefaultIconsUseFontAwesomeClasses(t *testing.T) {
+	for _, test := range []struct {
+		code Code
+		icon string
+	}{
+		{code: Page, icon: "fa-solid fa-file-lines"},
+		{code: Link, icon: "fa-solid fa-link"},
+		{code: ResourceLink, icon: "fa-solid fa-link"},
+		{code: Library, icon: "fa-solid fa-box-archive"},
+		{code: LibraryMirror, icon: "fa-solid fa-copy"},
+	} {
+		t.Run(string(test.code), func(t *testing.T) {
+			if icon := standardType(t, test.code).Metadata().Capabilities.DefaultIcon; icon != test.icon {
+				t.Fatalf("default icon = %q, want %q", icon, test.icon)
+			}
+		})
+	}
+}
+
 func TestLinkTypeURLPolicy(t *testing.T) {
 	link := standardType(t, Link)
 	if capabilities := link.Metadata().Capabilities; !capabilities.SupportsExternalURL || capabilities.SupportsTargetResource {

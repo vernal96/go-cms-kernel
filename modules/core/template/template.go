@@ -137,10 +137,6 @@ func Compile(definitions []Definition, resolver field.TypeResolver) (*Catalog, e
 		if definition.Label == "" || strings.TrimSpace(definition.Label) != definition.Label {
 			return nil, fmt.Errorf("template %q has invalid label %q", definition.Code, definition.Label)
 		}
-		definition.Icon = strings.TrimSpace(definition.Icon)
-		if strings.ContainsAny(definition.Icon, " /\\") {
-			return nil, fmt.Errorf("template %q has invalid icon %q", definition.Code, definition.Icon)
-		}
 		if _, exists := catalog.runtimes[definition.Code]; exists {
 			return nil, fmt.Errorf("duplicate template code %q", definition.Code)
 		}

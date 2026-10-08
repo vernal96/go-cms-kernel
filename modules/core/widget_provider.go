@@ -31,6 +31,7 @@ func buildWidgets(r *Runtime, types []resourcetype.Code, templates []template.De
 	if err != nil {
 		return err
 	}
+	r.resourceQuery = query
 	collectionQuery := func(ctx context.Context, input resource.LibraryItemQuery) (resource.LibraryItemPage, resource.LibraryCollection, error) {
 		if r.services.LibraryItems == nil {
 			return resource.LibraryItemPage{}, resource.LibraryCollection{}, fmt.Errorf("library service is unavailable")

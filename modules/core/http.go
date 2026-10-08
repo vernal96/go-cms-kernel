@@ -353,7 +353,7 @@ func (h pageResourceHandler) renderWidgets(ctx context.Context, siteRuntime *sit
 				Bindings widget.ParamBindings
 				Values   widget.ResourceValues
 			}{placement.Params, placement.ParamBindings, item.WidgetValues()},
-			Input: widget.RenderInput{Key: placement.Key, Cursor: query.Get("cursor." + placement.Key), Site: widget.SiteSnapshot{ID: int64(item.SiteID), Domain: siteRuntime.Site().Domain, Locale: siteRuntime.Site().Locale}, Resource: widget.ResourceSnapshot{ID: int64(item.ID), Title: item.Title, Content: item.Content}},
+			Input: widget.RenderInput{Key: placement.Key, Cursor: query.Get("cursor." + placement.Key), Site: widget.SiteSnapshot{ID: int64(item.SiteID), Domain: siteRuntime.Site().Domain, Locale: siteRuntime.Site().Locale}, Resource: widgetResourceSnapshot(item)},
 		})
 		indexes = append(indexes, len(result))
 		bindings = append(bindings, binding)
@@ -609,8 +609,32 @@ func (h pageResourceHandler) newWidgetInstance(ctx context.Context, runtime *wid
 			return nil, fmt.Errorf("%w: file parameter %q: %v", widget.ErrInvalidParams, ref.Key, err)
 		}
 		if !field.FileMatches(ref.Options, item.Storage, item.MIMEType) {
-			return nil, fmt.Errorf("%w: file parameter %q rejects selected file", widget.ErrInvalidParams, ref.Key)
+			return nil, fmt.Errorf(
+				"%w: file parameter %q rejects MIME type %q in storage %q; allowed MIME types: %v; allowed storages: %v",
+				widget.ErrInvalidParams,
+				ref.Key,
+				item.MIMEType,
+				item.Storage,
+				ref.Options.MIMETypes,
+				ref.Options.Storages,
+			)
 		}
 	}
 	return runtime.New(params)
+}
+
+func widgetResourceSnapshot(item resource.Resource) widget.ResourceSnapshot {
+	item = resource.Clone(item)
+	snapshot := widget.ResourceSnapshot{
+		ID: int64(item.ID), Title: item.Title, Content: item.Content,
+		Fields: item.Fields, PublishedAt: item.PublishedAt,
+	}
+	if item.Path != nil {
+		snapshot.Path = *item.Path
+	}
+	if item.ImageMediaID != nil {
+		imageID := int64(*item.ImageMediaID)
+		snapshot.ImageMediaID = &imageID
+	}
+	return snapshot
 }

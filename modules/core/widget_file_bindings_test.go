@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
@@ -53,8 +54,8 @@ func TestBoundFileChecksTargetRestrictions(t *testing.T) {
 		if mime == "image/png" && err != nil {
 			t.Fatal(err)
 		}
-		if mime == "application/pdf" && !errors.Is(err, widget.ErrInvalidParams) {
-			t.Fatalf("MIME constraint bypassed: %v", err)
+		if mime == "application/pdf" && (!errors.Is(err, widget.ErrInvalidParams) || !strings.Contains(err.Error(), mime) || !strings.Contains(err.Error(), "image/*")) {
+			t.Fatalf("MIME mismatch error is not explicit: %v", err)
 		}
 	}
 }

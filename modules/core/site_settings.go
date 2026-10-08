@@ -56,44 +56,136 @@ func projectPublicSettings(ctx context.Context, values map[string]any, definitio
 		if !exists {
 			continue
 		}
-		if value == nil || (definition.Type != field.TypeFile && definition.Type != field.TypeMedia) {
-			result[definition.Key] = value
-			continue
-		}
-		// Site settings have already been normalized by the compiled schema.
-		id, ok := value.(int64)
-		if !ok || id <= 0 {
-			return nil, fmt.Errorf("invalid site reference %q", definition.Key)
-		}
-		fileID := file.ID(id)
-		var err error
-		if definition.Type == field.TypeMedia {
-			if mediaService == nil {
-				return nil, errors.New("site media service unavailable")
-			}
-			var item media.Media
-			item, err = mediaService.Get(ctx, security.Guest(), media.ID(id))
-			fileID = item.FileID
-		}
-		var url string
-		if err == nil {
-			if files == nil {
-				return nil, errors.New("site file service unavailable")
-			}
-			url, err = files.URL(ctx, security.Guest(), fileID)
-		}
+		projected, err := projectPublicSettingValue(ctx, definition, value, files, mediaService)
 		if err != nil {
-			if errors.Is(err, file.ErrNotFound) || errors.Is(err, media.ErrNotFound) ||
-				errors.Is(err, security.ErrForbidden) || errors.Is(err, security.ErrUnauthenticated) ||
-				errors.Is(err, file.ErrUnauthorized) || errors.Is(err, filesystem.ErrInvalidVisibility) {
-				result[definition.Key] = nil
-				continue
-			}
-			return nil, fmt.Errorf("resolve public site parameter %q: %w", definition.Key, err)
+			return nil, fmt.Errorf("project public site parameter %q: %w", definition.Key, err)
 		}
-		result[definition.Key] = publicFileValue{ID: id, URL: url}
+		result[definition.Key] = projected
 	}
 	return result, nil
+}
+
+func projectPublicSettingValue(ctx context.Context, definition field.Definition, value any, files publicSettingsFiles, mediaService publicSettingsMedia) (any, error) {
+	if value == nil {
+		return nil, nil
+	}
+	switch definition.Type {
+	case field.TypeRepeater:
+		options, err := repeaterFieldOptions(definition.Options)
+		if err != nil {
+			return nil, fmt.Errorf("decode repeater fields: %w", err)
+		}
+		rows, ok := value.([]any)
+		if !ok {
+			return nil, errors.New("repeater value is invalid")
+		}
+		projectedRows := make([]map[string]any, 0, len(rows))
+		for _, item := range rows {
+			row, ok := item.(map[string]any)
+			if !ok {
+				return nil, errors.New("repeater row is invalid")
+			}
+			projectedRow := make(map[string]any)
+			for _, nested := range options.Fields {
+				if !nested.Public {
+					continue
+				}
+				nestedValue, exists := row[nested.Key]
+				if !exists {
+					continue
+				}
+				projectedValue, err := projectPublicSettingValue(ctx, nested, nestedValue, files, mediaService)
+				if err != nil {
+					return nil, fmt.Errorf("field %q: %w", nested.Key, err)
+				}
+				projectedRow[nested.Key] = projectedValue
+			}
+			projectedRows = append(projectedRows, projectedRow)
+		}
+		return projectedRows, nil
+	case field.TypeFile, field.TypeMedia:
+		if multipleReferenceValue(definition) {
+			values, ok := value.([]any)
+			if !ok {
+				return nil, errors.New("multiple file reference value is invalid")
+			}
+			result := make([]any, len(values))
+			for index, item := range values {
+				projected, err := projectPublicFileReference(ctx, definition, item, files, mediaService)
+				if err != nil {
+					return nil, err
+				}
+				result[index] = projected
+			}
+			return result, nil
+		}
+		return projectPublicFileReference(ctx, definition, value, files, mediaService)
+	default:
+		return value, nil
+	}
+}
+
+func repeaterFieldOptions(value any) (field.RepeaterOptions, error) {
+	switch options := value.(type) {
+	case field.RepeaterOptions:
+		options.Fields = field.CloneDefinitions(options.Fields)
+		return options, nil
+	case *field.RepeaterOptions:
+		if options == nil {
+			return field.RepeaterOptions{}, errors.New("repeater options are nil")
+		}
+		result := *options
+		result.Fields = field.CloneDefinitions(options.Fields)
+		return result, nil
+	default:
+		return field.DecodeOptions[field.RepeaterOptions](value)
+	}
+}
+
+func multipleReferenceValue(definition field.Definition) bool {
+	switch definition.Type {
+	case field.TypeFile:
+		options, _ := field.FileOptionsValue(definition.Options)
+		return options.Multiple
+	case field.TypeMedia:
+		options, err := field.DecodeOptions[field.MediaOptions](definition.Options)
+		return err == nil && options.Multiple
+	default:
+		return false
+	}
+}
+
+func projectPublicFileReference(ctx context.Context, definition field.Definition, value any, files publicSettingsFiles, mediaService publicSettingsMedia) (any, error) {
+	id, ok := value.(int64)
+	if !ok || id <= 0 {
+		return nil, fmt.Errorf("invalid file reference %q", definition.Key)
+	}
+	fileID := file.ID(id)
+	var err error
+	if definition.Type == field.TypeMedia {
+		if mediaService == nil {
+			return nil, errors.New("site media service unavailable")
+		}
+		var item media.Media
+		item, err = mediaService.Get(ctx, security.Guest(), media.ID(id))
+		fileID = item.FileID
+	}
+	var url string
+	if err == nil {
+		if files == nil {
+			return nil, errors.New("site file service unavailable")
+		}
+		url, err = files.URL(ctx, security.Guest(), fileID)
+	}
+	if err != nil {
+		if errors.Is(err, file.ErrNotFound) || errors.Is(err, media.ErrNotFound) ||
+			errors.Is(err, security.ErrForbidden) || errors.Is(err, security.ErrUnauthenticated) ||
+			errors.Is(err, file.ErrUnauthorized) || errors.Is(err, filesystem.ErrInvalidVisibility) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return publicFileValue{ID: id, URL: url}, nil
 }
 
 func (r *Runtime) serveSite(response http.ResponseWriter, request *http.Request) {

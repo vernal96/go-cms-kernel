@@ -115,3 +115,49 @@ func TestPublicSettingsReferences(t *testing.T) {
 		})
 	}
 }
+
+func TestPublicSettingsProjectsNestedRepeaterReferences(t *testing.T) {
+	publicFields := []field.Definition{
+		{Key: "icon", Type: field.TypeFile, Public: true},
+		{Key: "documents", Type: field.TypeFile, Public: true, Options: field.FileOptions{Multiple: true}},
+		{Key: "logo", Type: field.TypeMedia, Public: true},
+		{Key: "gallery", Type: field.TypeMedia, Public: true, Options: field.MediaOptions{Multiple: true}},
+		{Key: "secret", Type: field.TypeString, Public: false},
+		{Key: "nested", Type: field.TypeRepeater, Public: true, Options: field.RepeaterOptions{Fields: []field.Definition{
+			{Key: "attachment", Type: field.TypeFile, Public: true},
+			{Key: "private", Type: field.TypeString, Public: false},
+		}}},
+	}
+	definitions := []field.Definition{{
+		Key: "portals", Type: field.TypeRepeater, Public: true,
+		Options: field.RepeaterOptions{Fields: publicFields},
+	}}
+	values := map[string]any{"portals": []any{
+		map[string]any{
+			"icon": int64(1), "documents": []any{int64(2), int64(3)}, "logo": int64(7),
+			"gallery": []any{int64(7), int64(7)}, "secret": "must not escape",
+			"nested": []any{map[string]any{"attachment": int64(4), "private": "hidden"}},
+		},
+	}}
+
+	got, err := projectPublicSettings(context.Background(), values, definitions, &settingsFiles{t: t}, settingsMedia{t: t})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"portals": []map[string]any{{
+		"icon": publicFileValue{ID: 1, URL: "/files/logo.svg"},
+		"documents": []any{
+			publicFileValue{ID: 2, URL: "/files/logo.svg"},
+			publicFileValue{ID: 3, URL: "/files/logo.svg"},
+		},
+		"logo": publicFileValue{ID: 7, URL: "/files/logo.svg"},
+		"gallery": []any{
+			publicFileValue{ID: 7, URL: "/files/logo.svg"},
+			publicFileValue{ID: 7, URL: "/files/logo.svg"},
+		},
+		"nested": []map[string]any{{"attachment": publicFileValue{ID: 4, URL: "/files/logo.svg"}}},
+	}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("public settings = %#v, want %#v", got, want)
+	}
+}

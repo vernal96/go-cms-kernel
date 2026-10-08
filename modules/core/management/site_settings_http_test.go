@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	kernel "github.com/vernal96/go-cms-kernel"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
+	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
@@ -118,5 +119,84 @@ func TestSiteSettingsHTTPCreateIncompleteAndUpdateRequired(t *testing.T) {
 		if payload.Error.Code != "validation_failed" || len(payload.Error.Details.Fields) != 1 || payload.Error.Details.Fields[0].Key != "logo" || payload.Error.Details.Fields[0].Code != "required" {
 			t.Fatalf("unexpected error envelope: %s", response.Body.String())
 		}
+	}
+}
+
+type siteSettingsHTTPFiles struct{ file.Service }
+
+func (siteSettingsHTTPFiles) GetFile(_ context.Context, _ security.Actor, id file.ID) (file.File, error) {
+	return file.File{ID: id, MIMEType: "text/plain", Storage: "private-storage-detail"}, nil
+}
+
+func TestSiteSettingsHTTPRejectsUnsupportedFileFormat(t *testing.T) {
+	ctx := context.Background()
+	factory, err := kernel.NewProfileRuntimeFactory(extensionTestDatabaseResolver{}, kernel.RuntimeServices{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), EventBus: extensionTestBus{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "settings", Modules: []kernel.Module{siteSettingsHTTPModule{}}, Params: []field.Definition{
+		{Key: "logo", Type: field.TypeFile, Label: "Logo", Required: true, Options: field.FileOptions{MIMETypes: []string{"image/*"}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &siteSettingsHTTPRepository{managementSiteRepository: managementSiteRepository{page: site.Page{Items: []site.Site{
+		{ID: 1, ProfileCode: "settings", Name: "Existing", Domain: "existing.test", Locale: "ru-RU"},
+	}}}}
+	access := siteSettingsHTTPAccess{}
+	catalog, err := site.NewCatalog(repo, siteSettingsHTTPProfiles{blueprint}, access, siteSettingsHTTPFiles{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.Reload(ctx); err != nil {
+		t.Fatal(err)
+	}
+	previous, _ := catalog.RuntimeByID(1)
+	service := &Sites{authorization: authorization{sites: catalog, authorizer: access, policy: AllowAllSitesPolicy{}}, repository: repo}
+	router := chi.NewRouter()
+	registerContentRoutes(router, service, nil)
+	for _, requestPath := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPatch, "/sites/1"},
+		{http.MethodPost, "/sites"},
+	} {
+		t.Run(requestPath.method, func(t *testing.T) {
+			request := httptest.NewRequest(requestPath.method, requestPath.path, strings.NewReader(`{"name":"Edited","domain":"changed.test","profile_code":"settings","locale":"ru-RU","is_public":false,"settings":{"logo":9}}`))
+			request = request.WithContext(httptransport.WithActor(ctx, security.User(1)))
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if response.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("status %d: %s", response.Code, response.Body.String())
+			}
+			var payload struct {
+				Error struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+					Details struct {
+						Fields []FieldValidationError `json:"fields"`
+					} `json:"details"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Error.Code != "validation_failed" || !strings.Contains(payload.Error.Message, "file format") || !strings.Contains(payload.Error.Message, "logo") || len(payload.Error.Details.Fields) != 1 {
+				t.Fatalf("unexpected error envelope: %s", response.Body.String())
+			}
+			failure := payload.Error.Details.Fields[0]
+			allowed, ok := failure.Params["allowed_mime_types"].([]any)
+			if failure.Key != "logo" || failure.Code != "file_constraints" || failure.Params["mime_type"] != "text/plain" || !ok || len(allowed) != 1 || allowed[0] != "image/*" {
+				t.Fatalf("unexpected field error: %#v", failure)
+			}
+			if strings.Contains(response.Body.String(), "private-storage-detail") || strings.Contains(response.Body.String(), "CMS management") {
+				t.Fatalf("internal details leaked: %s", response.Body.String())
+			}
+			current, _ := catalog.RuntimeByID(1)
+			if current != previous || len(repo.page.Items) != 1 || repo.page.Items[0].Name != "Existing" {
+				t.Fatal("rejected file changed the stored site or runtime")
+			}
+		})
 	}
 }

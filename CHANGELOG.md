@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.0
+
+- Treat template and resource icons as opaque class strings. Kernel does not select or validate an icon library; empty icon metadata uses the standard `fa-solid fa-file-lines` class.
+- Document `ResourceSnapshot`, site-scoped `ResourceQuery`, recursive public site-settings projection, and readable server-side MIME restriction errors.
+
 ## 0.4.0
 
 - Replace `ProfileModule` and untyped configuration with `[]kernel.Module` and module-specific constructors. Modules own immutable typed configuration; only modules using caches or filesystems expose their bindings.

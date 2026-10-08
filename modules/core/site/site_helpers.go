@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	kernel "github.com/vernal96/go-cms-kernel"
+	"github.com/vernal96/go-cms-kernel/filesystem"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	"github.com/vernal96/go-cms-kernel/security"
@@ -103,7 +104,23 @@ func (c *Catalog) validateFileReferences(
 			return fmt.Errorf("file field %q: %w", reference.Key, err)
 		}
 		if !field.FileMatches(reference.Options, item.Storage, item.MIMEType) {
-			return fmt.Errorf("file field %q rejects selected file", reference.Key)
+			return fmt.Errorf(
+				"file field %q rejects file with MIME type %q in storage %q; allowed MIME types: %v; allowed storages: %v: %w",
+				reference.Key,
+				item.MIMEType,
+				item.Storage,
+				reference.Options.MIMETypes,
+				reference.Options.Storages,
+				field.ValidationErrors{{
+					Key:  reference.Key,
+					Code: "file_constraints",
+					Params: map[string]any{
+						"mime_type":          item.MIMEType,
+						"allowed_mime_types": append([]string(nil), reference.Options.MIMETypes...),
+						"allowed_storages":   append([]filesystem.Code(nil), reference.Options.Storages...),
+					},
+				}},
+			)
 		}
 	}
 	return nil

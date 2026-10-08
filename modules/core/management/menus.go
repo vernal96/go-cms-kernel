@@ -328,12 +328,14 @@ func treeItem(runtime *site.Runtime, item resource.Child, canCreate bool) Resour
 	if displayTitle == "" {
 		displayTitle = item.Title
 	}
-	icon := "document"
+	icon := defaultIcon
 	if runtime == nil {
 		if item.Type == resourcetype.Link || item.Type == resourcetype.ResourceLink {
-			icon = "link"
+			icon = "fa-solid fa-link"
 		} else if item.Type == resourcetype.Library {
-			icon = "collection"
+			icon = "fa-solid fa-box-archive"
+		} else if item.Type == resourcetype.LibraryMirror {
+			icon = "fa-solid fa-copy"
 		}
 	} else {
 		if resourceType, exists := runtime.Profile().Registry().ResourceType(item.Type); exists {
@@ -341,7 +343,7 @@ func treeItem(runtime *site.Runtime, item resource.Child, canCreate bool) Resour
 		}
 		if item.Template != nil {
 			if templateRuntime, exists := runtime.Profile().Template(*item.Template); exists {
-				if templateIcon, allowed := allowedIcon(templateRuntime.Definition().Icon); allowed {
+				if templateIcon := templateRuntime.Definition().Icon; templateIcon != "" {
 					icon = templateIcon
 				}
 			}
@@ -459,21 +461,13 @@ func appendResourceOptions(target *[]ResourceOption, nodes []resource.Node) {
 	}
 }
 
-func iconOrDefault(icon string) string {
-	if normalized, allowed := allowedIcon(icon); allowed {
-		return normalized
-	}
-	return "document"
-}
+const defaultIcon = "fa-solid fa-file-lines"
 
-func allowedIcon(icon string) (string, bool) {
-	icon = strings.ToLower(strings.TrimSpace(icon))
-	switch icon {
-	case "document", "link", "folder", "tickets", "collection":
-		return icon, true
-	default:
-		return "", false
+func iconOrDefault(icon string) string {
+	if icon == "" {
+		return defaultIcon
 	}
+	return icon
 }
 
 func cloneAnyMap(source map[string]any) map[string]any {
@@ -508,13 +502,17 @@ func validationError(err error) error {
 	var fieldErrors field.ValidationErrors
 	if errors.As(err, &fieldErrors) {
 		fields := make([]FieldValidationError, len(fieldErrors))
+		message := "request data is invalid"
 		for index, item := range fieldErrors {
 			fields[index] = FieldValidationError{
 				Key: item.Key, Code: string(item.Code), Params: item.Params,
 			}
+			if item.Code == "file_constraints" {
+				message = fmt.Sprintf("file format or storage is not supported for field %q", item.Key)
+			}
 		}
 		return ValidationError{
-			Message: "request data is invalid",
+			Message: message,
 			Fields:  fields,
 		}
 	}

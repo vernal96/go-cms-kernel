@@ -217,6 +217,7 @@ type Runtime struct {
 	revisionPolicy  resource.RevisionPolicy
 	logger          *slog.Logger
 	widgets         []widget.Widget
+	resourceQuery   *resource.QueryService
 }
 
 // ResourceRevisionPolicy exposes the profile's semantic history policy without
@@ -277,6 +278,15 @@ func (module) EntityHookEventNames() []string {
 }
 
 func (r *Runtime) MediaSettings() *media.SettingsService { return r.mediaSettings }
+
+// ResourceQuery returns the site's resource query service
+// for dependent modules that need to resolve public resources during rendering.
+func (r *Runtime) ResourceQuery() *resource.QueryService {
+	if r == nil {
+		return nil
+	}
+	return r.resourceQuery
+}
 
 func (m module) Registry() (kernel.ModuleRegistry, error) {
 	settings, err := media.SettingsFields(m.config.MediaSettings)

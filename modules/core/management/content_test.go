@@ -226,7 +226,7 @@ func TestManagementListSitesRejectsPermissionAndPagination(t *testing.T) {
 	}
 }
 
-func TestResourceTreeItemUsesSafeTitleAndIconFallbacks(t *testing.T) {
+func TestResourceTreeItemUsesIconDefaultsAndPreservesOpaqueValues(t *testing.T) {
 	t.Parallel()
 	page := treeItem(nil, resource.Child{
 		ID:        1,
@@ -235,18 +235,28 @@ func TestResourceTreeItemUsesSafeTitleAndIconFallbacks(t *testing.T) {
 		MenuTitle: " Menu title ",
 		InMenu:    true,
 	}, false)
-	if page.DisplayTitle != "Menu title" || page.Icon != "document" || page.CanCreateChild || !page.InMenu {
+	if page.DisplayTitle != "Menu title" || page.Icon != "fa-solid fa-file-lines" || page.CanCreateChild || !page.InMenu {
 		t.Fatalf("page item = %#v", page)
 	}
 	link := treeItem(nil, resource.Child{ID: 2, Type: resourcetype.Link, Title: "Link"}, true)
-	if link.DisplayTitle != "Link" || link.Icon != "link" || !link.CanCreateChild {
+	if link.DisplayTitle != "Link" || link.Icon != "fa-solid fa-link" || !link.CanCreateChild {
 		t.Fatalf("link item = %#v", link)
 	}
-	if iconOrDefault("unsafe/path") != "document" {
-		t.Fatal("unsafe icon did not fall back to document")
+	library := treeItem(nil, resource.Child{ID: 3, Type: resourcetype.Library, Title: "Library"}, true)
+	if library.Icon != "fa-solid fa-box-archive" {
+		t.Fatalf("library icon = %q", library.Icon)
 	}
-	if iconOrDefault("Collection") != "collection" {
-		t.Fatal("collection icon was not normalized")
+	mirror := treeItem(nil, resource.Child{ID: 4, Type: resourcetype.LibraryMirror, Title: "Mirror"}, true)
+	if mirror.Icon != "fa-solid fa-copy" {
+		t.Fatalf("library mirror icon = %q", mirror.Icon)
+	}
+	if iconOrDefault("") != "fa-solid fa-file-lines" {
+		t.Fatal("empty icon did not receive the default")
+	}
+	for _, icon := range []string{"not/a-valid-icon", "fa-solid fa-house", "   "} {
+		if normalized := iconOrDefault(icon); normalized != icon {
+			t.Errorf("icon %q was changed to %q", icon, normalized)
+		}
 	}
 }
 

@@ -43,6 +43,30 @@ func TestResourceTemplateRequiresPersistentFieldType(t *testing.T) {
 	}
 }
 
+func TestCompilePreservesOpaqueIconStrings(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		icon string
+	}{
+		{name: "empty", icon: ""},
+		{name: "arbitrary", icon: "not/a-valid-icon"},
+		{name: "multiple classes", icon: "fa-solid fa-house fa-fw"},
+		{name: "whitespace", icon: "   "},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			icon := test.icon
+			catalog, err := Compile([]Definition{{Code: "page", Label: "Page", Icon: icon}}, resolver())
+			if err != nil {
+				t.Fatalf("compile icon %q: %v", icon, err)
+			}
+			runtime, exists := catalog.Template("page")
+			if !exists || runtime.Definition().Icon != icon {
+				t.Fatalf("compiled icon = %q, want %q", runtime.Definition().Icon, icon)
+			}
+		})
+	}
+}
+
 func TestResourceTemplateValidatesAndClonesEditorTabs(t *testing.T) {
 	definition := Definition{
 		Code:  "article",
