@@ -235,25 +235,25 @@ func TestResourceTreeItemUsesIconDefaultsAndPreservesOpaqueValues(t *testing.T) 
 		MenuTitle: " Menu title ",
 		InMenu:    true,
 	}, false)
-	if page.DisplayTitle != "Menu title" || page.Icon != "fa-solid fa-file-lines" || page.CanCreateChild || !page.InMenu {
+	if page.DisplayTitle != "Menu title" || page.Icon != "file-lines" || page.CanCreateChild || !page.InMenu {
 		t.Fatalf("page item = %#v", page)
 	}
 	link := treeItem(nil, resource.Child{ID: 2, Type: resourcetype.Link, Title: "Link"}, true)
-	if link.DisplayTitle != "Link" || link.Icon != "fa-solid fa-link" || !link.CanCreateChild {
+	if link.DisplayTitle != "Link" || link.Icon != "link" || !link.CanCreateChild {
 		t.Fatalf("link item = %#v", link)
 	}
 	library := treeItem(nil, resource.Child{ID: 3, Type: resourcetype.Library, Title: "Library"}, true)
-	if library.Icon != "fa-solid fa-box-archive" {
+	if library.Icon != "box-archive" {
 		t.Fatalf("library icon = %q", library.Icon)
 	}
 	mirror := treeItem(nil, resource.Child{ID: 4, Type: resourcetype.LibraryMirror, Title: "Mirror"}, true)
-	if mirror.Icon != "fa-solid fa-copy" {
+	if mirror.Icon != "copy" {
 		t.Fatalf("library mirror icon = %q", mirror.Icon)
 	}
-	if iconOrDefault("") != "fa-solid fa-file-lines" {
+	if iconOrDefault("") != "file-lines" {
 		t.Fatal("empty icon did not receive the default")
 	}
-	for _, icon := range []string{"not/a-valid-icon", "fa-solid fa-house", "   "} {
+	for _, icon := range []string{"not/a-valid-icon", "house", "   "} {
 		if normalized := iconOrDefault(icon); normalized != icon {
 			t.Errorf("icon %q was changed to %q", icon, normalized)
 		}

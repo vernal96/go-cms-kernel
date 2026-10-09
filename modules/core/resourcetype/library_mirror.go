@@ -17,7 +17,7 @@ func (libraryMirrorType) Metadata() Metadata {
 	metadata.Label = "Зеркало библиотеки"
 	metadata.Capabilities.MutableType = false
 	metadata.Capabilities.MirrorsLibraryItems = true
-	metadata.Capabilities.DefaultIcon = "fa-solid fa-copy"
+	metadata.Capabilities.DefaultIcon = "copy"
 	metadata.SettingsFields = []field.Definition{{Key: "source_library_id", Type: field.TypeInteger, Label: "Библиотека-источник", Required: true, Editor: "library-source-picker"}}
 	return metadata
 }

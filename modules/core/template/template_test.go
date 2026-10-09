@@ -51,7 +51,7 @@ func TestCompilePreservesOpaqueIconStrings(t *testing.T) {
 	}{
 		{name: "empty", icon: ""},
 		{name: "arbitrary", icon: "not/a-valid-icon"},
-		{name: "multiple classes", icon: "fa-solid fa-house fa-fw"},
+		{name: "bare icon name", icon: "house"},
 		{name: "whitespace", icon: "   "},
 	} {
 		t.Run(test.name, func(t *testing.T) {

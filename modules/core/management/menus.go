@@ -331,11 +331,11 @@ func treeItem(runtime *site.Runtime, item resource.Child, canCreate bool) Resour
 	icon := defaultIcon
 	if runtime == nil {
 		if item.Type == resourcetype.Link || item.Type == resourcetype.ResourceLink {
-			icon = "fa-solid fa-link"
+			icon = "link"
 		} else if item.Type == resourcetype.Library {
-			icon = "fa-solid fa-box-archive"
+			icon = "box-archive"
 		} else if item.Type == resourcetype.LibraryMirror {
-			icon = "fa-solid fa-copy"
+			icon = "copy"
 		}
 	} else {
 		if resourceType, exists := runtime.Profile().Registry().ResourceType(item.Type); exists {
@@ -461,7 +461,7 @@ func appendResourceOptions(target *[]ResourceOption, nodes []resource.Node) {
 	}
 }
 
-const defaultIcon = "fa-solid fa-file-lines"
+const defaultIcon = "file-lines"
 
 func iconOrDefault(icon string) string {
 	if icon == "" {

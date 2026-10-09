@@ -432,7 +432,7 @@ func TestResourceMetadataDescribesTemplateSlotsAndProfileWidgets(t *testing.T) {
 		Params:     []field.Definition{{Key: "company", Type: field.TypeString, Label: "Company"}},
 		EditorTabs: []field.EditorTab{{Code: "main", Label: "Main", Fields: []string{"company"}}},
 		Templates: []template.Definition{{
-			Code: "page", Label: "Page", Icon: "fa-solid fa-house fa-fw",
+			Code: "page", Label: "Page", Icon: "house",
 			Fields:     []field.Definition{{Key: "title", Type: field.TypeString, Label: "Title"}},
 			EditorTabs: []field.EditorTab{{Code: "content", Label: "Content", Fields: []string{"title"}}},
 			Layout: template.Layout{
@@ -473,7 +473,7 @@ func TestResourceMetadataDescribesTemplateSlotsAndProfileWidgets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(metadata.Templates) != 1 || metadata.Templates[0].Icon != "fa-solid fa-house fa-fw" || !metadata.Templates[0].SupportsResourceWidgets ||
+	if len(metadata.Templates) != 1 || metadata.Templates[0].Icon != "house" || !metadata.Templates[0].SupportsResourceWidgets ||
 		len(metadata.Templates[0].WidgetAreas) != 2 || len(metadata.Templates[0].EditorTabs) != 1 ||
 		metadata.Templates[0].EditorTabs[0].Fields[0] != "title" {
 		t.Fatalf("templates = %#v", metadata.Templates)
@@ -487,7 +487,7 @@ func TestResourceMetadataDescribesTemplateSlotsAndProfileWidgets(t *testing.T) {
 	}
 	templateCode := template.Code("page")
 	item := treeItem(runtime, resource.Child{ID: 1, Type: resourcetype.Page, Template: &templateCode}, false)
-	if item.Icon != "fa-solid fa-house fa-fw" {
+	if item.Icon != "house" {
 		t.Fatalf("template icon was not preserved on resource tree item: %q", item.Icon)
 	}
 	if len(metadata.Widgets) != 1 || metadata.Widgets[0].Code != "feature_content" ||

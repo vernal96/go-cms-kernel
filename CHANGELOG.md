@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Return bare Font Awesome Solid icon names in template metadata, resource-tree items, and built-in resource-type defaults. Admin clients now compose the `fa-solid fa-` classes; consumers of the previous class-string API must update together with the admin.
+
 ## 0.6.0
 
 - Include ordered template widget items in management `widget_areas` metadata. Static entries carry the site-compiled widget code; resource-widget slots retain their position. The admin can show preset widgets without exposing their configuration or changing public rendering.
