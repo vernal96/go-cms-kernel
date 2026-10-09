@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+- Include ordered template widget items in management `widget_areas` metadata. Static entries carry the site-compiled widget code; resource-widget slots retain their position. The admin can show preset widgets without exposing their configuration or changing public rendering.
+
 ## 0.5.0
 
 - Treat template and resource icons as opaque class strings. Kernel does not select or validate an icon library; empty icon metadata uses the standard `fa-solid fa-file-lines` class.

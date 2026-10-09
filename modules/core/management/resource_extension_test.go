@@ -478,6 +478,13 @@ func TestResourceMetadataDescribesTemplateSlotsAndProfileWidgets(t *testing.T) {
 		metadata.Templates[0].EditorTabs[0].Fields[0] != "title" {
 		t.Fatalf("templates = %#v", metadata.Templates)
 	}
+	bodyItems := metadata.Templates[0].WidgetAreas[0].Items
+	if len(bodyItems) != 2 || bodyItems[0].Kind != "widget" || bodyItems[0].Code != "feature_content" || bodyItems[1].Kind != "resource_widgets" {
+		t.Fatalf("body widget items = %#v", bodyItems)
+	}
+	if items := metadata.Templates[0].WidgetAreas[1].Items; len(items) != 1 || items[0].Kind != "resource_widgets" {
+		t.Fatalf("sidebar widget items = %#v", items)
+	}
 	templateCode := template.Code("page")
 	item := treeItem(runtime, resource.Child{ID: 1, Type: resourcetype.Page, Template: &templateCode}, false)
 	if item.Icon != "fa-solid fa-house fa-fw" {

@@ -24,7 +24,8 @@ func areaRuntime(t *testing.T, layout Layout) *Runtime {
 func TestDynamicAreasDefaultAndRecovery(t *testing.T) {
 	empty := areaRuntime(t, nil)
 	descriptors := empty.Areas()
-	if len(descriptors) != 1 || descriptors[0].Code != widget.AreaDefault || descriptors[0].Label != "Страница сайта" || descriptors[0].AdminSpan != 24 {
+	if len(descriptors) != 1 || descriptors[0].Code != widget.AreaDefault || descriptors[0].Label != "Страница сайта" || descriptors[0].AdminSpan != 24 ||
+		!reflect.DeepEqual(descriptors[0].Items, []AreaItem{{Kind: "resource_widgets"}}) {
 		t.Fatalf("default: %#v", descriptors)
 	}
 	placements, err := Compose(empty, nil)

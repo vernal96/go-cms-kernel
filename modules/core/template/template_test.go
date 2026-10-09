@@ -2,6 +2,7 @@ package template
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -227,6 +228,45 @@ func TestCompileWidgetsResolvesTypedReferencesDefaultsAndGeneratedKeys(t *testin
 	}
 	if placements["body"][1].Key != "resource-widget-22" || placements["sidebar"][1].Key != "resource-widget-41" {
 		t.Fatalf("resource keys = %#v / %#v", placements["body"], placements["sidebar"])
+	}
+}
+
+func TestAreasDescribeCompiledWidgetOrderWithoutConfiguration(t *testing.T) {
+	before := widget.NewRef("before")
+	after := before
+	staticOnly := widget.NewRef("static_only")
+	catalog, err := Compile([]Definition{{
+		Code: "page", Label: "Page",
+		Layout: Layout{
+			{Code: "body", Label: "Body", Items: []Item{
+				Widget{Widget: before},
+				ResourceWidgets{},
+				Widget{Widget: after},
+			}},
+			{Code: "static", Label: "Static only", Items: []Item{Widget{Widget: staticOnly}}},
+		},
+	}}, resolver())
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiled, err := catalog.CompileWidgets(compileWidgets(t, []widget.Ref{before, staticOnly}, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, _ := compiled.Template("page")
+	areas := runtime.Areas()
+	want := []AreaDescriptor{
+		{Code: "body", Label: "Body", AdminSpan: 24, SupportsResourceWidgets: true, Items: []AreaItem{
+			{Kind: "widget", Code: "core_before"},
+			{Kind: "resource_widgets"},
+			{Kind: "widget", Code: "core_before"},
+		}},
+		{Code: "static", Label: "Static only", AdminSpan: 24, Items: []AreaItem{
+			{Kind: "widget", Code: "core_static_only"},
+		}},
+	}
+	if !reflect.DeepEqual(areas, want) {
+		t.Fatalf("area metadata = %#v, want %#v", areas, want)
 	}
 }
 

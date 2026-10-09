@@ -54,6 +54,14 @@ type AreaDescriptor struct {
 	Label                   string          `json:"label"`
 	AdminSpan               int             `json:"admin_span"`
 	SupportsResourceWidgets bool            `json:"supports_resource_widgets"`
+	Items                   []AreaItem      `json:"items"`
+}
+
+// AreaItem describes a compiled template widget or a resource-widget slot.
+// It intentionally omits widget configuration, which is not editor metadata.
+type AreaItem struct {
+	Kind string      `json:"kind"`
+	Code widget.Code `json:"code,omitempty"`
 }
 
 func areaItems(area Area) []Item {
@@ -227,7 +235,30 @@ func (r *Runtime) Areas() []AreaDescriptor {
 		if span == 0 {
 			span = 24
 		}
-		result = append(result, AreaDescriptor{Code: area.Code, Label: area.Label, AdminSpan: span, SupportsResourceWidgets: hasResourceWidgets(areaItems(area))})
+		result = append(result, AreaDescriptor{
+			Code:                    area.Code,
+			Label:                   area.Label,
+			AdminSpan:               span,
+			SupportsResourceWidgets: hasResourceWidgets(areaItems(area)),
+			Items:                   r.areaItems(area.Code),
+		})
+	}
+	return result
+}
+
+func (r *Runtime) areaItems(area widget.AreaCode) []AreaItem {
+	if r.compiled == nil {
+		return nil
+	}
+	compiledItems := (*r.compiled)[area]
+	result := make([]AreaItem, 0, len(compiledItems))
+	for _, item := range compiledItems {
+		switch item.kind {
+		case compiledWidget:
+			result = append(result, AreaItem{Kind: "widget", Code: item.code})
+		case compiledResourceWidgets:
+			result = append(result, AreaItem{Kind: "resource_widgets"})
+		}
 	}
 	return result
 }
