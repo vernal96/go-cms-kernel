@@ -26,7 +26,7 @@ func StandardTypes() Types {
 		DescribedType{Type: stringType{code: TypeTextarea}, Presentation: Metadata{Label: "Многострочный текст", Editor: "textarea"}},
 		DescribedType{Type: stringType{code: TypeEmail}, Presentation: Metadata{Label: "Email", Editor: "email"}},
 		DescribedType{Type: phoneType{}, Presentation: Metadata{Label: "Телефон", Editor: "phone"}},
-		DescribedType{Type: fileType{}, Presentation: Metadata{Label: "Файл из библиотеки", Editor: "file", Options: []ConfigField{{Key: "storages", Label: "Хранилища", Type: TypeJSON, Editor: "core.string-list"}, {Key: "mime_types", Label: "MIME-типы", Type: TypeJSON, Editor: "core.string-list"}}}},
+		DescribedType{Type: FileType(nil), Presentation: Metadata{Label: "Файл из библиотеки", Editor: "file", Options: []ConfigField{{Key: "disk", Label: "Диск", Type: TypeString, Required: true}, {Key: "virtual_path", Label: "Путь загрузки", Type: TypeString, Required: true}, {Key: "settings_code", Label: "Настройки медиа", Type: TypeString, Required: true}, {Key: "mime_types", Label: "MIME-типы", Type: TypeJSON, Editor: "core.string-list"}}}},
 		DescribedType{Type: mediaType{}, Presentation: Metadata{Label: "Медиа (изображение)", Editor: "media"}},
 		DescribedType{Type: jsonType{}, Presentation: Metadata{Label: "JSON", Editor: "json"}},
 	}
@@ -99,25 +99,43 @@ func cloneJSONValue(value any) any {
 	}
 }
 
-type fileType struct{}
+type fileType struct{ settings map[string][]Definition }
+
+// FileType binds field media settings to the file field compiler.
+func FileType(settings map[string][]Definition) Type {
+	if settings == nil {
+		return fileType{}
+	}
+	copy := make(map[string][]Definition, len(settings))
+	for code, definitions := range settings {
+		copy[code] = CloneDefinitions(definitions)
+	}
+	return fileType{settings: copy}
+}
 
 func (fileType) Code() TypeCode { return TypeFile }
 
-func (fileType) Compile(ctx CompileContext, options any) (ValueType, error) {
+func (t fileType) Compile(ctx CompileContext, options any) (ValueType, error) {
 	config, err := FileOptionsValue(options)
 	if err != nil {
 		return nil, err
 	}
-	seenStorages := make(map[string]struct{}, len(config.Storages))
-	for _, storage := range config.Storages {
-		value := strings.TrimSpace(string(storage))
-		if value == "" || value != string(storage) {
-			return nil, errors.New("file storage is invalid")
+	if config.Disk == "" || strings.TrimSpace(string(config.Disk)) != string(config.Disk) {
+		return nil, errors.New("file disk is required and must be a valid code")
+	}
+	if !validVirtualPath(config.VirtualPath) {
+		return nil, errors.New("file virtual path is required and must be relative")
+	}
+	if config.SettingsCode == "" || strings.TrimSpace(config.SettingsCode) != config.SettingsCode {
+		return nil, errors.New("file settings code is required")
+	}
+	var settingsFields []Definition
+	if t.settings != nil {
+		var exists bool
+		settingsFields, exists = t.settings[config.SettingsCode]
+		if !exists {
+			return nil, fmt.Errorf("unknown file media settings %q", config.SettingsCode)
 		}
-		if _, exists := seenStorages[value]; exists {
-			return nil, errors.New("file storage is duplicated")
-		}
-		seenStorages[value] = struct{}{}
 	}
 	seenMIME := make(map[string]struct{}, len(config.MIMETypes))
 	for _, mimeType := range config.MIMETypes {
@@ -129,13 +147,40 @@ func (fileType) Compile(ctx CompileContext, options any) (ValueType, error) {
 		}
 		seenMIME[mimeType] = struct{}{}
 	}
-	return withList(fileValue{options: config}, config.Multiple, false)
+	nested, err := ctx.EnterComposite(TypeFile)
+	if err != nil {
+		return nil, err
+	}
+	schema, err := nested.Compile(settingsFields)
+	if err != nil {
+		return nil, fmt.Errorf("file media settings %q: %w", config.SettingsCode, err)
+	}
+	if err := schema.ValidateReferenceTargets(); err != nil {
+		return nil, fmt.Errorf("file media settings %q: %w", config.SettingsCode, err)
+	}
+	descriptors, err := DescribeDefinitions(settingsFields, ctx.Types)
+	if err != nil {
+		return nil, err
+	}
+	return withList(fileValue{options: config, fields: descriptors}, config.Multiple, false)
 }
 
-type fileValue struct{ options FileOptions }
+type fileValue struct {
+	options FileOptions
+	fields  []Descriptor
+}
+
+func (v fileValue) DescribeOptions() (any, error) {
+	return struct {
+		FileOptions
+		SettingsFields []Descriptor `json:"settings_fields,omitempty"`
+	}{v.options, v.fields}, nil
+}
 
 func (fileValue) StorageKind() StorageKind { return StorageReference }
 func (fileValue) Multiple() bool           { return false }
+func (fileValue) ReferenceTarget() string  { return ReferenceFile }
+func (fileValue) FileField() bool          { return true }
 
 func (fileValue) Normalize(value any) (any, error) {
 	result, ok := normalizeInteger(value)
@@ -164,17 +209,8 @@ func FileOptionsValue(value any) (FileOptions, error) {
 }
 
 func FileMatches(options FileOptions, storage filesystem.Code, mimeType string) bool {
-	if len(options.Storages) > 0 {
-		matched := false
-		for _, allowed := range options.Storages {
-			if allowed == storage {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
+	if options.Disk != storage {
+		return false
 	}
 	if len(options.MIMETypes) > 0 {
 		for _, allowed := range options.MIMETypes {
@@ -194,6 +230,18 @@ func validMIMEPattern(value string) bool {
 		return false
 	}
 	return parts[0] != "*" && !strings.ContainsAny(value, " \t\r\n") && (parts[1] == "*" || !strings.Contains(parts[1], "*"))
+}
+
+func validVirtualPath(value string) bool {
+	if value == "" || strings.TrimSpace(value) != value || strings.Contains(value, "\\") || strings.HasPrefix(value, "/") {
+		return false
+	}
+	for _, segment := range strings.Split(value, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return false
+		}
+	}
+	return true
 }
 
 type stringType struct {

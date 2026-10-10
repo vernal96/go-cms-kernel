@@ -162,7 +162,7 @@ func projectPublicFileReference(ctx context.Context, definition field.Definition
 	}
 	fileID := file.ID(id)
 	var err error
-	if definition.Type == field.TypeMedia {
+	if definition.Type == field.TypeMedia || definition.Type == field.TypeFile {
 		if mediaService == nil {
 			return nil, errors.New("site media service unavailable")
 		}

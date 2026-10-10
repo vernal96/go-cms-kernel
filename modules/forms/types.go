@@ -211,17 +211,20 @@ type Result struct {
 }
 
 type ResultValue struct {
-	Multiple    bool              `json:"multiple"`
-	ID          ResultValueID     `json:"id"`
-	ResultID    ResultID          `json:"result_id"`
-	FieldID     *FieldID          `json:"field_id,omitempty"`
-	FieldCode   string            `json:"field_code"`
-	FieldLabel  string            `json:"field_label"`
-	ResultLabel string            `json:"result_label"`
-	FieldType   field.TypeCode    `json:"field_type"`
-	StorageKind field.StorageKind `json:"storage_kind"`
-	Position    int               `json:"position"`
-	Value       any               `json:"value"`
+	Multiple        bool              `json:"multiple"`
+	ID              ResultValueID     `json:"id"`
+	ResultID        ResultID          `json:"result_id"`
+	FieldID         *FieldID          `json:"field_id,omitempty"`
+	FieldCode       string            `json:"field_code"`
+	FieldLabel      string            `json:"field_label"`
+	ResultLabel     string            `json:"result_label"`
+	FieldType       field.TypeCode    `json:"field_type"`
+	StorageKind     field.StorageKind `json:"storage_kind"`
+	Position        int               `json:"position"`
+	Value           any               `json:"value"`
+	ReferenceTarget string            `json:"-"`
+	References      []field.Reference `json:"-"`
+	FileReferences  []field.Reference `json:"-"`
 }
 
 type ResultUpload struct {

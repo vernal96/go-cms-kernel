@@ -194,7 +194,7 @@ func ensureFilesUnused(ctx context.Context, tx pgx.Tx, ids []int64) error {
 SELECT EXISTS (
     SELECT 1 FROM core.media WHERE file_id = ANY($1::bigint[])
     UNION ALL
-    SELECT 1 FROM core.file_field_references WHERE file_id = ANY($1::bigint[])
+    SELECT 1 FROM core.file_field_references r JOIN core.media m ON m.id=r.media_id WHERE m.file_id = ANY($1::bigint[])
 );
 `, ids).Scan(&used); err != nil {
 		return err

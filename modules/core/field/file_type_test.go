@@ -3,15 +3,16 @@ package field_test
 import (
 	"testing"
 
-	"github.com/vernal96/go-cms-kernel/filesystem"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 )
 
 func TestFileTypeNormalizesReferencesAndClonesOptions(t *testing.T) {
 	required := true
 	options := field.FileOptions{
-		Storages:  []filesystem.Code{"public"},
-		MIMETypes: []string{"image/*", "application/pdf"},
+		Disk:         "public",
+		VirtualPath:  "site/assets",
+		SettingsCode: "image",
+		MIMETypes:    []string{"image/*", "application/pdf"},
 	}
 	schema, err := field.Compile([]field.Definition{{
 		Key: "asset", Type: field.TypeFile, Label: "Asset",
@@ -36,16 +37,18 @@ func TestFileTypeNormalizesReferencesAndClonesOptions(t *testing.T) {
 		field.FileMatches(references[0].Options, "public", "text/plain") {
 		t.Fatal("file option matching is invalid")
 	}
-	options.Storages[0] = "private"
-	if references[0].Options.Storages[0] != "public" {
+	options.MIMETypes[0] = "text/*"
+	if references[0].Options.MIMETypes[0] != "image/*" {
 		t.Fatal("file options were not cloned")
 	}
 }
 
 func TestFileTypeRejectsInvalidOptionsAndIDs(t *testing.T) {
 	for _, options := range []field.FileOptions{
-		{Storages: []filesystem.Code{"public", "public"}},
-		{MIMETypes: []string{"*/*"}},
+		{Disk: "public", VirtualPath: "site/assets", SettingsCode: "image", MIMETypes: []string{"*/*"}},
+		{Disk: "", VirtualPath: "site/assets", SettingsCode: "image"},
+		{Disk: "public", VirtualPath: "../escape", SettingsCode: "image"},
+		{Disk: "public", VirtualPath: "site/assets", SettingsCode: ""},
 	} {
 		if _, err := field.Compile([]field.Definition{{
 			Key: "asset", Type: field.TypeFile, Label: "Asset", Options: options,
@@ -53,13 +56,32 @@ func TestFileTypeRejectsInvalidOptionsAndIDs(t *testing.T) {
 			t.Fatalf("invalid options were accepted: %#v", options)
 		}
 	}
-	schema, err := field.Compile([]field.Definition{{
+	if _, err := field.Compile([]field.Definition{{
 		Key: "asset", Type: field.TypeFile, Label: "Asset",
-	}}, standardResolver())
+	}}, standardResolver()); err == nil {
+		t.Fatal("file field without required options was accepted")
+	}
+	schema, err := field.Compile([]field.Definition{{Key: "asset", Type: field.TypeFile, Label: "Asset", Options: field.FileOptions{Disk: "public", VirtualPath: "site/assets", SettingsCode: "image"}}}, standardResolver())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := schema.Validate(map[string]any{"asset": 0}); err == nil {
 		t.Fatal("zero file id was accepted")
+	}
+}
+
+func TestFileTypeRequiresDeclaredSettingsCodeWhenBound(t *testing.T) {
+	types := standardResolver()
+	types[field.TypeFile] = field.FileType(map[string][]field.Definition{
+		"image": {{Key: "alt", Type: field.TypeString, Label: "Alt"}},
+	})
+	for _, code := range []string{"image", "unknown"} {
+		_, err := field.Compile([]field.Definition{{
+			Key: "asset", Type: field.TypeFile, Label: "Asset",
+			Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: code},
+		}}, types)
+		if (code == "image") != (err == nil) {
+			t.Fatalf("settings code %q compile error = %v", code, err)
+		}
 	}
 }

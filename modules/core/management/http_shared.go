@@ -87,6 +87,12 @@ func writeResult(response http.ResponseWriter, status int, result any, err error
 
 func writeManagementError(response http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, media.ErrFileInUse):
+		httptransport.WriteJSONError(response, http.StatusConflict, "media_file_in_use", "file has other references")
+	case errors.Is(err, media.ErrFileDeleteConflict):
+		httptransport.WriteJSONError(response, http.StatusConflict, "media_file_delete_conflict", "media changed; reload the field")
+	case errors.Is(err, media.ErrFileDeleteUnsupported):
+		writeValidation(response, "the saved reference does not support permanent deletion")
 	case errors.Is(err, image.ErrBusy):
 		response.Header().Set("Retry-After", "1")
 		httptransport.WriteJSONError(response, 503, "busy", "image processing capacity exhausted")

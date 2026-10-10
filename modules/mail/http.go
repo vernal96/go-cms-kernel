@@ -64,6 +64,7 @@ func NewHTTPHandler(service *Service) (http.Handler, error) {
 	router.Get("/templates", handler.listTemplates)
 	router.Get("/variables", handler.siteVariables)
 	router.Get("/validator-types", handler.validatorTypes)
+	router.Post("/send/templates/{templateID}/variables/files", handler.uploadVariableFile)
 	router.Post("/templates", handler.createTemplate)
 	router.Get("/templates/{templateID}", handler.getTemplate)
 	router.Patch("/templates/{templateID}", handler.updateTemplate)

@@ -33,6 +33,9 @@ func TestStandardMultipleFields(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if tc.code == field.TypeFile {
+				options = field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image", Multiple: true}
+			}
 			def := field.Definition{Key: "values", Label: "Values", Type: tc.code, Options: options, Validators: []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": 1}}, {Type: "max_items", Options: map[string]any{"value": 2}}}}
 			schema, err := field.CompilePersistent([]field.Definition{def}, field.StandardTypes())
 			if err != nil {

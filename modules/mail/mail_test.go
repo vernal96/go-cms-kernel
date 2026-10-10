@@ -25,6 +25,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/job"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	coreuser "github.com/vernal96/go-cms-kernel/modules/core/user"
 	"github.com/vernal96/go-cms-kernel/permission"
@@ -54,6 +55,16 @@ type testFiles struct {
 	denyUsers bool
 }
 
+type testMediaResolver struct{ files *testFiles }
+
+func (r testMediaResolver) Resolve(ctx context.Context, actor security.Actor, id media.ID) (media.ResolvedMedia, error) {
+	item, err := r.files.GetFile(ctx, actor, file.ID(id))
+	if err != nil {
+		return media.ResolvedMedia{}, err
+	}
+	return media.ResolvedMedia{Media: media.Media{ID: id, FileID: item.ID}, File: item}, nil
+}
+
 func (f *testFiles) GetFile(_ context.Context, actor security.Actor, id file.ID) (file.File, error) {
 	if f.denyUsers && actor.IsUser() {
 		return file.File{}, security.ErrForbidden
@@ -81,8 +92,8 @@ func (f *testFiles) Open(_ context.Context, _ security.Actor, id file.ID) (file.
 
 func testRenderer(t *testing.T, policy SenderPolicy) (*Renderer, *testFiles) {
 	t.Helper()
-	files := &testFiles{items: map[file.ID]file.File{7: {ID: 7, Name: "invoice.pdf", MIMEType: "application/pdf", Size: 3, ChecksumSHA256: "abc"}}, body: map[file.ID]string{7: "pdf"}, urls: map[file.ID]string{7: "https://example.com/files/7"}}
-	renderer, err := NewRenderer(standardFields(), files, site.Site{Name: "Test site", ID: 5, ProfileCode: "test", Domain: "example.com", Locale: "ru-RU"}, nil, RendererConfig{SenderPolicy: policy})
+	files := &testFiles{items: map[file.ID]file.File{7: {ID: 7, Name: "invoice.pdf", Storage: "documents", MIMEType: "application/pdf", Size: 3, ChecksumSHA256: "abc"}}, body: map[file.ID]string{7: "pdf"}, urls: map[file.ID]string{7: "https://example.com/files/7"}}
+	renderer, err := NewRenderer(standardFields(), files, testMediaResolver{files}, site.Site{Name: "Test site", ID: 5, ProfileCode: "test", Domain: "example.com", Locale: "ru-RU"}, nil, RendererConfig{SenderPolicy: policy})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +111,7 @@ func mailTemplate() Template {
 			{Key: "name", Type: field.TypeString, Label: "Name"},
 			{Key: "email", Type: field.TypeEmail, Label: "Email"},
 			{Key: "count", Type: field.TypeInteger, Label: "Count"},
-			{Key: "invoice", Type: field.TypeFile, Label: "Invoice", Options: field.FileOptions{}},
+			{Key: "invoice", Type: field.TypeFile, Label: "Invoice", Options: field.FileOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "attachment"}},
 		},
 	}
 }
@@ -227,7 +238,7 @@ func TestRendererPreservesRequiredFieldsAndUsesPrivateSiteVariables(t *testing.T
 	required := true
 	params := []field.Definition{{Key: "company", Type: field.TypeString, Label: "Company"}}
 	files := &testFiles{items: map[file.ID]file.File{}, urls: map[file.ID]string{}}
-	renderer, err := NewRenderer(standardFields(), files, site.Site{Name: "Test site", ID: 5, ProfileCode: "dev", Domain: "example.com", Locale: "ru-RU", IsPublic: true, Settings: map[string]any{"company": "ACME"}}, params, RendererConfig{})
+	renderer, err := NewRenderer(standardFields(), files, testMediaResolver{files}, site.Site{Name: "Test site", ID: 5, ProfileCode: "dev", Domain: "example.com", Locale: "ru-RU", IsPublic: true, Settings: map[string]any{"company": "ACME"}}, params, RendererConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +288,7 @@ func TestRendererRejectsMissingRequiredStringEmailAndFile(t *testing.T) {
 		template.HTMLBody = "<p>Body</p>"
 		definition := field.Definition{Key: "required_value", Type: code, Label: "Required", Required: required}
 		if code == field.TypeFile {
-			definition.Options = field.FileOptions{}
+			definition.Options = field.FileOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "attachment"}
 		}
 		template.Variables = []field.Definition{definition}
 		if _, err := renderer.Render(context.Background(), template, nil, security.User(9)); !errors.Is(err, ErrInvalid) {
@@ -289,8 +300,8 @@ func TestRendererRejectsMissingRequiredStringEmailAndFile(t *testing.T) {
 func TestAttachmentAuthorizationDistinguishesEditingManualAndTrustedSiteSources(t *testing.T) {
 	t.Parallel()
 	files := &testFiles{items: map[file.ID]file.File{7: {ID: 7, Name: "contract.pdf", MIMEType: "application/pdf", Size: 3}}, body: map[file.ID]string{7: "pdf"}, urls: map[file.ID]string{}, denyUsers: true}
-	params := []field.Definition{{Key: "contract", Type: field.TypeFile, Label: "Contract", Options: field.FileOptions{}}}
-	renderer, err := NewRenderer(standardFields(), files, site.Site{Name: "Test site", ID: 5, ProfileCode: "dev", Domain: "example.com", Locale: "ru-RU", Settings: map[string]any{"contract": int64(7)}}, params, RendererConfig{})
+	params := []field.Definition{{Key: "contract", Type: field.TypeFile, Label: "Contract", Options: field.FileOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "attachment"}}}
+	renderer, err := NewRenderer(standardFields(), files, testMediaResolver{files}, site.Site{Name: "Test site", ID: 5, ProfileCode: "dev", Domain: "example.com", Locale: "ru-RU", Settings: map[string]any{"contract": int64(7)}}, params, RendererConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}

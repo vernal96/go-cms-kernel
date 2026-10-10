@@ -71,6 +71,10 @@ RETURNING id, widget_code, area, position, view, columns, margin_top, margin_bot
 	if err := touchWidgetResource(ctx, tx, resourceID); err != nil {
 		return widget.Binding{}, err
 	}
+	created.References = binding.References
+	if err := r.replaceWidgetOccurrence(ctx, tx, resourceID, created); err != nil {
+		return widget.Binding{}, err
+	}
 	if err := r.prepareWidgetDraft(ctx, tx, hookBefore); err != nil {
 		return widget.Binding{}, err
 	}
@@ -142,6 +146,10 @@ RETURNING id, widget_code, area, position, view, columns, margin_top, margin_bot
 	if err := touchWidgetResource(ctx, tx, resourceID); err != nil {
 		return widget.Binding{}, err
 	}
+	updated.References = binding.References
+	if err := r.replaceWidgetOccurrence(ctx, tx, resourceID, updated); err != nil {
+		return widget.Binding{}, err
+	}
 	if err := r.prepareWidgetDraft(ctx, tx, hookBefore); err != nil {
 		return widget.Binding{}, err
 	}
@@ -197,6 +205,9 @@ func (r *Repository) DeleteWidget(
 	var area widget.AreaCode
 	var position int
 	if err := tx.QueryRow(ctx, `SELECT area, position FROM core.resource_widgets WHERE resource_id = $1 AND id = $2 FOR UPDATE;`, resourceID, bindingID).Scan(&area, &position); err != nil {
+		return translateError(err)
+	}
+	if err := deleteWidgetOccurrence(ctx, tx, resourceID, bindingID); err != nil {
 		return translateError(err)
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM core.resource_widgets WHERE resource_id = $1 AND id = $2;`, resourceID, bindingID); err != nil {
@@ -483,8 +494,8 @@ ORDER BY resource_id, area, position, id;
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("iterate resource widgets: %w", err)
 	}
-
-	return nil
+	rows.Close()
+	return loadWidgetOccurrences(ctx, queryer, items)
 }
 
 func nonNilParamBindings(bindings widget.ParamBindings) widget.ParamBindings {

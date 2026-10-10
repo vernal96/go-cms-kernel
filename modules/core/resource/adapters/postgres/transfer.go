@@ -156,6 +156,22 @@ WHERE entity.site_id=$2 AND entity.id IN (SELECT id FROM owned_entities);`, id, 
 	if command.RowsAffected() < int64(len(ids)) {
 		return resource.SiteTransferResult{}, resource.ErrConflict
 	}
+	if _, err := tx.Exec(ctx, `
+WITH RECURSIVE tree AS (
+    SELECT id,type FROM core.resources WHERE id=$1 AND site_id=$3
+    UNION ALL
+    SELECT child.id,child.type FROM core.resources child JOIN tree parent ON child.parent_id=parent.id
+    WHERE child.site_id=$3
+), owned_entities AS (
+    SELECT id FROM tree
+    UNION
+    SELECT item.id FROM core.library_items item JOIN tree library ON library.id=item.library_id AND library.type='library'
+)
+UPDATE core.media_field_occurrences occurrence
+SET site_id=$3
+WHERE occurrence.owner_kind='resource' AND occurrence.site_id=$2 AND occurrence.owner_id IN (SELECT id FROM owned_entities);`, id, sourceSiteID, targetSiteID); err != nil {
+		return resource.SiteTransferResult{}, translateError(err)
+	}
 	for _, item := range items {
 		if _, err := tx.Exec(ctx, `UPDATE core.resources SET path=$2,updated_at=now(),updated_by=$3 WHERE id=$1;`, item.ID, item.Path, actorID); err != nil {
 			return resource.SiteTransferResult{}, translateError(err)

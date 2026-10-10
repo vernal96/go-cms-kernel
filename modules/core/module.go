@@ -258,6 +258,14 @@ func (r *Runtime) Files() file.ManagementService {
 	return r.services.Files
 }
 
+// MediaService exposes site-scoped media resolution to dependent modules.
+func (r *Runtime) MediaService() media.Service {
+	if r == nil || r.services == nil {
+		return nil
+	}
+	return r.services.Media
+}
+
 func (r *Runtime) RepositoryCache() (
 	RepositoryCacheDescriptor,
 	bool,
@@ -295,7 +303,10 @@ func (m module) Registry() (kernel.ModuleRegistry, error) {
 	}
 	registry := m.baseRegistry()
 	for i, t := range registry.FieldTypes {
-		if t.Code() == field.TypeMedia {
+		switch t.Code() {
+		case field.TypeFile:
+			registry.FieldTypes[i] = field.FileType(settings)
+		case field.TypeMedia:
 			registry.FieldTypes[i] = field.MediaType(settings)
 		}
 	}

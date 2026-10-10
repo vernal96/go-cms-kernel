@@ -27,10 +27,12 @@ func TestMigrationSourceIncludesIdentityAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 46 {
+	if len(entries) != 48 {
 		t.Fatalf("migration files = %#v", entries)
 	}
 	expected := map[string]bool{
+		"000024_media_file_deletions.up.sql":                 false,
+		"000024_media_file_deletions.down.sql":               false,
 		"000023_library_mirrors.up.sql":                      false,
 		"000023_library_mirrors.down.sql":                    false,
 		"000022_resource_media_fields.up.sql":                false,

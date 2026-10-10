@@ -95,6 +95,33 @@ func (r *Runtime) NormalizeConfiguration(params map[string]any, bindings ParamBi
 	return normalized, nil
 }
 
+func (r *Runtime) NormalizeStoredConfiguration(params map[string]any, bindings ParamBindings, source *field.Schema) (map[string]any, error) {
+	if r == nil {
+		return nil, ErrInvalidParams
+	}
+	stored := *r
+	stored.schema = r.schema.StoredSchema()
+	return stored.NormalizeConfiguration(params, bindings, source)
+}
+
+func (r *Runtime) ResolveStoredParams(params map[string]any, bindings ParamBindings, source *field.Schema, values ResourceValues) (map[string]any, error) {
+	if r == nil {
+		return nil, ErrInvalidParams
+	}
+	stored := *r
+	stored.schema = r.schema.StoredSchema()
+	return stored.ResolveParams(params, bindings, source, values)
+}
+
+func (r *Runtime) NewStored(params map[string]any) (Instance, error) {
+	if r == nil {
+		return nil, ErrInvalidParams
+	}
+	stored := *r
+	stored.schema = r.schema.StoredSchema()
+	return stored.New(params)
+}
+
 // Inspect only the referenced field: resolving a binding must not clone an
 // entire resource schema (including composite options) on every render.
 func bindingSourceShape(ref ResourceValueRef, schema *field.Schema) (field.ValueShape, bool) {

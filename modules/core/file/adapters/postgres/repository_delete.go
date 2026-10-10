@@ -334,7 +334,10 @@ FOR UPDATE OF item;
 	if err := tx.QueryRow(ctx, `SELECT COALESCE(array_agg(DISTINCT site_id ORDER BY site_id),'{}'::bigint[]) FROM (SELECT site_id FROM core.resources WHERE image_media_id=ANY($1::bigint[]) UNION SELECT site_id FROM core.library_items WHERE image_media_id=ANY($1::bigint[]) UNION SELECT e.site_id FROM core.resource_entities e JOIN core.resource_media_references mr ON mr.resource_id=e.id WHERE mr.media_id=ANY($1::bigint[])) owners;`, mediaIDs).Scan(&impact.ResourceSites); err != nil {
 		return err
 	}
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM core.file_field_references WHERE file_id=ANY($1::bigint[]);`, ids).Scan(&impact.FileFieldReferences); err != nil {
+	// The FileExplorer cascade does not own site, widget or optional-module
+	// lifecycles. Their normalized occurrences must block it before bytes are
+	// touched, rather than relying on a later RESTRICT foreign-key failure.
+	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM core.file_field_references WHERE media_id=ANY($1::bigint[])) + (SELECT count(*) FROM core.media_field_occurrences WHERE media_id=ANY($1::bigint[]));`, mediaIDs).Scan(&impact.FileFieldReferences); err != nil {
 		return err
 	}
 	var mediaFields string

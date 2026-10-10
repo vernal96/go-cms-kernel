@@ -242,7 +242,7 @@ func (a *App) boot(ctx context.Context) error {
 	a.cmsFiles = cmsFiles
 	a.adminManagement = adminManagement
 	a.siteAccessPolicy = siteAccessPolicy
-	if err := a.startRuntimeWorkers(ctx, catalog); err != nil {
+	if err := a.startRuntimeWorkers(ctx, catalog, coreServices.FileDeletions); err != nil {
 		return err
 	}
 
@@ -379,7 +379,7 @@ func declaredNames(
 	return owners, nil
 }
 
-func (a *App) startRuntimeWorkers(ctx context.Context, catalog *site.Catalog) error {
+func (a *App) startRuntimeWorkers(ctx context.Context, catalog *site.Catalog, deletions *core.MediaFileDeletions) error {
 	jobRunner, err := jobRunnerFromProfiles(a.definition.Profiles, catalog)
 	if err != nil {
 		return err
@@ -409,6 +409,9 @@ func (a *App) startRuntimeWorkers(ctx context.Context, catalog *site.Catalog) er
 		return fmt.Errorf("prepare runtime background tasks: %w", err)
 	}
 	a.startSiteSynchronization(workerContext)
+	if deletions != nil {
+		a.startMediaFileDeletionCleanup(workerContext, deletions)
+	}
 	a.startEntityHooks(workerContext, hookRunner, hookTopics)
 	if len(a.outboxSources) > 0 {
 		a.outboxPublisher = publisher

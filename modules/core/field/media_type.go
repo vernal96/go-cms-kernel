@@ -33,7 +33,7 @@ func (t mediaType) Compile(ctx CompileContext, options any) (ValueType, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err = schema.ValidateReferenceTargets(ReferenceFile); err != nil {
+		if err = schema.ValidateReferenceTargets(); err != nil {
 			return nil, err
 		}
 		descriptors, err = DescribeDefinitions(definitions, ctx.Types)

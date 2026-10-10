@@ -84,6 +84,11 @@ func (v listValue) ReferenceTarget() string {
 	return ""
 }
 
+func (v listValue) FileField() bool {
+	_, ok := v.item.(fileValue)
+	return ok
+}
+
 func (v listValue) References(value any) ([]Reference, error) {
 	collector, ok := v.item.(ReferenceCollector)
 	if !ok {

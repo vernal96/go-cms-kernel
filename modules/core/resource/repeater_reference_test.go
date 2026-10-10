@@ -15,7 +15,7 @@ import (
 func TestRepeaterReferenceServiceValidation(t *testing.T) {
 	schema, err := field.CompilePersistent([]field.Definition{{Key: "slides", Type: field.TypeRepeater, Label: "Slides", Options: field.RepeaterOptions{Fields: []field.Definition{
 		{Key: "image", Type: field.TypeMedia, Label: "Image"},
-		{Key: "attachment", Type: field.TypeFile, Label: "Attachment", Options: field.FileOptions{MIMETypes: []string{"image/*"}}},
+		{Key: "attachment", Type: field.TypeFile, Label: "Attachment", Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image", MIMETypes: []string{"image/*"}}},
 	}}}}, field.StandardTypes())
 	if err != nil {
 		t.Fatal(err)
@@ -33,8 +33,8 @@ func TestRepeaterReferenceServiceValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	mediaService := newTestMediaService()
-	fileService := &referenceFileService{err: security.ErrForbidden}
-	service := &Service{media: mediaService, files: fileService}
+	mediaService.errors[8] = security.ErrForbidden
+	service := &Service{media: mediaService}
 	ctx := context.Background()
 	actor := security.User(1)
 	if err := service.validateMediaFields(ctx, actor, stored); !errors.Is(err, media.ErrNotFound) || !strings.Contains(err.Error(), "slides[0].image") {
@@ -51,12 +51,12 @@ func TestRepeaterReferenceServiceValidation(t *testing.T) {
 	if err := service.validateFileReferences(ctx, actor, files, nil); !errors.Is(err, security.ErrForbidden) {
 		t.Fatalf("permission bypassed: %v", err)
 	}
-	fileService.err = nil
-	fileService.item = file.File{ID: 8, MIMEType: "application/pdf"}
+	delete(mediaService.errors, 8)
+	mediaService.items[8] = media.ResolvedMedia{Media: media.Media{ID: 8}, File: file.File{ID: 80, Storage: "public", MIMEType: "application/pdf"}}
 	if err := service.validateFileReferences(ctx, actor, files, nil); err == nil {
 		t.Fatal("nested MIME restriction bypassed")
 	}
-	fileService.item.MIMEType = "image/png"
+	mediaService.items[8] = media.ResolvedMedia{Media: media.Media{ID: 8}, File: file.File{ID: 80, Storage: "public", MIMEType: "image/png"}}
 	if err := service.validateFileReferences(ctx, actor, files, nil); err != nil {
 		t.Fatal(err)
 	}

@@ -34,24 +34,25 @@ func TestPostgresMultipleFields(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			first, err := db.Media().Create(ctx, nil, media.Media{FileID: f.ID, Params: map[string]any{}})
-			if err != nil {
-				t.Fatal(err)
+			makeMedia := func() media.ID {
+				item, err := db.Media().Create(ctx, nil, media.Media{FileID: f.ID, Params: map[string]any{}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return item.ID
 			}
-			second, err := db.Media().Create(ctx, nil, media.Media{FileID: f.ID, Params: map[string]any{}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			first, second := makeMedia(), makeMedia()
 			schema, err := field.CompilePersistent([]field.Definition{
 				{Key: "images", Label: "Images", Type: field.TypeMedia, Options: field.MediaOptions{Multiple: true}},
-				{Key: "files", Label: "Files", Type: field.TypeFile, Options: field.FileOptions{Multiple: true}},
+				{Key: "files", Label: "Files", Type: field.TypeFile, Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "images", Multiple: true}},
 				{Key: "numbers", Label: "Numbers", Type: field.TypeInteger, Options: field.IntegerOptions{Multiple: true}},
 			}, field.StandardTypes())
 			if err != nil {
 				t.Fatal(err)
 			}
-			normalize := func(images []any) (map[string]any, []field.StoredValue, map[string]file.ID) {
-				values, err := schema.Validate(map[string]any{"images": images, "files": []any{int64(f.ID), int64(f.ID)}, "numbers": []any{int64(0), int64(7)}})
+			fileFirst, fileSecond := makeMedia(), makeMedia()
+			normalize := func(images []any) (map[string]any, []field.StoredValue, map[string]media.ID) {
+				values, err := schema.Validate(map[string]any{"images": images, "files": []any{int64(fileFirst), int64(fileSecond)}, "numbers": []any{int64(0), int64(7)}})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -63,13 +64,13 @@ func TestPostgresMultipleFields(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				files := map[string]file.ID{}
+				files := map[string]media.ID{}
 				for _, ref := range refs {
-					files[ref.Key] = file.ID(ref.ID)
+					files[ref.Key] = media.ID(ref.ID)
 				}
 				return values, stored, files
 			}
-			initial := []any{int64(first.ID), int64(second.ID), int64(first.ID)}
+			initial := []any{int64(first), int64(second), int64(first)}
 			values, stored, files := normalize(initial)
 			path := "/"
 			root, err := db.Resources().Create(ctx, nil, resource.Resource{SiteID: sid, Type: resourcetype.Library, Title: "Root", Path: &path, TypeSettings: map[string]any{"item_url_pattern": "/{slug}"}}, nil)
@@ -158,20 +159,20 @@ func TestPostgresMultipleFields(t *testing.T) {
 				t.Fatalf("foreign media owner accepted: %v", err)
 			}
 
-			update([]any{int64(second.ID), int64(first.ID)}, false)
-			assertImages([]any{int64(second.ID), int64(first.ID)})
+			update([]any{int64(second), int64(first)}, false)
+			assertImages([]any{int64(second), int64(first)})
 			update(initial, true)
 			assertImages(initial)
-			update([]any{int64(first.ID)}, false)
-			assertImages([]any{int64(first.ID)})
-			if _, err := db.Media().ByID(ctx, first.ID); err != nil {
+			update([]any{int64(first)}, false)
+			assertImages([]any{int64(first)})
+			if _, err := db.Media().ByID(ctx, first); err != nil {
 				t.Fatalf("remaining duplicate was deleted: %v", err)
 			}
-			if _, err := db.Media().ByID(ctx, second.ID); !errors.Is(err, media.ErrNotFound) {
+			if _, err := db.Media().ByID(ctx, second); !errors.Is(err, media.ErrNotFound) {
 				t.Fatalf("unused media remains: %v", err)
 			}
 			var count int
-			if err := conn.Pool().QueryRow(ctx, `SELECT count(*) FROM core.resource_media_references WHERE resource_id=$1`, id).Scan(&count); err != nil || count != 1 {
+			if err := conn.Pool().QueryRow(ctx, `SELECT count(*) FROM core.resource_media_references WHERE resource_id=$1`, id).Scan(&count); err != nil || count != 3 {
 				t.Fatalf("references %d: %v", count, err)
 			}
 			if err := conn.Pool().QueryRow(ctx, `SELECT count(*) FROM core.file_field_references WHERE owner_kind='resource' AND owner_id=$1`, id).Scan(&count); err != nil || count != 2 {

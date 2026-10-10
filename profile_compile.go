@@ -29,6 +29,9 @@ func (f *ProfileRuntimeFactory) Compile(
 	}
 
 	profile = cloneProfile(profile)
+	if err := validateProfileFileDisks(profile, f.services.Filesystems); err != nil {
+		return nil, err
+	}
 
 	moduleCodes := make(
 		map[ModuleCode]struct{},

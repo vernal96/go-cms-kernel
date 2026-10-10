@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/permission"
 	"github.com/vernal96/go-cms-kernel/security"
@@ -30,7 +31,7 @@ func (r *layoutRepositoryStub) CreateField(_ context.Context, siteID site.ID, fo
 	item.ID = 10
 	return item, LayoutNode{ID: 20, Kind: LayoutField, FieldID: &item.ID, ParentID: placement.ParentID, Position: placement.Position}, nil
 }
-func (r *layoutRepositoryStub) CreateElement(_ context.Context, siteID site.ID, formID FormID, item Element, placement LayoutPlacement) (Element, LayoutNode, error) {
+func (r *layoutRepositoryStub) CreateElement(_ context.Context, siteID site.ID, formID FormID, item Element, placement LayoutPlacement, _ []field.Reference) (Element, LayoutNode, error) {
 	r.siteID, r.formID, r.placement = siteID, formID, placement
 	item.ID = 11
 	return item, LayoutNode{ID: 21, Kind: LayoutElement, ElementID: &item.ID, ParentID: placement.ParentID, Position: placement.Position}, nil
@@ -54,7 +55,7 @@ func (a *layoutAuthorizer) Check(_ context.Context, _ security.Actor, code permi
 }
 
 func TestLayoutHTTPPlacementAndAuthorization(t *testing.T) {
-	elements, err := newElementCatalog()
+	elements, err := newElementCatalog(testImageFileOptions())
 	if err != nil {
 		t.Fatal(err)
 	}

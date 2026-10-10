@@ -15,8 +15,11 @@ import (
 	connectorpostgres "github.com/vernal96/go-cms-kernel/connectors/postgres"
 	"github.com/vernal96/go-cms-kernel/migrations"
 	corepostgres "github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres"
+	"github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres/mediaoccurrence"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/field/validation"
+	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/forms"
 )
@@ -127,7 +130,7 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 		if err != nil || child.ParentID == nil || *child.ParentID != inner.ID {
 			t.Fatalf("nested field: %#v %v", child, err)
 		}
-		_, heading, err := repository.CreateElement(ctx, siteIDs[0], formID, forms.Element{Code: "heading", Type: forms.ElementHeading, Config: []byte(`{"text":"Heading","level":2}`)}, forms.LayoutPlacement{ParentID: &outer.ID, Position: 1})
+		_, heading, err := repository.CreateElement(ctx, siteIDs[0], formID, forms.Element{Code: "heading", Type: forms.ElementHeading, Config: []byte(`{"text":"Heading","level":2}`)}, forms.LayoutPlacement{ParentID: &outer.ID, Position: 1}, nil)
 		if err != nil || heading.ParentID == nil || *heading.ParentID != outer.ID {
 			t.Fatalf("nested element: %#v %v", heading, err)
 		}
@@ -138,7 +141,7 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 				t.Fatal("accepted invalid parent", parent)
 			}
 		}
-		if _, _, err := repository.CreateElement(ctx, siteIDs[0], formID, forms.Element{Code: "invalid", Type: forms.ElementText, Config: []byte(`{"content":"Invalid"}`)}, forms.LayoutPlacement{Position: 999}); !errors.Is(err, forms.ErrInvalid) {
+		if _, _, err := repository.CreateElement(ctx, siteIDs[0], formID, forms.Element{Code: "invalid", Type: forms.ElementText, Config: []byte(`{"content":"Invalid"}`)}, forms.LayoutPlacement{Position: 999}, nil); !errors.Is(err, forms.ErrInvalid) {
 			t.Fatalf("invalid position: %v", err)
 		}
 		if err := repository.DeleteContainer(ctx, siteIDs[1], formID, outer.ID); !errors.Is(err, forms.ErrNotFound) {
@@ -227,6 +230,68 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 	if len(created.Values) != 1 || created.Values[0].Value != "person@example.test" || len(created.Executions) != 1 || created.Executions[0].ActionID == nil || *created.Executions[0].ActionID != action.ID {
 		t.Fatalf("created result = %#v", created)
 	}
+	t.Run("file field snapshot persists with result occurrence", func(t *testing.T) {
+		storedFile, err := coreDatabase.Files().CreateFile(ctx, file.File{
+			Storage: "public", Name: "form-result.pdf", Path: fmt.Sprintf("forms/results/%d.pdf", suffix),
+			MIMEType: "application/pdf", Size: 1, ChecksumSHA256: fmt.Sprintf("%064d", 1),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		storedMedia, err := coreDatabase.Media().Create(ctx, nil, media.Media{FileID: storedFile.ID, Params: map[string]any{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := repository.CreateResult(ctx, forms.SubmissionRecord{
+			Result: forms.Result{SiteID: siteIDs[1], FormID: second.Form.ID, FormCode: second.Form.Code, FormName: second.Form.Name, StatusID: second.Statuses[0].ID, UserAgent: "file-snapshot"},
+			Values: []forms.ResultValue{{
+				FieldCode: "document", FieldLabel: "Document", FieldType: field.TypeFile,
+				StorageKind: field.StorageReference, Value: int64(storedMedia.ID), ReferenceTarget: field.ReferenceFile,
+				FileReferences: []field.Reference{{
+					Target: field.ReferenceFile, ID: int64(storedMedia.ID),
+					Options: field.FileOptions{Disk: "public", VirtualPath: "forms/documents", SettingsCode: "form_document", MIMETypes: []string{"application/pdf"}},
+				}},
+			}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			cleanup := context.Background()
+			_, _ = connector.Pool().Exec(cleanup, `DELETE FROM forms.results WHERE id=$1`, result.Result.ID)
+			_, _ = connector.Pool().Exec(cleanup, `DELETE FROM core.media WHERE id=$1`, storedMedia.ID)
+			_, _ = connector.Pool().Exec(cleanup, `DELETE FROM core.files WHERE id=$1`, storedFile.ID)
+		})
+		if len(result.Values) != 1 || len(result.Values[0].FileReferences) != 1 {
+			t.Fatalf("created file result = %#v", result.Values)
+		}
+		var occurrence media.FileOccurrence
+		occurrence.MediaID = storedMedia.ID
+		if err := connector.Pool().QueryRow(ctx, `SELECT owner_kind,owner_id,site_id,container,value_path,reference_target FROM core.media_field_occurrences WHERE media_id=$1`, storedMedia.ID).Scan(
+			&occurrence.OwnerKind, &occurrence.OwnerID, &occurrence.SiteID, &occurrence.Container, &occurrence.Path, &occurrence.Target,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if occurrence.OwnerKind != "forms.result" || occurrence.OwnerID != int64(result.Result.ID) || occurrence.Target != field.ReferenceMedia {
+			t.Fatalf("result occurrence = %#v", occurrence)
+		}
+		tx, err := connector.Pool().Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(context.WithoutCancel(ctx))
+		values, err := repository.(media.FileOccurrenceReader).ReadFileOccurrence(mediaoccurrence.WithTransaction(ctx, connector.Pool(), tx), occurrence)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(values.References) != 1 {
+			t.Fatalf("stored file snapshots = %#v", values.References)
+		}
+		snapshot := values.References[0]
+		if snapshot.ID != int64(storedMedia.ID) || snapshot.Target != field.ReferenceFile || snapshot.Options.Disk != "public" || snapshot.Options.VirtualPath != "forms/documents" || !reflect.DeepEqual(snapshot.Path, occurrence.Path) {
+			t.Fatalf("stored file snapshot = %#v, occurrence = %#v", snapshot, occurrence)
+		}
+	})
 	var outboxCount int
 	if err := connector.Pool().QueryRow(ctx, `SELECT count(*) FROM core.outbox_messages WHERE topic=$1;`, "job.forms.execute_action").Scan(&outboxCount); err != nil || outboxCount != 1 {
 		t.Fatalf("Forms outbox count = %d, %v", outboxCount, err)

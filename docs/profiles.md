@@ -79,12 +79,12 @@ IDE подсказывает поля конкретного `Config`. Напр�
 | `field.TypeSelect` (`select`) | Выбор из списка; может быть множественным | `field.SelectOptions`: `Choices`, `Multiple` |
 | `field.TypeEmail` (`email`) | Строка с проверкой формата email | `field.StringOptions`: `Multiple` |
 | `field.TypePhone` (`phone`) | Телефон | `field.PhoneOptions`: `Multiple` |
-| `field.TypeFile` (`file`) | Ссылка на файл | `field.FileOptions`: `Storages`, `MIMETypes`, `Multiple` |
+| `field.TypeFile` (`file`) | Ссылка на медиа-объект файла | `field.FileOptions`: обязательные `Disk`, `VirtualPath`, `SettingsCode`; необязательные `MIMETypes`, `Multiple` |
 | `field.TypeMedia` (`media`) | Медиа, в текущей реализации — изображение | `field.MediaOptions`: `Multiple`, `SettingsCode` |
 | `field.TypeJSON` (`json`) | Структурированный JSON-объект или массив | Нет |
 | `field.TypeRepeater` (`repeater`) | Упорядоченный список групп вложенных полей | `field.RepeaterOptions{Fields: []field.Definition{...}}` |
 
-`Multiple` включает список значений там, где тип его поддерживает; число элементов ограничивают валидаторы `validation.MinItems` и `validation.MaxItems`. `Choices` задаёт пары стабильных значений `Value` и отображаемых подписей `Label`. Для файла можно ограничить допустимые коды хранилищ и MIME-типы, например `image/*`. Для телефона формат E.164 проверяется самим типом; дополнительный шаблон задают `validation.Regex`. `Step` задаёт шаг числового редактора.
+`Multiple` включает список значений там, где тип его поддерживает; число элементов ограничивают валидаторы `validation.MinItems` и `validation.MaxItems`. `Choices` задаёт пары стабильных значений `Value` и отображаемых подписей `Label`. `Disk` задаёт единственный диск, `VirtualPath` — каталог назначения новых загрузок, а `SettingsCode` — набор метаданных медиа для этого поля. Уже существующие файлы можно выбирать в любом каталоге того же диска; при сохранении сервер проверяет диск и `MIMETypes` (например, `image/*`). Для телефона формат E.164 проверяется самим типом; дополнительный шаблон задают `validation.Regex`. `Step` задаёт шаг числового редактора.
 
 У определения также есть общие свойства: `Key` — уникальный ключ параметра, `Label` — подпись, `Required` — bool, задающий обязательность заполнения, `Validators` — список типизированных дополнительных проверок, `Public` — разрешение включить значение в публичные данные сайта, `Editor` — код редактора, а `VisibleWhen` — простое условие показа относительно другого поля. `Editor` меняет представление в админке, но не тип и правила хранения значения.
 

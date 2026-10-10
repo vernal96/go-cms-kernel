@@ -167,7 +167,7 @@ func TestSchemaStoredValuesPreserveKindsAndMultiValueOrder(t *testing.T) {
 			Multiple: true,
 			Choices:  []field.Choice{{Value: "editor", Label: "Editor"}, {Value: "author", Label: "Author"}},
 		}},
-		{Key: "attachment", Type: field.TypeFile, Label: "Attachment"},
+		{Key: "attachment", Type: field.TypeFile, Label: "Attachment", Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image"}},
 	}, standardResolver())
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +186,7 @@ func TestSchemaStoredValuesPreserveKindsAndMultiValueOrder(t *testing.T) {
 		{Key: "count", Kind: field.StorageInteger, Value: int64(3)},
 		{Key: "roles", Position: 0, Kind: field.StorageString, Multiple: true, Value: "editor"},
 		{Key: "roles", Position: 1, Kind: field.StorageString, Multiple: true, Value: "author"},
-		{Key: "attachment", Kind: field.StorageReference, Value: int64(42)},
+		{Key: "attachment", Kind: field.StorageReference, ReferenceTarget: field.ReferenceFile, FileField: true, Value: int64(42)},
 	}
 	if !reflect.DeepEqual(stored, want) {
 		t.Fatalf("stored values = %#v, want %#v", stored, want)

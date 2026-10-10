@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/job"
 	"github.com/vernal96/go-cms-kernel/messageid"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
+	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	coreuser "github.com/vernal96/go-cms-kernel/modules/core/user"
 	"github.com/vernal96/go-cms-kernel/permission"
@@ -29,6 +31,7 @@ var (
 	MessageReadPermission    = permission.MustCode("mail", "message", permission.Read)
 	MessageCreatePermission  = permission.MustCode("mail", "message", permission.Create)
 	MessageDeletePermission  = permission.MustCode("mail", "message", permission.Delete)
+	coreFileCreatePermission = permission.MustCode("core", "file", permission.Create)
 )
 
 const SendJobName = "mail.send"
@@ -45,6 +48,7 @@ type Service struct {
 		Current(context.Context, security.Actor) (coreuser.User, error)
 	}
 	spool           *AttachmentSpool
+	uploadFiles     file.ManagementService
 	limits          Limits
 	messageIDDomain string
 	uploadStorage   filesystem.Code
@@ -114,6 +118,48 @@ func (s *Service) Template(ctx context.Context, actor security.Actor, id Templat
 		return Template{}, err
 	}
 	return s.repository.TemplateByID(ctx, s.siteID, id)
+}
+
+// UploadVariableFile stores a send-time file variable in the exact folder
+// declared by the current site's Mail template schema.
+func (s *Service) UploadVariableFile(ctx context.Context, actor security.Actor, id TemplateID, path []string, name string, content io.Reader) (file.File, error) {
+	for _, code := range []permission.Code{TemplateReadPermission, MessageCreatePermission, coreFileCreatePermission} {
+		if err := s.authorizer.Check(ctx, actor, code); err != nil {
+			return file.File{}, err
+		}
+	}
+	if id <= 0 {
+		return file.File{}, fmt.Errorf("%w: template ID is invalid", ErrInvalid)
+	}
+	template, err := s.repository.TemplateByID(ctx, s.siteID, id)
+	if err != nil {
+		return file.File{}, err
+	}
+	if !template.Enabled {
+		return file.File{}, ErrTemplateDisabled
+	}
+	if err := s.validateTemplateRuntime(template); err != nil {
+		return file.File{}, err
+	}
+	options, err := field.FileUploadOptions(template.Variables, path)
+	if err != nil {
+		return file.File{}, fmt.Errorf("%w: file variable path is invalid: %v", ErrInvalid, err)
+	}
+	if s.uploadFiles == nil {
+		return file.File{}, errors.New("mail file upload service is unavailable")
+	}
+	item, err := field.UploadFile(ctx, actor, s.uploadFiles, options, name, content)
+	if err != nil {
+		var validation field.ValidationErrors
+		if errors.As(err, &validation) {
+			return file.File{}, fmt.Errorf("%w: file variable %q MIME type is not allowed", ErrInvalid, field.ReferenceKey(path))
+		}
+		if errors.Is(err, file.ErrInvalidInput) {
+			return file.File{}, fmt.Errorf("%w: file variable upload is invalid", ErrInvalid)
+		}
+		return file.File{}, err
+	}
+	return item, nil
 }
 
 // IntegrationTemplate returns safe metadata for another same-site module's

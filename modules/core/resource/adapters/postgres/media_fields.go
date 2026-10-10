@@ -35,6 +35,8 @@ func deleteUnusedMedia(ctx context.Context, tx pgx.Tx, ids []media.ID) error {
  AND NOT EXISTS (SELECT 1 FROM core.resource_media_references WHERE media_id=m.id)
  AND NOT EXISTS (SELECT 1 FROM core.resources WHERE image_media_id=m.id)
  AND NOT EXISTS (SELECT 1 FROM core.library_items WHERE image_media_id=m.id)
- AND NOT EXISTS (SELECT 1 FROM core.users WHERE avatar_media_id=m.id)`, ids)
+ AND NOT EXISTS (SELECT 1 FROM core.users WHERE avatar_media_id=m.id)
+ AND NOT EXISTS (SELECT 1 FROM core.media_field_occurrences WHERE media_id=m.id)
+ AND NOT EXISTS (SELECT 1 FROM core.file_field_references WHERE media_id=m.id)`, ids)
 	return translateDeleteError(err)
 }

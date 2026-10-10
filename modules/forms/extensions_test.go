@@ -24,7 +24,7 @@ func TestElementRegistrationIsScopedSealedAndExposedByHTTP(t *testing.T) {
 	if err := runtime.RegisterElementType(element); err == nil {
 		t.Fatal("duplicate accepted")
 	}
-	other, err := newElementCatalog()
+	other, err := newElementCatalog(testImageFileOptions())
 	if err != nil {
 		t.Fatal(err)
 	}

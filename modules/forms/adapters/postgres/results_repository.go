@@ -9,7 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/vernal96/go-cms-kernel/job"
+	"github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres/mediaoccurrence"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/forms"
 )
@@ -38,12 +40,17 @@ RETURNING id;`, record.Result.SiteID, record.Result.FormID, record.Result.FormCo
 		return forms.ResultDetail{}, err
 	}
 	values := make([]forms.ResultValue, len(record.Values))
+	valueReferences := make([]field.Reference, 0)
 	for index, item := range record.Values {
 		item.ResultID = created.ID
 		values[index], err = insertResultValue(ctx, tx, item)
 		if err != nil {
 			return forms.ResultDetail{}, err
 		}
+		valueReferences = append(valueReferences, resultValueReferences(values[index])...)
+	}
+	if err := mediaoccurrence.Replace(ctx, tx, media.FileOccurrence{OwnerKind: "forms.result", OwnerID: int64(created.ID), SiteID: int64(record.Result.SiteID), Container: "result_values"}, valueReferences); err != nil {
+		return forms.ResultDetail{}, err
 	}
 	uploads := make([]forms.ResultUpload, len(record.Uploads))
 	for index, item := range record.Uploads {
@@ -127,6 +134,13 @@ func insertResultValue(ctx context.Context, tx pgx.Tx, item forms.ResultValue) (
 	if err != nil {
 		return forms.ResultValue{}, err
 	}
+	snapshots, err := json.Marshal(item.FileReferences)
+	if err != nil {
+		return forms.ResultValue{}, err
+	}
+	if item.FileReferences == nil {
+		snapshots = []byte(`[]`)
+	}
 	var created forms.ResultValue
 	var raw []byte
 	var stringOut *string
@@ -134,12 +148,41 @@ func insertResultValue(ctx context.Context, tx pgx.Tx, item forms.ResultValue) (
 	var floatOut *float64
 	var boolOut *bool
 	var timeOut *time.Time
-	err = tx.QueryRow(ctx, `INSERT INTO forms.result_values(result_id,field_id,field_code,field_label,result_label,field_type,storage_kind,position,is_multi,string_value,integer_value,float_value,boolean_value,timestamp_value,reference_value,json_value) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id,result_id,field_id,field_code,field_label,result_label,field_type,storage_kind,position,is_multi,string_value,integer_value,float_value,boolean_value,timestamp_value,reference_value,json_value;`, item.ResultID, item.FieldID, item.FieldCode, item.FieldLabel, item.ResultLabel, item.FieldType, item.StorageKind, item.Position, item.Multiple, stringValue, integerValue, floatValue, booleanValue, timestampValue, referenceValue, jsonValue).Scan(&created.ID, &created.ResultID, &created.FieldID, &created.FieldCode, &created.FieldLabel, &created.ResultLabel, &created.FieldType, &created.StorageKind, &created.Position, &created.Multiple, &stringOut, &integerOut, &floatOut, &boolOut, &timeOut, &referenceOut, &raw)
+	err = tx.QueryRow(ctx, `INSERT INTO forms.result_values(result_id,field_id,field_code,field_label,result_label,field_type,storage_kind,position,is_multi,string_value,integer_value,float_value,boolean_value,timestamp_value,reference_value,json_value,file_references) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id,result_id,field_id,field_code,field_label,result_label,field_type,storage_kind,position,is_multi,string_value,integer_value,float_value,boolean_value,timestamp_value,reference_value,json_value;`, item.ResultID, item.FieldID, item.FieldCode, item.FieldLabel, item.ResultLabel, item.FieldType, item.StorageKind, item.Position, item.Multiple, stringValue, integerValue, floatValue, booleanValue, timestampValue, referenceValue, jsonValue, snapshots).Scan(&created.ID, &created.ResultID, &created.FieldID, &created.FieldCode, &created.FieldLabel, &created.ResultLabel, &created.FieldType, &created.StorageKind, &created.Position, &created.Multiple, &stringOut, &integerOut, &floatOut, &boolOut, &timeOut, &referenceOut, &raw)
 	if err != nil {
 		return forms.ResultValue{}, mapWriteError(err)
 	}
 	created.Value, err = decodedStoredValue(created.StorageKind, stringOut, integerOut, floatOut, boolOut, timeOut, referenceOut, raw)
+	created.ReferenceTarget, created.References = item.ReferenceTarget, item.References
+	created.FileReferences = item.FileReferences
 	return created, err
+}
+
+func resultValueReferences(item forms.ResultValue) []field.Reference {
+	var references []field.Reference
+	if item.StorageKind == field.StorageReference && (item.ReferenceTarget == field.ReferenceFile || item.ReferenceTarget == field.ReferenceMedia || item.FieldType == field.TypeFile || item.FieldType == field.TypeMedia) {
+		if id, ok := item.Value.(int64); ok && id > 0 {
+			references = append(references, field.Reference{Target: field.ReferenceMedia, ID: id})
+		}
+	}
+	for _, reference := range item.References {
+		if reference.Target != field.ReferenceFile && reference.Target != field.ReferenceMedia {
+			continue
+		}
+		reference.Target = field.ReferenceMedia
+		reference.Path = append([]string{fmt.Sprint(item.ID), fmt.Sprint(item.Position)}, reference.Path...)
+		references = append(references, reference)
+	}
+	for index := range references {
+		if len(references[index].Path) == 0 {
+			references[index].Path = []string{fmt.Sprint(item.ID), fmt.Sprint(item.Position)}
+		} else if len(references[index].Path) == 1 {
+			references[index].Path = append(references[index].Path, fmt.Sprint(item.Position))
+		} else if references[index].Path[0] != fmt.Sprint(item.ID) {
+			references[index].Path = append([]string{fmt.Sprint(item.ID), fmt.Sprint(item.Position)}, references[index].Path...)
+		}
+	}
+	return references
 }
 
 func decodedStoredValue(kind field.StorageKind, stringValue *string, integerValue *int64, floatValue *float64, booleanValue *bool, timestampValue *time.Time, referenceValue *int64, raw []byte) (any, error) {
@@ -461,6 +504,9 @@ func (r *Repository) DeleteResult(ctx context.Context, siteID site.ID, id forms.
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM core.media_field_occurrences WHERE site_id=$1 AND owner_kind='forms.result' AND owner_id=$2 AND container='result_values';`, siteID, id); err != nil {
 		return nil, err
 	}
 	command, err := tx.Exec(ctx, `DELETE FROM forms.results WHERE site_id=$1 AND id=$2;`, siteID, id)

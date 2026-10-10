@@ -173,6 +173,11 @@ func (b *ProfileBlueprint) Build(
 			err,
 		)
 	}
+	for _, definition := range widgets.Definitions() {
+		if err := validateFileFieldDisks(definition.Fields, b.factory.services.Filesystems); err != nil {
+			return nil, fmt.Errorf("profile %q widget %q: %w", profile.Code, definition.Code, err)
+		}
+	}
 	templates, err := b.templates.CompileWidgets(widgets)
 	if err != nil {
 		return nil, fmt.Errorf(

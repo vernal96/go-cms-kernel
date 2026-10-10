@@ -13,6 +13,7 @@ Docker-сборка использует эти адреса без локаль
 | Админка | `/api/admin/...` |
 | Сайты, ресурсы и модули управления | `/api/sites/...`, `/api/site-profiles` |
 | Файловый менеджер и media | `/api/files/...`, `/api/media/...` |
+| Окончательное удаление плитки | `POST /api/sites/{siteID}/media/{mediaID}/delete-file`, `GET /api/sites/{siteID}/media-file-deletions/{operationID}` |
 | Системное администрирование | `/api/administration/...` |
 | Публичные данные сайта и меню | `GET /api/site`, `GET /api/menu` |
 | Поиск | `GET /api/search?q=...` |
@@ -27,6 +28,9 @@ Docker-сборка использует эти адреса без локаль
 прав независимо от публичных маршрутов.
 
 ## Путь страницы и адрес API
+
+Контракт окончательного удаления файлового поля и состояния `pending` описан в
+[документации Core](modules/core/file-field-deletion.md).
 
 Путь ресурса `/about` хранится без префикса API. Для получения его JSON клиент
 запрашивает `/api/about`; поля путей в ответах, ссылки меню, поисковой выдачи и SEO

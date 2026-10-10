@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres/medialock"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
-	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
@@ -38,8 +37,8 @@ SELECT resource_id, field_key, position, is_multi, value_kind,
        value_timestamp, value_reference, value_json,
        CASE WHEN EXISTS (SELECT 1 FROM core.resource_media_references mr
                          WHERE mr.resource_id = fv.resource_id AND mr.field_key = fv.field_key AND mr.position = fv.position AND cardinality(mr.value_path)=0)
-            THEN 'media' ELSE '' END,
-       COALESCE((SELECT jsonb_agg(jsonb_build_object('target','media','id',mr.media_id,'path',mr.value_path) ORDER BY mr.value_path)
+            THEN (SELECT mr.reference_target FROM core.resource_media_references mr WHERE mr.resource_id=fv.resource_id AND mr.field_key=fv.field_key AND mr.position=fv.position AND cardinality(mr.value_path)=0 LIMIT 1) ELSE '' END,
+       COALESCE((SELECT jsonb_agg(jsonb_build_object('target',mr.reference_target,'id',mr.media_id,'path',mr.value_path) ORDER BY mr.value_path)
                  FROM core.resource_media_references mr WHERE mr.resource_id=fv.resource_id AND mr.field_key=fv.field_key AND mr.position=fv.position AND cardinality(mr.value_path)>0), '[]'::jsonb)
 FROM core.resource_field_values fv
 WHERE resource_id = ANY($1::bigint[])
@@ -475,14 +474,14 @@ func replaceFileReferences(
 	ctx context.Context,
 	tx pgx.Tx,
 	ownerID resource.ID,
-	references map[string]file.ID,
+	references map[string]media.ID,
 ) error {
 	if _, err := tx.Exec(ctx, `DELETE FROM core.file_field_references WHERE owner_kind = 'resource' AND owner_id = $1;`, ownerID); err != nil {
 		return fmt.Errorf("delete resource file references: %w", err)
 	}
 	for key, id := range references {
 		if _, err := tx.Exec(ctx, `
-INSERT INTO core.file_field_references (owner_kind, owner_id, field_key, file_id)
+INSERT INTO core.file_field_references (owner_kind, owner_id, field_key, media_id)
 VALUES ('resource', $1, $2, $3);`, ownerID, key, id); err != nil {
 			return fmt.Errorf("insert resource file reference: %w", err)
 		}
@@ -578,7 +577,7 @@ INSERT INTO core.resource_field_values (
 				return err
 			}
 			path := append([]string{}, ref.Path...)
-			if _, err := tx.Exec(ctx, `INSERT INTO core.resource_media_references(resource_id,field_key,position,value_path,media_id) VALUES($1,$2,$3,$4,$5)`, resourceID, stored.Key, stored.Position, path, ref.ID); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO core.resource_media_references(resource_id,field_key,position,value_path,media_id,reference_target) VALUES($1,$2,$3,$4,$5,$6)`, resourceID, stored.Key, stored.Position, path, ref.ID, ref.Target); err != nil {
 				return translateError(err)
 			}
 		}
@@ -586,11 +585,11 @@ INSERT INTO core.resource_field_values (
 	return deleteUnusedMedia(ctx, tx, oldMedia)
 }
 
-func cloneFileReferences(source map[string]file.ID) map[string]file.ID {
+func cloneFileReferences(source map[string]media.ID) map[string]media.ID {
 	if source == nil {
 		return nil
 	}
-	result := make(map[string]file.ID, len(source))
+	result := make(map[string]media.ID, len(source))
 	for key, value := range source {
 		result[key] = value
 	}

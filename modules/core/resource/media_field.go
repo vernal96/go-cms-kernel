@@ -12,11 +12,17 @@ import (
 
 func (s *Service) validateMediaFields(ctx context.Context, actor security.Actor, values []field.StoredValue) error {
 	for _, value := range values {
+		if value.FileField || value.ReferenceTarget == field.ReferenceFile {
+			continue
+		}
 		references, err := value.MediaReferences()
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrInvalidReference, err)
 		}
 		for _, reference := range references {
+			if reference.Target == field.ReferenceFile {
+				continue
+			}
 			id := reference.ID
 			path := []string{value.Key}
 			if value.Multiple {

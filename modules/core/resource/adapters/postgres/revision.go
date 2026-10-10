@@ -256,6 +256,9 @@ WHERE id=$1 AND site_id=$2;`, candidate.ID, candidate.SiteID, candidate.ParentID
 	if err := replaceFileReferences(ctx, tx, candidate.ID, candidate.FileReferences); err != nil {
 		return resource.Resource{}, err
 	}
+	if err := deleteWidgetOccurrences(ctx, tx, candidate.ID); err != nil {
+		return resource.Resource{}, translateError(err)
+	}
 	if _, err := tx.Exec(ctx, `DELETE FROM core.resource_widgets WHERE resource_id=$1;`, candidate.ID); err != nil {
 		return resource.Resource{}, translateError(err)
 	}
@@ -264,12 +267,17 @@ WHERE id=$1 AND site_id=$2;`, candidate.ID, candidate.SiteID, candidate.ParentID
 		if encodeErr != nil {
 			return resource.Resource{}, encodeErr
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO core.resource_widgets
+		var bindingID widget.BindingID
+		if err := tx.QueryRow(ctx, `INSERT INTO core.resource_widgets
  (resource_id,widget_code,area,position,view,columns,margin_top,margin_bottom,enabled,params,param_bindings)
- VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb);`, candidate.ID, binding.Code, binding.Area,
+ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb) RETURNING id;`, candidate.ID, binding.Code, binding.Area,
 			binding.Position, binding.Presentation.View, binding.Presentation.Columns, binding.Presentation.MarginTop,
-			binding.Presentation.MarginBottom, binding.Presentation.Enabled, string(rawParams), nonNilParamBindings(binding.ParamBindings)); err != nil {
+			binding.Presentation.MarginBottom, binding.Presentation.Enabled, string(rawParams), nonNilParamBindings(binding.ParamBindings)).Scan(&bindingID); err != nil {
 			return resource.Resource{}, translateError(err)
+		}
+		binding.ID = bindingID
+		if err := r.replaceWidgetOccurrence(ctx, tx, candidate.ID, binding); err != nil {
+			return resource.Resource{}, err
 		}
 	}
 	if _, err := tx.Exec(ctx, `
@@ -383,6 +391,9 @@ WHERE id=$1 RETURNING `+libraryItemColumns+`;`, candidate.ID, candidate.LibraryI
 	if err := replaceFileReferences(ctx, tx, candidate.ID, candidate.FileReferences); err != nil {
 		return resource.LibraryItem{}, err
 	}
+	if err := deleteWidgetOccurrences(ctx, tx, candidate.ID); err != nil {
+		return resource.LibraryItem{}, translateError(err)
+	}
 	if _, err := tx.Exec(ctx, `DELETE FROM core.resource_widgets WHERE resource_id=$1;`, candidate.ID); err != nil {
 		return resource.LibraryItem{}, translateError(err)
 	}
@@ -391,12 +402,17 @@ WHERE id=$1 RETURNING `+libraryItemColumns+`;`, candidate.ID, candidate.LibraryI
 		if encodeErr != nil {
 			return resource.LibraryItem{}, encodeErr
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO core.resource_widgets
+		var bindingID widget.BindingID
+		if err := tx.QueryRow(ctx, `INSERT INTO core.resource_widgets
  (resource_id,widget_code,area,position,view,columns,margin_top,margin_bottom,enabled,params,param_bindings)
- VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb);`, candidate.ID, binding.Code, binding.Area,
+ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb) RETURNING id;`, candidate.ID, binding.Code, binding.Area,
 			binding.Position, binding.Presentation.View, binding.Presentation.Columns, binding.Presentation.MarginTop,
-			binding.Presentation.MarginBottom, binding.Presentation.Enabled, string(rawParams), nonNilParamBindings(binding.ParamBindings)); err != nil {
+			binding.Presentation.MarginBottom, binding.Presentation.Enabled, string(rawParams), nonNilParamBindings(binding.ParamBindings)).Scan(&bindingID); err != nil {
 			return resource.LibraryItem{}, translateError(err)
+		}
+		binding.ID = bindingID
+		if err := r.replaceWidgetOccurrence(ctx, tx, candidate.ID, binding); err != nil {
+			return resource.LibraryItem{}, err
 		}
 	}
 	restored.Version = candidate.Version

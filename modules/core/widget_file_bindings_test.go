@@ -8,6 +8,7 @@ import (
 
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/widget"
 	"github.com/vernal96/go-cms-kernel/security"
 )
@@ -20,12 +21,11 @@ func (r bindingFields) FieldType(code field.TypeCode) (field.Type, bool) {
 }
 
 type bindingFiles struct {
-	file.Service
 	mime string
 }
 
-func (f bindingFiles) GetFile(context.Context, security.Actor, file.ID) (file.File, error) {
-	return file.File{Storage: "public", MIMEType: f.mime}, nil
+func (f bindingFiles) Resolve(context.Context, security.Actor, media.ID) (media.ResolvedMedia, error) {
+	return media.ResolvedMedia{Media: media.Media{ID: 1, FileID: 1}, File: file.File{ID: 1, Storage: "public", MIMEType: f.mime}}, nil
 }
 
 func TestBoundFileChecksTargetRestrictions(t *testing.T) {
@@ -33,12 +33,12 @@ func TestBoundFileChecksTargetRestrictions(t *testing.T) {
 	for _, typ := range field.StandardTypes() {
 		types[typ.Code()] = typ
 	}
-	schema, err := field.CompilePersistent([]field.Definition{{Key: "attachment", Label: "Attachment", Type: field.TypeFile}}, types)
+	schema, err := field.CompilePersistent([]field.Definition{{Key: "attachment", Label: "Attachment", Type: field.TypeFile, Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image"}}}, types)
 	if err != nil {
 		t.Fatal(err)
 	}
 	catalog, err := widget.Compile([]widget.Source{{Module: widget.ModuleDescriptor{Code: "test", Label: "Test"}, Widgets: []widget.Widget{widget.Functional{
-		Description: widget.Definition{Reference: widget.NewRef("file"), Label: "File", Description: "File", Fields: []field.Definition{{Key: "image", Label: "Image", Type: field.TypeFile, Options: field.FileOptions{MIMETypes: []string{"image/*"}}}}},
+		Description: widget.Definition{Reference: widget.NewRef("file"), Label: "File", Description: "File", Fields: []field.Definition{{Key: "image", Label: "Image", Type: field.TypeFile, Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image", MIMETypes: []string{"image/*"}}}}},
 		Render: func(_ context.Context, _ widget.RenderInput, params map[string]any) (map[string]any, error) {
 			return params, nil
 		},
@@ -49,7 +49,7 @@ func TestBoundFileChecksTargetRestrictions(t *testing.T) {
 	runtime, _ := catalog.Widget("test_file")
 	placement := widget.Placement{ParamBindings: widget.ParamBindings{"image": widget.ResourceField("attachment")}}
 	for _, mime := range []string{"image/png", "application/pdf"} {
-		handler := pageResourceHandler{files: bindingFiles{mime: mime}}
+		handler := pageResourceHandler{media: bindingFiles{mime: mime}}
 		_, err := handler.newWidgetInstance(context.Background(), runtime, placement, schema, widget.ResourceValues{Fields: map[string]any{"attachment": int64(1)}})
 		if mime == "image/png" && err != nil {
 			t.Fatal(err)

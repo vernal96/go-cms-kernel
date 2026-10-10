@@ -841,12 +841,14 @@ func sameTestMediaID(left, right *media.ID) bool {
 }
 
 type testMediaService struct {
-	items map[media.ID]media.ResolvedMedia
+	items  map[media.ID]media.ResolvedMedia
+	errors map[media.ID]error
 }
 
 func newTestMediaService() *testMediaService {
 	return &testMediaService{
-		items: make(map[media.ID]media.ResolvedMedia),
+		items:  make(map[media.ID]media.ResolvedMedia),
+		errors: make(map[media.ID]error),
 	}
 }
 
@@ -875,6 +877,9 @@ func (s *testMediaService) Resolve(
 	_ security.Actor,
 	id media.ID,
 ) (media.ResolvedMedia, error) {
+	if err := s.errors[id]; err != nil {
+		return media.ResolvedMedia{}, err
+	}
 	item, exists := s.items[id]
 	if !exists {
 		return media.ResolvedMedia{}, media.ErrNotFound

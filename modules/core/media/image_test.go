@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	image "github.com/vernal96/go-cms-kernel/modules/core/image"
 	"github.com/vernal96/go-cms-kernel/permission"
@@ -18,15 +19,25 @@ import (
 
 type imageRepo struct {
 	Repository
-	mu   sync.Mutex
-	item Media
-	fail bool
+	mu     sync.Mutex
+	item   Media
+	fail   bool
+	usages []Usage
 }
 
 func (r *imageRepo) ByID(context.Context, ID) (Media, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return Clone(r.item), nil
+}
+func (r *imageRepo) Create(_ context.Context, _ *security.UserID, item Media) (Media, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	item.ID = 2
+	item.CreatedAt = time.Now().UTC()
+	item.UpdatedAt = item.CreatedAt
+	r.item = Clone(item)
+	return Clone(item), nil
 }
 func (r *imageRepo) UpdateImage(ctx context.Context, _ *security.UserID, m Media, expected time.Time, validate ValidateUsages) (Media, error) {
 	r.mu.Lock()
@@ -37,12 +48,58 @@ func (r *imageRepo) UpdateImage(ctx context.Context, _ *security.UserID, m Media
 	if !expected.Equal(r.item.UpdatedAt) {
 		return Media{}, ErrImageConflict
 	}
-	if err := validate(ctx, nil); err != nil {
+	if err := validate(ctx, r.usages); err != nil {
 		return Media{}, err
 	}
 	m.UpdatedAt = r.item.UpdatedAt.Add(time.Microsecond)
 	r.item = Clone(m)
 	return Clone(m), nil
+}
+
+func TestImageRestoreChecksFileOccurrenceBeforeSwitchOrCleanup(t *testing.T) {
+	s, r, f := imageFixture(t, imageProcessor{})
+	rootID := file.ID(1)
+	f.items[1] = file.File{ID: rootID, Storage: "private", MIMEType: "image/jpeg"}
+	f.items[2] = file.File{ID: 2, ParentID: &rootID, Storage: "public", MIMEType: "image/png"}
+	r.item.FileID = 2
+	ref := FileOccurrence{OwnerKind: "site", OwnerID: 1, SiteID: 1, Container: "settings", Path: []string{"icon"}, Target: field.ReferenceFile, MediaID: 1}
+	references := []field.Reference{{ID: 1, Target: field.ReferenceFile, Path: ref.Path, Options: field.FileOptions{Disk: "public", MIMETypes: []string{"image/png"}}}}
+	r.usages = []Usage{{Kind: FileFieldUsage, OwnerID: 1, Occurrence: &ref}}
+	s.media.policies[FileFieldUsage] = func(_ context.Context, target file.File, usage Usage) error {
+		return ValidateFileOccurrence(*usage.Occurrence, references, target)
+	}
+	for _, original := range []file.File{{ID: rootID, Storage: "private", MIMEType: "image/png"}, {ID: rootID, Storage: "public", MIMEType: "image/jpeg"}} {
+		f.items[rootID] = original
+		_, err := s.Restore(context.Background(), security.System(), 1, r.item.UpdatedAt)
+		var validation field.ValidationErrors
+		if !errors.As(err, &validation) || r.item.FileID != 2 || len(f.deleted) != 0 {
+			t.Fatalf("restore changed incompatible selection: %v, Media=%+v, deleted=%v", err, r.item, f.deleted)
+		}
+	}
+}
+
+func TestMediaCreateAcceptsFilesAndKeepsImageCapabilitySeparate(t *testing.T) {
+	s, _, f := imageFixture(t, imageProcessor{})
+	f.items[2] = file.File{ID: 2, Storage: "public", MIMEType: "text/plain"}
+
+	createdText, err := s.Create(context.Background(), security.User(1), 2)
+	if err != nil || createdText.FileID != 2 {
+		t.Fatalf("create text Media = %+v, error = %v", createdText, err)
+	}
+	state, err := s.State(context.Background(), security.User(1), createdText.ID)
+	if err != nil || state.Editable {
+		t.Fatalf("text Media editor state = %+v, error = %v", state, err)
+	}
+
+	f.items[3] = file.File{ID: 3, Storage: "public", MIMEType: "image/png"}
+	createdImage, err := s.Create(context.Background(), security.User(1), 3)
+	if err != nil || createdImage.FileID != 3 {
+		t.Fatalf("create image Media = %+v, error = %v", createdImage, err)
+	}
+	state, err = s.State(context.Background(), security.User(1), createdImage.ID)
+	if err != nil || !state.Editable {
+		t.Fatalf("PNG Media editor state = %+v, error = %v", state, err)
+	}
 }
 
 type imageFiles struct {

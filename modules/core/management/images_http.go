@@ -28,10 +28,31 @@ func ImageDTO(state media.ImageState, limits image.Limits) ImageStateDTO {
 }
 func registerImageRoutes(router chi.Router, h *filesHTTP) {
 	router.Get("/files/{fileID}/thumbnail", h.thumbnail)
+	router.Get("/media/{mediaID}", h.mediaDetails)
 	router.Get("/media/{mediaID}/image", h.imageState)
 	router.Post("/media/{mediaID}/image", h.editImage)
 	router.Post("/media/{mediaID}/image/restore", h.restoreImage)
 	router.Post("/media", h.createMedia)
+}
+
+type MediaDetailsDTO struct {
+	ID            media.ID          `json:"id"`
+	UpdatedAt     time.Time         `json:"updated_at"`
+	File          FilesystemItemDTO `json:"file"`
+	EditableImage bool              `json:"editable_image"`
+}
+
+func (h *filesHTTP) mediaDetails(w http.ResponseWriter, r *http.Request) {
+	id, ok := imageID(w, r)
+	if !ok {
+		return
+	}
+	resolved, err := h.files.images.Resolve(r.Context(), actor(r), id)
+	result := MediaDetailsDTO{}
+	if err == nil {
+		result = MediaDetailsDTO{ID: resolved.Media.ID, UpdatedAt: resolved.Media.UpdatedAt, File: fileItemDTO(resolved.File), EditableImage: image.EditableMIME(resolved.File.MIMEType)}
+	}
+	writeResult(w, http.StatusOK, result, err)
 }
 func (h *filesHTTP) thumbnail(w http.ResponseWriter, r *http.Request) {
 	id, ok := filesystemFileID(w, r)

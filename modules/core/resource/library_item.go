@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
-	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
@@ -50,7 +49,7 @@ type LibraryItem struct {
 	UpdatedBy      *security.UserID
 	DeletedAt      *time.Time
 	DeletedBy      *security.UserID
-	FileReferences map[string]file.ID
+	FileReferences map[string]media.ID
 }
 
 type CreateLibraryItemInput struct {
@@ -458,7 +457,7 @@ func (s *LibraryService) library(ctx context.Context, siteID site.ID, id ID) (Re
 	return item, runtime, nil
 }
 
-func (s *LibraryService) normalize(ctx context.Context, actor security.Actor, item LibraryItem, runtime *site.Runtime, trusted map[string]file.ID) (LibraryItem, error) {
+func (s *LibraryService) normalize(ctx context.Context, actor security.Actor, item LibraryItem, runtime *site.Runtime, trusted map[string]media.ID) (LibraryItem, error) {
 	item.Title = strings.TrimSpace(item.Title)
 	if item.Title == "" || !validSlug(item.Slug, pointerID(item.LibraryID)) {
 		return LibraryItem{}, errors.New("library item title or slug is invalid")

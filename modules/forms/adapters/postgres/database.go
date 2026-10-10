@@ -4,8 +4,8 @@ import (
 	"embed"
 	"errors"
 
-	connectorpostgres "github.com/vernal96/go-cms-kernel/connectors/postgres"
 	"github.com/vernal96/go-cms-kernel"
+	connectorpostgres "github.com/vernal96/go-cms-kernel/connectors/postgres"
 	"github.com/vernal96/go-cms-kernel/migrations"
 	"github.com/vernal96/go-cms-kernel/modules/forms"
 )

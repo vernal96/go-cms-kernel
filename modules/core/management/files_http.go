@@ -16,6 +16,8 @@ import (
 
 type filesHTTP struct {
 	files         *Files
+	sites         *Sites
+	resources     *Resources
 	maxUploadSize int64
 	uploadTimeout time.Duration
 }
@@ -31,6 +33,7 @@ func registerFileRoutes(router chi.Router, handler *filesHTTP) {
 	router.Post("/files/folders", handler.createFilesystemFolder)
 	router.Patch("/files/folders/{folderID}", handler.renameFilesystemFolder)
 	router.Post("/files/uploads", handler.uploadFilesystemFile)
+	router.Post("/files/field-uploads", handler.uploadFieldFile)
 	router.Get("/files/{fileID}", handler.getFilesystemFile)
 	router.Patch("/files/{fileID}", handler.renameFilesystemFile)
 	router.Get("/files/{fileID}/preview", handler.previewFilesystemFile)

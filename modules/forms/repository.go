@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/security"
 )
@@ -52,8 +53,8 @@ type Repository interface {
 	CreateField(context.Context, site.ID, FormID, FormField, LayoutPlacement) (FormField, LayoutNode, error)
 	UpdateField(context.Context, site.ID, FormField) (FormField, error)
 	DeleteField(context.Context, site.ID, FormID, FieldID) error
-	CreateElement(context.Context, site.ID, FormID, Element, LayoutPlacement) (Element, LayoutNode, error)
-	UpdateElement(context.Context, site.ID, Element) (Element, error)
+	CreateElement(context.Context, site.ID, FormID, Element, LayoutPlacement, []field.Reference) (Element, LayoutNode, error)
+	UpdateElement(context.Context, site.ID, Element, []field.Reference) (Element, error)
 	DeleteElement(context.Context, site.ID, FormID, ElementID) error
 	CreateContainer(context.Context, site.ID, FormID, LayoutNode) (LayoutNode, error)
 	DeleteContainer(context.Context, site.ID, FormID, LayoutNodeID) error

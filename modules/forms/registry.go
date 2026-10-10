@@ -34,11 +34,15 @@ type elementCatalog struct {
 	types  map[ElementTypeCode]ElementType
 }
 
-func newElementCatalog() (*elementCatalog, error) {
+func newElementCatalog(imageOptions field.FileOptions, resolvers ...field.TypeResolver) (*elementCatalog, error) {
+	var resolver field.TypeResolver = field.StandardTypes()
+	if len(resolvers) > 0 && resolvers[0] != nil {
+		resolver = resolvers[0]
+	}
 	items := []ElementType{
 		ElementDefinition{Description: ElementTypeMetadata{Code: ElementText, Label: "Текст", Fields: []field.ConfigField{{Key: "content", Label: "Текст", Type: field.TypeTextarea, Required: true}}}},
 		ElementDefinition{Description: ElementTypeMetadata{Code: ElementHeading, Label: "Заголовок", Fields: []field.ConfigField{{Key: "text", Label: "Заголовок", Type: field.TypeString, Required: true}, {Key: "level", Label: "Уровень", Type: field.TypeInteger, Required: true, Default: 2, Validators: []field.ValidatorDefinition{validation.Min(1), validation.Max(6)}}}}},
-		ElementDefinition{Description: ElementTypeMetadata{Code: ElementImage, Label: "Изображение", Fields: []field.ConfigField{{Key: "file_id", Label: "Публичное изображение", Type: field.TypeFile, Required: true, Options: map[string]any{"storages": []string{"public"}}}, {Key: "alt", Label: "Alt", Type: field.TypeString}}}},
+		ElementDefinition{Description: ElementTypeMetadata{Code: ElementImage, Label: "Изображение", Fields: []field.ConfigField{{Key: "file_id", Label: "Публичное изображение", Type: field.TypeFile, Required: true, Options: fileOptionMap(imageOptions)}, {Key: "alt", Label: "Alt", Type: field.TypeString}}}, FieldTypes: resolver},
 		ElementDefinition{Description: ElementTypeMetadata{Code: ElementSubmitButton, Label: "Кнопка отправки", Fields: []field.ConfigField{{Key: "label", Label: "Текст кнопки", Type: field.TypeString, Required: true, Default: "Отправить"}}}},
 	}
 
@@ -50,6 +54,21 @@ func newElementCatalog() (*elementCatalog, error) {
 	}
 
 	return result, nil
+}
+
+func fileOptionMap(options field.FileOptions) map[string]any {
+	result := map[string]any{
+		"disk":          options.Disk,
+		"virtual_path":  options.VirtualPath,
+		"settings_code": options.SettingsCode,
+	}
+	if options.Multiple {
+		result["multiple"] = true
+	}
+	if len(options.MIMETypes) > 0 {
+		result["mime_types"] = append([]string(nil), options.MIMETypes...)
+	}
+	return result
 }
 
 func (c *elementCatalog) Type(code ElementTypeCode) (ElementType, bool) {

@@ -9,7 +9,7 @@ import (
 
 	kernel "github.com/vernal96/go-cms-kernel"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
-	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/permission"
 	"github.com/vernal96/go-cms-kernel/security"
 	"golang.org/x/text/language"
@@ -47,19 +47,20 @@ var (
 )
 
 type Site struct {
-	Version        int64
-	ID             ID
-	ProfileCode    kernel.ProfileCode
-	Name           string
-	Domain         string
-	Locale         string
-	Settings       map[string]any
-	IsPublic       bool
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	CreatedBy      *security.UserID
-	UpdatedBy      *security.UserID
-	FileReferences map[string]file.ID
+	Version          int64
+	ID               ID
+	ProfileCode      kernel.ProfileCode
+	Name             string
+	Domain           string
+	Locale           string
+	Settings         map[string]any
+	IsPublic         bool
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	CreatedBy        *security.UserID
+	UpdatedBy        *security.UserID
+	FileReferences   map[string]media.ID
+	MediaOccurrences []field.Reference
 }
 
 type Repository interface {
@@ -225,7 +226,7 @@ func normalizeRuntimeSite(
 	if paramSchema == nil {
 		return Site{}, nil, errors.New("profile param schema is nil")
 	}
-	settings, err := paramSchema.ValidateIncomplete(item.Settings)
+	settings, err := paramSchema.ValidateStored(item.Settings)
 	if err != nil {
 		return Site{}, nil, fmt.Errorf("validate site settings: %w", err)
 	}
@@ -235,6 +236,10 @@ func normalizeRuntimeSite(
 		return Site{}, nil, fmt.Errorf("collect site file references: %w", err)
 	}
 	item.FileReferences = fileReferenceMap(fileReferences)
+	item.MediaOccurrences, err = paramSchema.StoredReferences(settings)
+	if err != nil {
+		return Site{}, nil, err
+	}
 	return item, fileReferences, nil
 }
 
@@ -244,6 +249,13 @@ func (r *Runtime) Site() Site {
 	result.CreatedBy = cloneUserID(result.CreatedBy)
 	result.UpdatedBy = cloneUserID(result.UpdatedBy)
 	result.FileReferences = cloneFileReferences(result.FileReferences)
+	if result.MediaOccurrences != nil {
+		result.MediaOccurrences = append([]field.Reference{}, result.MediaOccurrences...)
+		for index := range result.MediaOccurrences {
+			result.MediaOccurrences[index].Path = append([]string(nil), result.MediaOccurrences[index].Path...)
+			result.MediaOccurrences[index].Options.MIMETypes = append([]string(nil), result.MediaOccurrences[index].Options.MIMETypes...)
+		}
+	}
 	return result
 }
 

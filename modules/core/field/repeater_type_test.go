@@ -196,7 +196,7 @@ func TestRepeaterCustomMetadataAndCloning(t *testing.T) {
 	}
 }
 func TestRepeaterReferences(t *testing.T) {
-	fileDef := field.Definition{Key: "file", Type: field.TypeFile, Label: "File", Options: field.FileOptions{MIMETypes: []string{"image/*"}}}
+	fileDef := field.Definition{Key: "file", Type: field.TypeFile, Label: "File", Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image", MIMETypes: []string{"image/*"}}}
 	mediaDef := field.Definition{Key: "image", Type: field.TypeMedia, Label: "Image"}
 	schema, err := field.CompilePersistent([]field.Definition{repeater(fileDef, mediaDef), fileDef, mediaDef}, field.StandardTypes())
 	if err != nil {
@@ -232,7 +232,7 @@ func TestRepeaterReferences(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(media) != 2 || media[0].ID != 2 || !reflect.DeepEqual(media[1].Path, []string{"1", "image"}) {
+	if len(media) != 4 || media[0].ID != 1 || media[0].Target != field.ReferenceFile || media[1].ID != 2 || !reflect.DeepEqual(media[3].Path, []string{"1", "image"}) {
 		t.Fatalf("media=%#v", media)
 	}
 }
@@ -263,7 +263,7 @@ func (customFileType) Compile(ctx field.CompileContext, options any) (field.Valu
 }
 func TestRepeaterCollectsCustomReferences(t *testing.T) {
 	types := append(field.StandardTypes(), customFileType{})
-	schema, err := field.CompilePersistent([]field.Definition{repeater(field.Definition{Key: "asset", Type: "example.file", Label: "Asset", Options: field.FileOptions{MIMETypes: []string{"image/*"}}})}, types)
+	schema, err := field.CompilePersistent([]field.Definition{repeater(field.Definition{Key: "asset", Type: "example.file", Label: "Asset", Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image", MIMETypes: []string{"image/*"}}})}, types)
 	if err != nil {
 		t.Fatal(err)
 	}

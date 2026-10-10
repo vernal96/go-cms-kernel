@@ -3,17 +3,93 @@ package management
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	image "github.com/vernal96/go-cms-kernel/modules/core/image"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/security"
 	httptransport "github.com/vernal96/go-cms-kernel/transport/http"
 )
+
+type createMediaRepository struct {
+	next  media.ID
+	items map[media.ID]media.Media
+}
+
+func (r *createMediaRepository) Create(_ context.Context, _ *security.UserID, item media.Media) (media.Media, error) {
+	r.next++
+	item.ID = r.next
+	item.CreatedAt = time.Now().UTC()
+	item.UpdatedAt = item.CreatedAt
+	r.items[item.ID] = item
+	return item, nil
+}
+func (r *createMediaRepository) ByID(_ context.Context, id media.ID) (media.Media, error) {
+	item, ok := r.items[id]
+	if !ok {
+		return media.Media{}, media.ErrNotFound
+	}
+	return item, nil
+}
+func (*createMediaRepository) Update(context.Context, *security.UserID, media.Media, media.ValidateUsages) (media.Media, error) {
+	return media.Media{}, errors.New("not implemented")
+}
+func (*createMediaRepository) Delete(context.Context, media.ID) error {
+	return errors.New("not implemented")
+}
+
+type createMediaFiles struct {
+	file.ManagementService
+	items map[file.ID]file.File
+}
+
+func (f createMediaFiles) GetFile(_ context.Context, _ security.Actor, id file.ID) (file.File, error) {
+	item, ok := f.items[id]
+	if !ok {
+		return file.File{}, file.ErrNotFound
+	}
+	return item, nil
+}
+
+type createMediaProcessor struct{}
+
+func (createMediaProcessor) Transform(context.Context, io.Reader, image.TransformOptions) (image.Result, error) {
+	return image.Result{}, errors.New("not used")
+}
+
+func TestCreateMediaHTTPAcceptsNonImageFile(t *testing.T) {
+	repository := &createMediaRepository{items: make(map[media.ID]media.Media)}
+	files, err := media.NewImageService(
+		repository,
+		createMediaFiles{items: map[file.ID]file.File{7: {ID: 7, MIMEType: "text/plain", Storage: "public"}}},
+		nil,
+		managementAuthorizer{},
+		createMediaProcessor{},
+		image.DefaultLimits(),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := &filesHTTP{files: &Files{images: files}}
+	router := chi.NewRouter()
+	registerImageRoutes(router, handler)
+	request := httptest.NewRequest(http.MethodPost, "/media", bytes.NewBufferString(`{"file_id":7}`))
+	request = request.WithContext(httptransport.WithActor(request.Context(), security.User(1)))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated || response.Body.String() != "{\"id\":1}\n" {
+		t.Fatalf("response = %d, %s", response.Code, response.Body.String())
+	}
+}
 
 type thumbnailFiles struct {
 	file.Service

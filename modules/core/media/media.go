@@ -49,8 +49,9 @@ type UpdateInput struct {
 }
 
 type Usage struct {
-	Kind    UsageKind
-	OwnerID int64
+	Kind       UsageKind
+	OwnerID    int64
+	Occurrence *FileOccurrence
 }
 
 type ValidateUsages func(context.Context, []Usage) error

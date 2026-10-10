@@ -73,6 +73,7 @@ func NewManagementHTTPHandler(service *Service) (http.Handler, error) {
 	router.Patch("/forms/{formID}/enabled", h.setFormEnabled)
 	router.Delete("/forms/{formID}", h.deleteForm)
 	router.Get("/forms/{formID}/editor", h.editor)
+	router.Post("/forms/{formID}/file-fields/uploads", h.uploadFieldFile)
 	router.Post("/forms/{formID}/fields", h.createField)
 	router.Patch("/forms/{formID}/fields/{fieldID}", h.updateField)
 	router.Delete("/forms/{formID}/fields/{fieldID}", h.deleteField)

@@ -21,6 +21,7 @@ func (s *Service) validateStored(
 	ctx context.Context,
 	item Resource,
 ) (Resource, error) {
+	ctx = context.WithValue(ctx, storedValidationKey{}, true)
 	if item.ID <= 0 {
 		return Resource{}, errors.New("stored resource id is invalid")
 	}
@@ -57,7 +58,7 @@ func (s *Service) normalize(
 	item Resource,
 	siteRuntime *site.Runtime,
 	known map[ID]Resource,
-	trustedFileReferences map[string]file.ID,
+	trustedFileReferences map[string]media.ID,
 ) (Resource, error) {
 	item = Clone(item)
 	item.Title = strings.TrimSpace(item.Title)
@@ -164,7 +165,7 @@ func (s *Service) normalizeResourceTemplate(
 	item Resource,
 	payload resourcetype.Payload,
 	profileRuntime *kernel.ProfileRuntime,
-	trustedFileReferences map[string]file.ID,
+	trustedFileReferences map[string]media.ID,
 ) (Resource, error) {
 	if payload.Template == nil {
 		if len(item.Widgets) != 0 {
@@ -181,12 +182,27 @@ func (s *Service) normalizeResourceTemplate(
 	if !exists {
 		return Resource{}, fmt.Errorf("resource references unknown template %q", *payload.Template)
 	}
-	widgets, err := normalizeWidgetBindings(profileRuntime, templateRuntime, item.Widgets)
+	stored, _ := ctx.Value(storedValidationKey{}).(bool)
+	widgets, err := normalizeWidgetBindings(profileRuntime, templateRuntime, item.Widgets, stored)
 	if err != nil {
 		return Resource{}, err
 	}
 	item.Widgets = widgets
-	fields, err := templateRuntime.FieldSchema().Validate(payload.Fields)
+	for _, binding := range widgets {
+		runtime, _ := profileRuntime.Widget(binding.Code)
+		refs, err := runtime.FieldSchema().FileReferences(binding.Params)
+		if err != nil {
+			return Resource{}, err
+		}
+		if err := s.validateFileReferences(ctx, actor, refs, nil); err != nil {
+			return Resource{}, err
+		}
+	}
+	schema := templateRuntime.FieldSchema()
+	if stored {
+		schema = schema.StoredSchema()
+	}
+	fields, err := schema.Validate(payload.Fields)
 	if err != nil {
 		return Resource{}, fmt.Errorf("validate resource template %q fields: %w", *payload.Template, err)
 	}
@@ -237,35 +253,35 @@ func applyResourcePayload(
 	return item, nil
 }
 
-func (s *Service) validateFileReferences(ctx context.Context, actor security.Actor, references []field.FileReference, trusted map[string]file.ID) error {
+func (s *Service) validateFileReferences(ctx context.Context, actor security.Actor, references []field.FileReference, trusted map[string]media.ID) error {
 	if len(references) == 0 {
 		return nil
 	}
-	if s.files == nil {
-		return errors.New("resource file service is unavailable")
+	if s.media == nil {
+		return errors.New("resource media service is unavailable")
 	}
 	for _, reference := range references {
-		if trusted[reference.Key] == file.ID(reference.ID) {
+		if trusted[reference.Key] == media.ID(reference.ID) {
 			continue
 		}
-		item, err := s.files.GetFile(ctx, actor, file.ID(reference.ID))
+		resolved, err := s.media.Resolve(ctx, actor, media.ID(reference.ID))
 		if err != nil {
-			return fmt.Errorf("file field %q: %w", reference.Key, err)
+			return fmt.Errorf("file field %q media: %w", reference.Key, err)
 		}
-		if !field.FileMatches(reference.Options, item.Storage, item.MIMEType) {
-			return fmt.Errorf("file field %q rejects selected file", reference.Key)
+		if !field.FileMatches(reference.Options, resolved.File.Storage, resolved.File.MIMEType) {
+			return fmt.Errorf("file field %q rejects selected file with MIME type %q on disk %q", reference.Key, resolved.File.MIMEType, resolved.File.Storage)
 		}
 	}
 	return nil
 }
 
-func resourceFileReferenceMap(references []field.FileReference) map[string]file.ID {
+func resourceFileReferenceMap(references []field.FileReference) map[string]media.ID {
 	if len(references) == 0 {
 		return nil
 	}
-	result := make(map[string]file.ID, len(references))
+	result := make(map[string]media.ID, len(references))
 	for _, reference := range references {
-		result[reference.Key] = file.ID(reference.ID)
+		result[reference.Key] = media.ID(reference.ID)
 	}
 	return result
 }
@@ -278,6 +294,7 @@ func normalizeWidgetBindings(
 		FieldSchema() *field.Schema
 	},
 	source []widget.Binding,
+	stored ...bool,
 ) ([]widget.Binding, error) {
 	if profileRuntime == nil {
 		return nil, errors.New("resource widget profile runtime is nil")
@@ -321,6 +338,9 @@ func normalizeWidgetBindings(
 			return nil, fmt.Errorf("validate resource widget %q presentation: %w", binding.Code, err)
 		}
 		params, err := runtime.NormalizeConfiguration(binding.Params, binding.ParamBindings, templateRuntime.FieldSchema())
+		if len(stored) > 0 && stored[0] {
+			params, err = runtime.NormalizeStoredConfiguration(binding.Params, binding.ParamBindings, templateRuntime.FieldSchema())
+		}
 		if err != nil {
 			return nil, fmt.Errorf(
 				"validate resource widget %q params: %w",
@@ -332,6 +352,10 @@ func normalizeWidgetBindings(
 		result[index] = widget.CloneBinding(binding)
 		result[index].Presentation = presentation
 		result[index].Params = params
+		result[index].References, err = runtime.FieldSchema().StoredReferences(params)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }

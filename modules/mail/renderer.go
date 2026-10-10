@@ -12,6 +12,7 @@ import (
 
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/security"
 	"github.com/vernal96/go-cms-kernel/templating"
@@ -29,6 +30,10 @@ type FileService interface {
 	URL(context.Context, security.Actor, file.ID) (string, error)
 }
 
+type MediaResolver interface {
+	Resolve(context.Context, security.Actor, media.ID) (media.ResolvedMedia, error)
+}
+
 type SenderPolicy struct {
 	AllowedAddresses []string
 	AllowedDomains   []string
@@ -43,17 +48,21 @@ type RendererConfig struct {
 type Renderer struct {
 	fields        field.TypeResolver
 	files         FileService
+	media         MediaResolver
 	siteID        site.ID
 	siteVariables site.TemplateVariables
 	config        RendererConfig
 }
 
-func NewRenderer(fields field.TypeResolver, files FileService, item site.Site, params []field.Definition, config RendererConfig) (*Renderer, error) {
+func NewRenderer(fields field.TypeResolver, files FileService, mediaResolver MediaResolver, item site.Site, params []field.Definition, config RendererConfig) (*Renderer, error) {
 	if fields == nil {
 		return nil, errors.New("mail field type resolver is nil")
 	}
 	if files == nil {
 		return nil, errors.New("mail file service is nil")
+	}
+	if mediaResolver == nil {
+		return nil, errors.New("mail media resolver is nil")
 	}
 	var err error
 	config, err = normalizeRendererConfig(config)
@@ -64,7 +73,7 @@ func NewRenderer(fields field.TypeResolver, files FileService, item site.Site, p
 		config.SenderPolicy.AllowedDomains = []string{item.Domain}
 	}
 	config.SenderPolicy = normalizeSenderPolicy(config.SenderPolicy)
-	return &Renderer{fields: fields, files: files, siteID: item.ID, siteVariables: site.NewTemplateVariables(item, params), config: config}, nil
+	return &Renderer{fields: fields, files: files, media: mediaResolver, siteID: item.ID, siteVariables: site.NewTemplateVariables(item, params), config: config}, nil
 }
 
 func (r *Renderer) ValidateTemplate(template Template) error {
@@ -171,11 +180,11 @@ func (r *Renderer) Render(ctx context.Context, template Template, values map[str
 		return RenderedMessage{}, fmt.Errorf("%w: file variables: %v", ErrInvalid, err)
 	}
 	for _, reference := range fileReferences {
-		item, loadErr := r.files.GetFile(ctx, actor, file.ID(reference.ID))
+		resolved, loadErr := r.media.Resolve(ctx, actor, media.ID(reference.ID))
 		if loadErr != nil {
-			return RenderedMessage{}, fmt.Errorf("%w: file variable %q: %v", ErrInvalid, reference.Key, loadErr)
+			return RenderedMessage{}, fmt.Errorf("%w: media variable %q: %v", ErrInvalid, reference.Key, loadErr)
 		}
-		if !field.FileMatches(reference.Options, item.Storage, item.MIMEType) {
+		if !field.FileMatches(reference.Options, resolved.File.Storage, resolved.File.MIMEType) {
 			return RenderedMessage{}, fmt.Errorf("%w: file variable %q violates its file constraints", ErrInvalid, reference.Key)
 		}
 	}
@@ -327,7 +336,12 @@ func (r *Renderer) renderAttachments(ctx context.Context, template Template, val
 			if !ok || integer <= 0 {
 				return nil, fmt.Errorf("%w: attachment variable %q is invalid", ErrInvalid, key)
 			}
-			id = file.ID(integer)
+			mediaID := media.ID(integer)
+			resolved, err := r.media.Resolve(ctx, accessActor, mediaID)
+			if err != nil {
+				return nil, fmt.Errorf("resolve mail attachment media %d: %w", mediaID, err)
+			}
+			id = resolved.File.ID
 		case AttachmentSite:
 			value, exists := r.siteVariables.Value(source.Variable)
 			if !exists {
@@ -338,7 +352,12 @@ func (r *Renderer) renderAttachments(ctx context.Context, template Template, val
 			if !ok || integer <= 0 {
 				return nil, fmt.Errorf("%w: site attachment variable %q is invalid", ErrInvalid, source.Variable)
 			}
-			id = file.ID(integer)
+			mediaID := media.ID(integer)
+			resolved, err := r.media.Resolve(ctx, security.System(), mediaID)
+			if err != nil {
+				return nil, fmt.Errorf("resolve site attachment media %d: %w", mediaID, err)
+			}
+			id = resolved.File.ID
 		}
 		item, err := r.files.GetFile(ctx, accessActor, id)
 		if err != nil {
@@ -379,7 +398,11 @@ func (r *Renderer) scalarValue(ctx context.Context, definition field.Definition,
 		if !ok || id <= 0 {
 			return nil, false, nil
 		}
-		url, err := r.files.URL(ctx, security.System(), file.ID(id))
+		resolved, err := r.media.Resolve(ctx, security.System(), media.ID(id))
+		if err != nil {
+			return nil, false, fmt.Errorf("media %d cannot be resolved: %w", id, err)
+		}
+		url, err := r.files.URL(ctx, security.System(), resolved.File.ID)
 		if err != nil {
 			return nil, false, fmt.Errorf("file %d has no safe public URL: %w", id, err)
 		}

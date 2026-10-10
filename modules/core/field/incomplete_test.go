@@ -10,7 +10,7 @@ import (
 
 func TestSchemaValidateIncomplete(t *testing.T) {
 	schema, err := field.Compile([]field.Definition{
-		{Key: "logo", Type: field.TypeFile, Label: "Logo", Required: true},
+		{Key: "logo", Type: field.TypeFile, Label: "Logo", Required: true, Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image"}},
 		{Key: "title", Type: field.TypeString, Label: "Title", Required: true, Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 2}}}},
 		{Key: "count", Type: field.TypeInteger, Label: "Count", Required: true, Validators: []field.ValidatorDefinition{{Type: "min", Options: map[string]any{"value": 0}}}},
 		{Key: "enabled", Type: field.TypeCheckbox, Label: "Enabled", Required: true},

@@ -49,9 +49,9 @@ func CompileSettings(definitions []SettingsDefinition, resolver field.TypeResolv
 		if err != nil {
 			return nil, fmt.Errorf("media settings %q: %w", def.Code, err)
 		}
-		// Nested Media ownership and arbitrary reference collectors need dedicated
-		// lifecycle support. Plain File references use the existing File policy.
-		if err := schema.ValidateReferenceTargets(field.ReferenceFile); err != nil {
+		// Media settings are metadata only: their persistence has no reference
+		// ownership/indexing lifecycle, including nested File selections.
+		if err := schema.ValidateReferenceTargets(); err != nil {
 			return nil, fmt.Errorf("media settings %q: %w", def.Code, err)
 		}
 		descriptors, err := field.DescribeDefinitions(schema.Definitions(), resolver)
@@ -145,22 +145,6 @@ func (s *SettingsService) Save(ctx context.Context, actor security.Actor, id ID,
 	normalized, err := schema.schema.Validate(values)
 	if err != nil {
 		return SettingsState{}, err
-	}
-	refs, err := schema.schema.References(normalized)
-	if err != nil {
-		return SettingsState{}, err
-	}
-	for _, ref := range refs {
-		if ref.Target != field.ReferenceFile {
-			return SettingsState{}, fmt.Errorf("%w: unsupported reference", ErrSettings)
-		}
-		item, err := s.files.GetFile(ctx, actor, file.ID(ref.ID))
-		if err != nil {
-			return SettingsState{}, err
-		}
-		if !field.FileMatches(ref.Options, item.Storage, item.MIMEType) {
-			return SettingsState{}, field.ValidationErrors{{Key: ref.Key, Code: "file"}}
-		}
 	}
 	item, err := s.writer.UpdateSettings(ctx, actor.AuditUserID(), id, normalized, expected)
 	if err != nil {

@@ -1414,7 +1414,7 @@ func TestProfileRuntimeRejectsInvalidResourceTypeRegistrations(
 				code: "custom", pathMode: resourcetype.PathRoute,
 				metadata: &resourcetype.Metadata{
 					Label:            "Custom",
-					SettingsFields:   []field.Definition{{Key: "asset", Type: field.TypeFile, Label: "Asset"}},
+					SettingsFields:   []field.Definition{{Key: "asset", Type: field.TypeFile, Label: "Asset", Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "asset"}}},
 					SettingsDefaults: map[string]any{},
 				},
 			}},

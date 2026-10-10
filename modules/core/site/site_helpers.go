@@ -8,9 +8,8 @@ import (
 	"strings"
 
 	kernel "github.com/vernal96/go-cms-kernel"
-	"github.com/vernal96/go-cms-kernel/filesystem"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
-	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/security"
 )
 
@@ -87,37 +86,38 @@ func (c *Catalog) validateFileReferences(
 	ctx context.Context,
 	actor security.Actor,
 	references []field.FileReference,
-	trusted map[string]file.ID,
+	trusted map[string]media.ID,
 ) error {
 	if len(references) == 0 {
 		return nil
 	}
-	if c.files == nil {
-		return errors.New("site file service is unavailable")
+	if c.media == nil {
+		return errors.New("site media service is unavailable")
 	}
 	for _, reference := range references {
-		if trusted[reference.Key] == file.ID(reference.ID) {
+		if trusted[reference.Key] == media.ID(reference.ID) {
 			continue
 		}
-		item, err := c.files.GetFile(ctx, actor, file.ID(reference.ID))
+		resolved, err := c.media.Resolve(ctx, actor, media.ID(reference.ID))
 		if err != nil {
-			return fmt.Errorf("file field %q: %w", reference.Key, err)
+			return fmt.Errorf("file field %q media: %w", reference.Key, err)
 		}
+		item := resolved.File
 		if !field.FileMatches(reference.Options, item.Storage, item.MIMEType) {
 			return fmt.Errorf(
-				"file field %q rejects file with MIME type %q in storage %q; allowed MIME types: %v; allowed storages: %v: %w",
+				"file field %q rejects file with MIME type %q in disk %q; allowed MIME types: %v; required disk: %q: %w",
 				reference.Key,
 				item.MIMEType,
 				item.Storage,
 				reference.Options.MIMETypes,
-				reference.Options.Storages,
+				reference.Options.Disk,
 				field.ValidationErrors{{
 					Key:  reference.Key,
 					Code: "file_constraints",
 					Params: map[string]any{
 						"mime_type":          item.MIMEType,
 						"allowed_mime_types": append([]string(nil), reference.Options.MIMETypes...),
-						"allowed_storages":   append([]filesystem.Code(nil), reference.Options.Storages...),
+						"disk":               reference.Options.Disk,
 					},
 				}},
 			)
@@ -126,22 +126,22 @@ func (c *Catalog) validateFileReferences(
 	return nil
 }
 
-func fileReferenceMap(references []field.FileReference) map[string]file.ID {
+func fileReferenceMap(references []field.FileReference) map[string]media.ID {
 	if len(references) == 0 {
 		return nil
 	}
-	result := make(map[string]file.ID, len(references))
+	result := make(map[string]media.ID, len(references))
 	for _, reference := range references {
-		result[reference.Key] = file.ID(reference.ID)
+		result[reference.Key] = media.ID(reference.ID)
 	}
 	return result
 }
 
-func cloneFileReferences(source map[string]file.ID) map[string]file.ID {
+func cloneFileReferences(source map[string]media.ID) map[string]media.ID {
 	if source == nil {
 		return nil
 	}
-	result := make(map[string]file.ID, len(source))
+	result := make(map[string]media.ID, len(source))
 	for key, value := range source {
 		result[key] = value
 	}

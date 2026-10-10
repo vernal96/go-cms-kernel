@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	connectorpostgres "github.com/vernal96/go-cms-kernel/connectors/postgres"
 	"github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres/medialock"
+	"github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres/mediaoccurrence"
 	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/security"
 )
@@ -148,7 +149,7 @@ FOR UPDATE;
 	if err != nil {
 		return media.Media{}, err
 	}
-	if err := validate(ctx, usages); err != nil {
+	if err := validate(mediaoccurrence.WithTransaction(ctx, r.connector.Pool(), transaction), usages); err != nil {
 		return media.Media{}, err
 	}
 
@@ -229,9 +230,6 @@ func mediaUsages(
 SELECT kind, owner_id
 FROM
 (
-    SELECT 'resource.image'::text AS kind, resource_id AS owner_id
-    FROM core.resource_media_references WHERE media_id = $1
-    UNION ALL
     SELECT
         'resource.image'::text AS kind,
         id AS owner_id
@@ -278,7 +276,32 @@ ORDER BY kind, owner_id;
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate media usages: %w", err)
 	}
-	return result, nil
+	rows.Close()
+	occurrences, err := transaction.Query(ctx, `
+SELECT owner_kind, owner_id, site_id, container, value_path, reference_target
+FROM core.media_field_occurrences WHERE media_id=$1
+UNION ALL
+SELECT 'resource', mr.resource_id, e.site_id,
+       'fields:'||mr.field_key||':'||mr.position::text,
+       ARRAY[mr.field_key] || CASE WHEN fv.is_multi THEN ARRAY[mr.position::text] ELSE '{}'::text[] END || mr.value_path,
+       mr.reference_target
+FROM core.resource_media_references mr
+JOIN core.resource_entities e ON e.id=mr.resource_id
+JOIN core.resource_field_values fv USING(resource_id,field_key,position)
+WHERE mr.media_id=$1
+ORDER BY owner_kind,owner_id,container,value_path;`, id)
+	if err != nil {
+		return nil, fmt.Errorf("query media %d field occurrences: %w", id, err)
+	}
+	defer occurrences.Close()
+	for occurrences.Next() {
+		ref := media.FileOccurrence{MediaID: id}
+		if err := occurrences.Scan(&ref.OwnerKind, &ref.OwnerID, &ref.SiteID, &ref.Container, &ref.Path, &ref.Target); err != nil {
+			return nil, err
+		}
+		result = append(result, media.Usage{Kind: media.FileFieldUsage, OwnerID: ref.OwnerID, Occurrence: &ref})
+	}
+	return result, occurrences.Err()
 }
 
 type rowScanner interface {

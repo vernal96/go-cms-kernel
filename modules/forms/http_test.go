@@ -57,12 +57,12 @@ func publicHTTPService(t *testing.T, repository *repositoryStub) (*Service, *Upl
 	if err != nil {
 		t.Fatal(err)
 	}
-	elements, err := newElementCatalog()
+	elements, err := newElementCatalog(testImageFileOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
 	captcha := &captchaStub{}
-	service, err := NewService(5, repository, formsFieldResolver(), elements, newActionRegistry(), map[string]CaptchaProvider{"test": captcha}, "test", allowAuthorizer{}, &filesStub{}, spool, PublicLimits{
+	service, err := NewService(5, repository, formsFieldResolver(), elements, newActionRegistry(), map[string]CaptchaProvider{"test": captcha}, "test", allowAuthorizer{}, &filesStub{}, &mediaStub{}, spool, PublicLimits{
 		MaxRequestSize: 1 << 20, MaxScalarFields: 20, MaxScalarValueSize: 1 << 10,
 		MaxUploadFileSize: 1 << 20, MaxUploadCount: 4, MaxTotalUploadBytes: 1 << 20,
 		SubmissionTimeout: time.Second, RateLimit: 20, RateWindow: time.Minute, RateEntries: 100,

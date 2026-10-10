@@ -198,6 +198,7 @@ func (s *Schema) StoredValues(values map[string]any) ([]StoredValue, error) {
 			continue
 		}
 		compiled := s.fields[definition.Key]
+		compiled.valueType = storedValueType(compiled.valueType)
 		storage, ok := compiled.valueType.(StorageValueType)
 		if !ok {
 			return nil, fmt.Errorf("field %q has no storage semantics", definition.Key)
@@ -213,6 +214,9 @@ func (s *Schema) StoredValues(values map[string]any) ([]StoredValue, error) {
 			}
 			if reference, ok := storage.(ReferenceValueType); ok {
 				stored.ReferenceTarget = reference.ReferenceTarget()
+			}
+			if fileField, ok := storage.(interface{ FileField() bool }); ok {
+				stored.FileField = fileField.FileField()
 			}
 			result = append(result, stored)
 			continue
@@ -282,7 +286,7 @@ func (s *Schema) FileReferences(values map[string]any) ([]FileReference, error) 
 	if s == nil {
 		return nil, errors.New("field schema is nil")
 	}
-	refs, err := s.References(values)
+	refs, err := s.StoredReferences(values)
 	if err != nil {
 		return nil, err
 	}

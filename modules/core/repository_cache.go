@@ -65,6 +65,14 @@ type cachedSiteRepository struct {
 	policy *repositoryCachePolicy
 }
 
+func (r *cachedSiteRepository) ApplyFileDeletionSettings(ctx context.Context, actor *security.UserID, item site.Site) (site.Site, error) {
+	repo, ok := r.base.(site.FileDeletionRepository)
+	if !ok {
+		return site.Site{}, errors.New("site file deletion repository unavailable")
+	}
+	return repo.ApplyFileDeletionSettings(ctx, actor, item)
+}
+
 func (r *cachedSiteRepository) List(
 	ctx context.Context,
 ) ([]site.Site, error) {

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 0.7.0
+
+- Replace file-field storage lists with required disk, upload path and media-settings code. Store each selection as its own Media ID; validate disk and MIME on the server, resolve trusted upload targets for Core, Forms and Mail, and support reference-checked permanent file deletion.
 - Return bare Font Awesome Solid icon names in template metadata, resource-tree items, and built-in resource-type defaults. Admin clients now compose the `fa-solid fa-` classes; consumers of the previous class-string API must update together with the admin.
 
 ## 0.6.0

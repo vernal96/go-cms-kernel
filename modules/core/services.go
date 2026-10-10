@@ -31,14 +31,19 @@ type Services struct {
 	Files         file.ManagementService
 	Media         media.Service
 	Images        *media.ImageService
+	FileDeletions *MediaFileDeletions
 	Users         user.Service
 	Groups        group.Service
 	Authorization access.Service
 
-	database    Database
-	revisions   resource.RevisionRepository
-	cachePolicy *repositoryCachePolicy
-	hooks       *entityhooks.Registry
+	database               Database
+	revisions              resource.RevisionRepository
+	cachePolicy            *repositoryCachePolicy
+	hooks                  *entityhooks.Registry
+	fileDeletionRepository media.FileDeletionRepository
+	fileDeletionOwners     []media.FileOccurrenceOwner
+	fileDeletionDisks      filesystem.Resolver
+	fileOccurrenceReaders  map[string]media.FileOccurrenceReader
 }
 
 // NewServices assembles the site-independent part of the core domain. Site
@@ -51,12 +56,32 @@ func NewServices(
 	cacheInvalidator cache.Invalidator,
 	hooks *entityhooks.Registry,
 ) (*Services, error) {
+	var deletionRepository media.FileDeletionRepository
+	var deletionOwners []media.FileOccurrenceOwner
+	if provider, ok := database.(interface {
+		FileDeletions() media.FileDeletionRepository
+	}); ok {
+		deletionRepository = provider.FileDeletions()
+	}
+	if provider, ok := database.(interface {
+		FileOccurrenceOwners() []media.FileOccurrenceOwner
+	}); ok {
+		deletionOwners = provider.FileOccurrenceOwners()
+	}
 	if hooks == nil {
 		hooks = entityhooks.EmptyRegistry(entityhooks.Application, "")
 	}
 	coherent, err := newCoherentDatabase(database, cacheInvalidator)
 	if err != nil {
 		return nil, err
+	}
+	services := &Services{}
+	readers := make(map[string]media.FileOccurrenceReader)
+	if reader, ok := database.Resources().(media.FileOccurrenceReader); ok {
+		readers["resource"] = reader
+	}
+	if reader, ok := database.Sites().(media.FileOccurrenceReader); ok {
+		readers["site"] = reader
 	}
 	database = coherent
 	revisionRepository, ok := database.Resources().(resource.RevisionRepository)
@@ -94,6 +119,7 @@ func NewServices(
 		media.FilePolicies{
 			resource.ImageMediaUsage: resource.ValidateImageMediaFile,
 			user.AvatarMediaUsage:    user.ValidateAvatarMediaFile,
+			media.FileFieldUsage:     services.validateMediaFileOccurrence,
 		},
 		authorization,
 	)
@@ -124,18 +150,21 @@ func NewServices(
 	}
 
 	sessions, _ := database.Users().(security.SessionStore)
-	return &Services{
-		Sessions:      sessions,
-		Files:         files,
-		Media:         mediaService,
-		Users:         users,
-		Groups:        groups,
-		Authorization: authorization,
-		database:      database,
-		revisions:     revisionRepository,
-		cachePolicy:   coherent.policy,
-		hooks:         hooks,
-	}, nil
+	*services = Services{
+		Sessions:               sessions,
+		Files:                  files,
+		Media:                  mediaService,
+		Users:                  users,
+		Groups:                 groups,
+		Authorization:          authorization,
+		database:               database,
+		revisions:              revisionRepository,
+		cachePolicy:            coherent.policy,
+		hooks:                  hooks,
+		fileDeletionRepository: deletionRepository, fileDeletionOwners: deletionOwners, fileDeletionDisks: filesystems,
+		fileOccurrenceReaders: readers,
+	}
+	return services, nil
 }
 
 // Database returns the cache-coherent core persistence boundary used by all
@@ -164,9 +193,11 @@ func (s *Services) BuildContent(
 		s.database.Sites(),
 		profiles,
 		s.Authorization,
-		s.Files,
 	)
 	if err != nil {
+		return err
+	}
+	if err := catalog.SetMediaService(s.Media); err != nil {
 		return err
 	}
 	if err := catalog.Reload(ctx); err != nil {
@@ -204,6 +235,9 @@ func (s *Services) BuildContent(
 	s.Resources = resources
 	s.Revisions = revisions
 	s.LibraryItems = libraryItems
+	if s.fileDeletionRepository != nil {
+		s.FileDeletions = &MediaFileDeletions{repository: s.fileDeletionRepository, services: s, disks: s.fileDeletionDisks, owners: s.fileDeletionOwners, authorizer: s.Authorization}
+	}
 	return nil
 }
 

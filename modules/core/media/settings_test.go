@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/vernal96/go-cms-kernel/filesystem"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	"github.com/vernal96/go-cms-kernel/permission"
@@ -44,7 +45,6 @@ func TestSettingsValidationPermissionsAndIsolation(t *testing.T) {
 		{Key: "alt", Type: field.TypeString, Label: "Alt", Validators: []field.ValidatorDefinition{{Type: "max_length", Options: map[string]any{"value": 10}}}},
 		{Key: "count", Type: field.TypeInteger, Label: "Count"},
 		{Key: "decorative", Type: field.TypeCheckbox, Label: "Decorative", Required: optional},
-		{Key: "attachment", Type: field.TypeFile, Label: "Attachment", Required: optional, Options: field.FileOptions{MIMETypes: []string{"image/*"}}},
 	}}}
 	catalog, err := CompileSettings(definitions, field.StandardTypes())
 	if err != nil {
@@ -54,13 +54,13 @@ func TestSettingsValidationPermissionsAndIsolation(t *testing.T) {
 	ctx := context.Background()
 	actor := security.System()
 	first, _ := repo.Create(ctx, nil, Media{FileID: 1, Params: map[string]any{"image": map[string]any{"version": 1}}})
-	second, _ := repo.Create(ctx, nil, Media{FileID: 1, Params: map[string]any{}})
-	files := memoryFiles{items: map[file.ID]file.File{1: {ID: 1, MIMEType: "image/png"}, 2: {ID: 2, MIMEType: "application/pdf"}}}
+	second, _ := repo.Create(ctx, nil, Media{FileID: 2, Params: map[string]any{}})
+	files := memoryFiles{items: map[file.ID]file.File{1: {ID: 1, Storage: filesystem.Code("public"), MIMEType: "image/png"}, 2: {ID: 2, Storage: filesystem.Code("public"), MIMEType: "application/pdf"}}}
 	service, err := NewSettingsService(catalog, repo, files, settingsAuthorizer{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := map[string]any{"alt": "Example", "count": float64(3), "decorative": false, "attachment": float64(1)}
+	input := map[string]any{"alt": "Example", "count": float64(3), "decorative": false}
 	result, err := service.Save(ctx, actor, first.ID, "image", input, first.UpdatedAt)
 	if err != nil {
 		t.Fatal(err)
@@ -81,7 +81,7 @@ func TestSettingsValidationPermissionsAndIsolation(t *testing.T) {
 	if _, err = service.Save(ctx, actor, first.ID, "image", input, first.UpdatedAt); !errors.Is(err, ErrSettingsConflict) {
 		t.Fatalf("stale save: %v", err)
 	}
-	for _, invalid := range []map[string]any{{"alt": "too long value", "count": 3}, {"alt": "ok", "count": "oops"}, {"alt": "ok", "count": 3, "attachment": 2}} {
+	for _, invalid := range []map[string]any{{"alt": "too long value", "count": 3}, {"alt": "ok", "count": "oops"}} {
 		_, err := service.Save(ctx, actor, first.ID, "image", invalid, current.UpdatedAt)
 		var validation field.ValidationErrors
 		if !errors.As(err, &validation) {
@@ -100,6 +100,26 @@ func TestSettingsValidationPermissionsAndIsolation(t *testing.T) {
 		}
 		if !errors.Is(err, security.ErrForbidden) {
 			t.Fatal("permissions ignored", err)
+		}
+	}
+}
+
+func TestSettingsRejectsReferencesAtEveryDepth(t *testing.T) {
+	for _, referenceType := range []field.TypeCode{field.TypeFile, field.TypeMedia} {
+		for _, multiple := range []bool{false, true} {
+			definition := field.Definition{Key: "asset", Label: "Asset", Type: referenceType}
+			if referenceType == field.TypeFile {
+				definition.Options = field.FileOptions{Disk: "public", VirtualPath: "media", SettingsCode: "image", Multiple: multiple}
+			} else {
+				definition.Options = field.MediaOptions{Multiple: multiple}
+			}
+			for depth := 0; depth < 3; depth++ {
+				definitions := []SettingsDefinition{{Code: "image", Fields: []field.Definition{definition}}}
+				if _, err := CompileSettings(definitions, field.StandardTypes()); err == nil {
+					t.Fatalf("accepted %s reference, multiple=%t, depth=%d", referenceType, multiple, depth)
+				}
+				definition = field.Definition{Key: "rows", Label: "Rows", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: []field.Definition{definition}}}
+			}
 		}
 	}
 }

@@ -54,6 +54,9 @@ func NewImageService(repository Repository, files file.ManagementService, polici
 	return &ImageService{base.(*service), files, processor, limits, logger}, nil
 }
 func (s *ImageService) Limits() image.Limits { return s.limits }
+func (s *ImageService) Resolve(ctx context.Context, actor security.Actor, id ID) (ResolvedMedia, error) {
+	return s.media.Resolve(ctx, actor, id)
+}
 func (s *ImageService) State(ctx context.Context, actor security.Actor, id ID) (ImageState, error) {
 	m, err := s.media.Get(ctx, actor, id)
 	if err != nil {
@@ -204,9 +207,6 @@ func (s *ImageService) Create(ctx context.Context, actor security.Actor, id int6
 	f, err := s.files.GetFile(ctx, actor, file.ID(id))
 	if err != nil {
 		return Media{}, err
-	}
-	if !image.EditableMIME(f.MIMEType) {
-		return Media{}, image.ErrUnsupportedFormat
 	}
 	return s.media.Create(ctx, actor, CreateInput{FileID: f.ID})
 }

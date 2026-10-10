@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
+	coremedia "github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/security"
 )
 
@@ -171,6 +172,9 @@ func (s *Service) validateSubmission(ctx context.Context, input SubmitInput, cli
 	if err != nil {
 		return validatedSubmission{}, err
 	}
+	if err := s.validateFileReferences(ctx, schema, normalized); err != nil {
+		return validatedSubmission{}, err
+	}
 	if err := s.verifyCaptchas(ctx, detail.Form, active, input.Values, client); err != nil {
 		return validatedSubmission{}, err
 	}
@@ -179,6 +183,24 @@ func (s *Service) validateSubmission(ctx context.Context, input SubmitInput, cli
 		return validatedSubmission{}, err
 	}
 	return validatedSubmission{detail: detail, active: active, values: normalized, uploads: uploads, schema: schema}, nil
+}
+
+func (s *Service) validateFileReferences(ctx context.Context, schema *field.Schema, values map[string]any) error {
+	references, err := schema.FileReferences(values)
+	if err != nil {
+		return fmt.Errorf("Forms file references are invalid: %w", err)
+	}
+	fieldErrors := make(FieldValidationErrors)
+	for _, reference := range references {
+		resolved, err := s.media.Resolve(ctx, security.System(), coremedia.ID(reference.ID))
+		if err != nil || !field.FileMatches(reference.Options, resolved.File.Storage, resolved.File.MIMEType) {
+			fieldErrors[reference.Key] = append(fieldErrors[reference.Key], "file")
+		}
+	}
+	if len(fieldErrors) > 0 {
+		return fieldErrors
+	}
+	return nil
 }
 
 func validateSubmissionFieldNames(fields []FormField, values map[string]any, uploads []UploadInput) error {
@@ -220,6 +242,10 @@ func submissionFieldInputs(active []FormField, values map[string]any) ([]field.D
 }
 
 func submissionResultValues(prepared validatedSubmission) ([]ResultValue, error) {
+	references, err := prepared.schema.References(prepared.values)
+	if err != nil {
+		return nil, err
+	}
 	stored, err := prepared.schema.StoredValues(prepared.values)
 	if err != nil {
 		return nil, err
@@ -231,10 +257,27 @@ func submissionResultValues(prepared validatedSubmission) ([]ResultValue, error)
 			return nil, errors.New("validated Forms field metadata is unavailable")
 		}
 		fieldID := formField.ID
+		fileReferences := []field.Reference{}
+		for _, reference := range references {
+			if len(reference.Path) == 0 || reference.Path[0] != storedValue.Key || (reference.Target != field.ReferenceFile && reference.Target != field.ReferenceMedia) {
+				continue
+			}
+			path := reference.Path[1:]
+			if storedValue.Multiple {
+				if len(path) == 0 || path[0] != fmt.Sprint(storedValue.Position) {
+					continue
+				}
+				path = path[1:]
+			}
+			reference.Path = append([]string{}, path...)
+			fileReferences = append(fileReferences, reference)
+		}
 		values = append(values, ResultValue{
 			FieldID: &fieldID, FieldCode: formField.Code, FieldLabel: formField.Label,
 			ResultLabel: formField.EffectiveResultLabel(), FieldType: formField.Type,
 			Multiple: storedValue.Multiple, StorageKind: storedValue.Kind, Position: storedValue.Position, Value: storedValue.Value,
+			ReferenceTarget: storedValue.ReferenceTarget, References: storedValue.References,
+			FileReferences: fileReferences,
 		})
 	}
 	return values, nil

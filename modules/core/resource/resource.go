@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
-	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
@@ -81,7 +80,7 @@ type Resource struct {
 	UpdatedBy        *security.UserID
 	DeletedAt        *time.Time
 	DeletedBy        *security.UserID
-	FileReferences   map[string]file.ID
+	FileReferences   map[string]media.ID
 }
 
 type CreateInput struct {
@@ -302,18 +301,17 @@ func cloneStoredValues(source []field.StoredValue) []field.StoredValue {
 		for j := range result[index].References {
 			ref := &result[index].References[j]
 			ref.Path = append([]string(nil), ref.Path...)
-			ref.Options.Storages = append(ref.Options.Storages[:0:0], ref.Options.Storages...)
 			ref.Options.MIMETypes = append([]string(nil), ref.Options.MIMETypes...)
 		}
 	}
 	return result
 }
 
-func cloneFileReferences(source map[string]file.ID) map[string]file.ID {
+func cloneFileReferences(source map[string]media.ID) map[string]media.ID {
 	if source == nil {
 		return nil
 	}
-	result := make(map[string]file.ID, len(source))
+	result := make(map[string]media.ID, len(source))
 	for key, value := range source {
 		result[key] = value
 	}

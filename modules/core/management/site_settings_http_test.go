@@ -15,6 +15,7 @@ import (
 	kernel "github.com/vernal96/go-cms-kernel"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
@@ -64,7 +65,7 @@ func TestSiteSettingsHTTPCreateIncompleteAndUpdateRequired(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "settings", Modules: []kernel.Module{siteSettingsHTTPModule{}}, Params: []field.Definition{{Key: "logo", Type: field.TypeFile, Label: "Logo", Required: true}}})
+	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "settings", Modules: []kernel.Module{siteSettingsHTTPModule{}}, Params: []field.Definition{{Key: "logo", Type: field.TypeFile, Label: "Logo", Required: true, Options: field.FileOptions{Disk: "public", VirtualPath: "site", SettingsCode: "logo"}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,10 +123,10 @@ func TestSiteSettingsHTTPCreateIncompleteAndUpdateRequired(t *testing.T) {
 	}
 }
 
-type siteSettingsHTTPFiles struct{ file.Service }
+type siteSettingsHTTPMedia struct{ media.Service }
 
-func (siteSettingsHTTPFiles) GetFile(_ context.Context, _ security.Actor, id file.ID) (file.File, error) {
-	return file.File{ID: id, MIMEType: "text/plain", Storage: "private-storage-detail"}, nil
+func (siteSettingsHTTPMedia) Resolve(_ context.Context, _ security.Actor, id media.ID) (media.ResolvedMedia, error) {
+	return media.ResolvedMedia{Media: media.Media{ID: id}, File: file.File{ID: 90, MIMEType: "text/plain", Storage: "public"}}, nil
 }
 
 func TestSiteSettingsHTTPRejectsUnsupportedFileFormat(t *testing.T) {
@@ -135,7 +136,7 @@ func TestSiteSettingsHTTPRejectsUnsupportedFileFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "settings", Modules: []kernel.Module{siteSettingsHTTPModule{}}, Params: []field.Definition{
-		{Key: "logo", Type: field.TypeFile, Label: "Logo", Required: true, Options: field.FileOptions{MIMETypes: []string{"image/*"}}},
+		{Key: "logo", Type: field.TypeFile, Label: "Logo", Required: true, Options: field.FileOptions{Disk: "public", VirtualPath: "site", SettingsCode: "logo", MIMETypes: []string{"image/*"}}},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -144,8 +145,11 @@ func TestSiteSettingsHTTPRejectsUnsupportedFileFormat(t *testing.T) {
 		{ID: 1, ProfileCode: "settings", Name: "Existing", Domain: "existing.test", Locale: "ru-RU"},
 	}}}}
 	access := siteSettingsHTTPAccess{}
-	catalog, err := site.NewCatalog(repo, siteSettingsHTTPProfiles{blueprint}, access, siteSettingsHTTPFiles{})
+	catalog, err := site.NewCatalog(repo, siteSettingsHTTPProfiles{blueprint}, access)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SetMediaService(siteSettingsHTTPMedia{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := catalog.Reload(ctx); err != nil {

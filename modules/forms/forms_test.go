@@ -19,6 +19,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/job"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	corefile "github.com/vernal96/go-cms-kernel/modules/core/file"
+	coremedia "github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/mail"
 	"github.com/vernal96/go-cms-kernel/permission"
@@ -49,6 +50,10 @@ func formsFieldResolver() testFieldResolver {
 		result[item.Code()] = item
 	}
 	return result
+}
+
+func testImageFileOptions() field.FileOptions {
+	return field.FileOptions{Disk: "public", VirtualPath: "forms/images", SettingsCode: "forms_image", MIMETypes: []string{"image/*"}}
 }
 
 func TestConditionalFieldsUseNormalizedControllersAndIgnoreInactiveValues(t *testing.T) {
@@ -199,7 +204,7 @@ func (customActionContributorRuntime) ModuleCode() kernel.ModuleCode {
 
 func TestContributorModuleRegistersActionBeforeFormsFinalization(t *testing.T) {
 	actions := newActionRegistry()
-	elements, err := newElementCatalog()
+	elements, err := newElementCatalog(testImageFileOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +237,27 @@ type allowAuthorizer struct{}
 
 func (allowAuthorizer) Check(context.Context, security.Actor, permission.Code) error { return nil }
 
-type filesStub struct{ corefile.ManagementService }
+type filesStub struct {
+	corefile.ManagementService
+	urlFileID corefile.ID
+	urlErr    error
+}
+
+func (f *filesStub) URL(_ context.Context, _ security.Actor, id corefile.ID) (string, error) {
+	f.urlFileID = id
+	return "/files/current", f.urlErr
+}
+
+type mediaStub struct {
+	coremedia.Service
+	resolved coremedia.ResolvedMedia
+	err      error
+}
+
+func (m *mediaStub) Resolve(context.Context, security.Actor, coremedia.ID) (coremedia.ResolvedMedia, error) {
+	return m.resolved, m.err
+}
+
 type repositoryStub struct {
 	Repository
 	detail      FormDetail
@@ -269,11 +294,11 @@ func (*repositoryStub) MarkUploadSpoolDeleted(context.Context, site.ID, ResultID
 
 func TestCreateFormBuildsMandatoryDefaultsBeforeAtomicRepositoryCall(t *testing.T) {
 	repository := &repositoryStub{}
-	elements, err := newElementCatalog()
+	elements, err := newElementCatalog(testImageFileOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := NewService(5, repository, formsFieldResolver(), elements, newActionRegistry(), map[string]CaptchaProvider{"test": &captchaStub{}}, "test", allowAuthorizer{}, &filesStub{}, nil, PublicLimits{
+	service, err := NewService(5, repository, formsFieldResolver(), elements, newActionRegistry(), map[string]CaptchaProvider{"test": &captchaStub{}}, "test", allowAuthorizer{}, &filesStub{}, &mediaStub{}, nil, PublicLimits{
 		MaxRequestSize: 1 << 20, MaxScalarFields: 20, MaxScalarValueSize: 1 << 10,
 		MaxUploadFileSize: 1 << 20, MaxUploadCount: 4, MaxTotalUploadBytes: 1 << 20,
 		SubmissionTimeout: time.Second, RateLimit: 10, RateWindow: time.Minute, RateEntries: 100,
@@ -474,7 +499,7 @@ func (c *captchaStub) Verify(_ context.Context, input CaptchaInput) error {
 
 func TestSubmissionPersistsTypedSnapshotsWithoutCaptchaOrHiddenFields(t *testing.T) {
 	resolver := formsFieldResolver()
-	elements, err := newElementCatalog()
+	elements, err := newElementCatalog(testImageFileOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -493,7 +518,7 @@ func TestSubmissionPersistsTypedSnapshotsWithoutCaptchaOrHiddenFields(t *testing
 		Layout:   []LayoutNode{{ID: 1, FieldID: &consentID}, {ID: 2, FieldID: &captchaID}, {ID: 3, FieldID: &subscribeID}, {ID: 4, FieldID: &emailID}, {ID: 5, ElementID: &submitID}},
 		Statuses: []Status{{ID: 1, FormID: 9, Code: DefaultStatusCode, Name: "Новый", IsDefault: true}},
 	}}
-	service, err := NewService(5, repository, resolver, elements, actions, map[string]CaptchaProvider{"test": captcha}, "test", allowAuthorizer{}, &filesStub{}, nil, PublicLimits{
+	service, err := NewService(5, repository, resolver, elements, actions, map[string]CaptchaProvider{"test": captcha}, "test", allowAuthorizer{}, &filesStub{}, &mediaStub{}, nil, PublicLimits{
 		MaxRequestSize: 1 << 20, MaxScalarFields: 20, MaxScalarValueSize: 1 << 10,
 		MaxUploadFileSize: 1 << 20, MaxUploadCount: 4, MaxTotalUploadBytes: 1 << 20,
 		SubmissionTimeout: time.Second, RateLimit: 10, RateWindow: time.Minute, RateEntries: 100,

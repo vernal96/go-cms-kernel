@@ -77,7 +77,7 @@ func TestPostgresImageDeletionImpactCascadeAndFields(t *testing.T) {
 	if err := files.DeleteFile(ctx, root.ID, physical); !errors.Is(err, file.ErrInUse) || deleted != 0 {
 		t.Fatal("safe delete allowed referenced image", err)
 	}
-	if _, err = conn.Pool().Exec(ctx, `INSERT INTO core.file_field_references(owner_kind,owner_id,field_key,file_id) VALUES('resource',$1,'generic_file',$2)`, ownerID, child.ID); err != nil {
+	if _, err = conn.Pool().Exec(ctx, `INSERT INTO core.file_field_references(owner_kind,owner_id,field_key,media_id) VALUES('resource',$1,'generic_file',$2)`, ownerID, m.ID); err != nil {
 		t.Fatal(err)
 	}
 	blocked, err := cascade.DeleteImpact(ctx, items)

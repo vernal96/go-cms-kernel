@@ -296,6 +296,22 @@ WITH RECURSIVE tree AS (
     SELECT id FROM core.resources WHERE id = $1
     UNION ALL
     SELECT child.id FROM core.resources child JOIN tree parent ON child.parent_id = parent.id
+), owners AS (
+    SELECT id FROM tree
+    UNION
+    SELECT route.resource_id
+    FROM core.library_item_routes route
+    JOIN tree library ON library.id = route.library_id
+)
+DELETE FROM core.media_field_occurrences
+WHERE owner_kind='resource' AND owner_id IN (SELECT id FROM owners);`, id); err != nil {
+		return translateDeleteError(err)
+	}
+	if _, err := transaction.Exec(ctx, `
+WITH RECURSIVE tree AS (
+    SELECT id FROM core.resources WHERE id = $1
+    UNION ALL
+    SELECT child.id FROM core.resources child JOIN tree parent ON child.parent_id = parent.id
 )
 DELETE FROM core.resource_entities entity
 WHERE entity.storage_kind = 'library_item'

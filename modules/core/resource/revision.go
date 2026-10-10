@@ -352,6 +352,10 @@ func validateSnapshotWidgets(runtime *site.Runtime, candidate *Resource) error {
 			return fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
 		binding.Params = params
+		binding.References, err = widgetRuntime.FieldSchema().StoredReferences(params)
+		if err != nil {
+			return err
+		}
 		if err := validateLiteralWidgetInstance(widgetRuntime, params, binding.ParamBindings); err != nil {
 			return fmt.Errorf("%w: %w", ErrInvalid, err)
 		}

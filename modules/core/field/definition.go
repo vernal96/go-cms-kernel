@@ -115,10 +115,11 @@ type PhoneOptions struct {
 }
 
 type FileOptions struct {
-	Multiple bool `json:"multiple,omitempty"`
-
-	Storages  []filesystem.Code `json:"storages,omitempty"`
-	MIMETypes []string          `json:"mime_types,omitempty"`
+	Disk         filesystem.Code `json:"disk"`
+	VirtualPath  string          `json:"virtual_path"`
+	SettingsCode string          `json:"settings_code"`
+	Multiple     bool            `json:"multiple,omitempty"`
+	MIMETypes    []string        `json:"mime_types,omitempty"`
 }
 
 // CompileContext carries the current resolver and composite ancestry through
@@ -181,6 +182,7 @@ const ReferenceMedia = "media"
 type StoredValue struct {
 	ReferenceTarget string      `json:"reference_target,omitempty"`
 	References      []Reference `json:"references,omitempty"`
+	FileField       bool        `json:"-"`
 	Key             string
 	Position        int
 	Kind            StorageKind
@@ -359,7 +361,6 @@ func cloneOptions(options any) any {
 		return &result
 
 	case FileOptions:
-		typed.Storages = append([]filesystem.Code(nil), typed.Storages...)
 		typed.MIMETypes = append([]string(nil), typed.MIMETypes...)
 		return typed
 
@@ -368,7 +369,6 @@ func cloneOptions(options any) any {
 			return (*FileOptions)(nil)
 		}
 		result := *typed
-		result.Storages = append([]filesystem.Code(nil), typed.Storages...)
 		result.MIMETypes = append([]string(nil), typed.MIMETypes...)
 		return &result
 

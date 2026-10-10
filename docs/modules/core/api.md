@@ -100,10 +100,22 @@ GET /api/sites/{siteID}/resources/{libraryID}/items?limit=10&search=report&filte
 | `POST /api/files/folders` | JSON `disk`, `parent_id` (nullable), `name`. |
 | `PATCH /api/files/folders/{folderID}`, `PATCH /api/files/{fileID}` | JSON `name`; path ID выбирает переименовываемую сущность. |
 | `POST /api/files/uploads` | Multipart: обязательный `file`, `disk`, необязательный `folder_id`; размер ограничен конфигурацией. |
+| `POST /api/files/field-uploads` | Multipart: JSON-поле `target` и файл `file`. Сервер определяет диск, виртуальный путь и MIME-ограничения по доверенной схеме владельца; параметры обычной загрузки диска и папки не принимаются. |
 | `GET /api/files/{fileID}`, `GET /api/files/{fileID}/preview`, `GET /api/files/{fileID}/download` | Положительный `fileID`; query/body не требуются. |
 | `POST /api/files/move` | JSON `disk`, `folder_id` (nullable), `items`: массив `{kind, id}`, где `kind` — `file` или `folder`. |
 | `POST /api/files/delete-impact` | JSON `items`: массив `{kind, id}`; возвращает предварительный анализ последствий. |
 | `POST /api/files/delete` | JSON `items`, `policy`, `impact_token`. Пустая policy означает безопасное удаление; подтверждённый media cascade требует policy `confirmed_media_cascade` и токен из анализа. |
+
+Для загрузки из поля `target` — JSON-строка в multipart-форме с `owner`, доверенными идентификаторами и структурированным `field_path`. Поддерживаются владельцы `site`, `resource` и `widget`. Например, поле логотипа нового сайта выбирается так:
+
+```sh
+curl -X POST 'http://localhost:8080/api/files/field-uploads' \
+  -H 'Authorization: Bearer <token>' \
+  -F 'target={"owner":"site","profile_code":"editorial","field_path":["logo"]}' \
+  -F 'file=@./logo.png'
+```
+
+Для существующего сайта передайте `site_id`; `profile_code` используется только при создании сайта. Для полей ресурса передайте `site_id` и `template_code` либо `resource_id`; для поля виджета укажите его `widget_code` и `site_id`. Вложенное поле repeater адресуется массивом ключей и индекса строки, например `field_path: ["blocks", "0", "image"]`. Клиент не задаёт `disk`, `folder_id`, `virtual_path` или `mime_types`: Core находит определение поля по владельцу и пути и применяет его `FileOptions`. Сервер определяет MIME по содержимому (первые 512 байт) до создания каталога или записи файла, затем создаёт настроенный виртуальный путь при необходимости и загружает туда. Успех возвращает `201 Created` с объектом файла. Для файлового менеджера сохраняется отдельный `POST /api/files/uploads`, где вызывающая сторона задаёт диск и папку.
 
 ### Изображения, media и site menu
 
@@ -114,7 +126,7 @@ GET /api/sites/{siteID}/resources/{libraryID}/items?limit=10&search=report&filte
 | `GET /api/media/{mediaID}/image` | `{mediaID}` — положительный ID media; query/body нет. |
 | `POST /api/media/{mediaID}/image` | JSON `expected_updated_at` (timestamp из image state) и `transform`. Transform поддерживает `crop` (`x`, `y`, `width`, `height`), `rotate` (кратно 90°, от −360 до 360), `scale_x`, `scale_y`, `width`, `height`, `fit`, `position`, `quality` (1–100). Непереданные scale по умолчанию 1, fit — `contain`, position — `center`, quality — 85. Версия защищает от перезаписи параллельных изменений. |
 | `POST /api/media/{mediaID}/image/restore` | JSON `expected_updated_at` из текущего image state. |
-| `GET/PUT /api/sites/{siteID}/media/{mediaID}/settings` | При GET необязательный query `code` выбирает схему настроек. PUT JSON: `code`, `values` (объект настроек), `expected_updated_at`. |
+| `GET/PUT /api/sites/{siteID}/media/{mediaID}/settings` | При GET query `code` выбирает схему настроек, объявленную в `core.Config.MediaSettings`. PUT JSON: `code`, `values` (объект настроек), `expected_updated_at`; значения валидируются по схеме и сохраняются в `Media.Params.settings`, отдельно от `Media.Params.image`. Несовпадение версии возвращает `409`, ошибки схемы — `422`. |
 | `GET /api/sites/{siteID}/menu` | Только положительный `siteID`, без query/body. |
 
 ## Примеры

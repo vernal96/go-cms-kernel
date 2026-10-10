@@ -216,6 +216,7 @@ type Binding struct {
 	Presentation  Presentation
 	Params        map[string]any
 	ParamBindings ParamBindings
+	References    []field.Reference
 }
 
 type Order struct {
@@ -240,6 +241,13 @@ type Placements map[AreaCode][]Placement
 func CloneBinding(binding Binding) Binding {
 	binding.Params = cloneMap(binding.Params)
 	binding.ParamBindings = CloneParamBindings(binding.ParamBindings)
+	if binding.References != nil {
+		binding.References = append([]field.Reference{}, binding.References...)
+	}
+	for i := range binding.References {
+		binding.References[i].Path = append([]string{}, binding.References[i].Path...)
+		binding.References[i].Options.MIMETypes = append([]string(nil), binding.References[i].Options.MIMETypes...)
+	}
 	return binding
 }
 

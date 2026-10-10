@@ -25,17 +25,9 @@ func (e ElementDefinition) ValidateConfig(raw json.RawMessage) error {
 	if err != nil || values == nil {
 		return fmt.Errorf("%w: element config must be an object", ErrInvalid)
 	}
-	definitions := make([]field.Definition, len(e.Description.Fields))
-	for i, item := range e.Description.Fields {
-		options, err := field.EncodeOptionsJSON(item.Options)
-		if err != nil {
-			return err
-		}
-		decoded, err := field.DecodeOptionsJSON(item.Type, options)
-		if err != nil {
-			return err
-		}
-		definitions[i] = field.Definition{Key: item.Key, Type: item.Type, Label: item.Label, Required: item.Required, Validators: item.Validators, Options: decoded}
+	definitions, err := elementConfigDefinitions(e.Description.Fields)
+	if err != nil {
+		return err
 	}
 	resolver := e.FieldTypes
 	if resolver == nil {
@@ -52,4 +44,20 @@ func (e ElementDefinition) ValidateConfig(raw json.RawMessage) error {
 		return e.Validate(raw)
 	}
 	return nil
+}
+
+func elementConfigDefinitions(fields []field.ConfigField) ([]field.Definition, error) {
+	definitions := make([]field.Definition, len(fields))
+	for i, item := range fields {
+		options, err := field.EncodeOptionsJSON(item.Options)
+		if err != nil {
+			return nil, err
+		}
+		decoded, err := field.DecodeOptionsJSON(item.Type, options)
+		if err != nil {
+			return nil, err
+		}
+		definitions[i] = field.Definition{Key: item.Key, Type: item.Type, Label: item.Label, Required: item.Required, Validators: item.Validators, Options: decoded}
+	}
+	return definitions, nil
 }

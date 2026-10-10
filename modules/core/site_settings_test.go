@@ -33,7 +33,7 @@ type settingsMedia struct {
 }
 
 func (m settingsMedia) Get(_ context.Context, actor security.Actor, id media.ID) (media.Media, error) {
-	if !actor.IsGuest() || id != 7 {
+	if !actor.IsGuest() || id <= 0 {
 		m.t.Fatal("invalid media lookup")
 	}
 	return media.Media{ID: id, FileID: 12}, m.err
@@ -103,10 +103,7 @@ func TestPublicSettingsReferences(t *testing.T) {
 					if got["logo"] != (publicFileValue{ID: 7, URL: "/files/logo.svg"}) {
 						t.Fatalf("reference = %#v", got)
 					}
-					wantID := file.ID(7)
-					if kind == field.TypeMedia {
-						wantID = 12
-					}
+					wantID := file.ID(12)
 					if files.id != wantID {
 						t.Fatalf("wrong current media file: %d", files.id)
 					}
@@ -118,13 +115,13 @@ func TestPublicSettingsReferences(t *testing.T) {
 
 func TestPublicSettingsProjectsNestedRepeaterReferences(t *testing.T) {
 	publicFields := []field.Definition{
-		{Key: "icon", Type: field.TypeFile, Public: true},
-		{Key: "documents", Type: field.TypeFile, Public: true, Options: field.FileOptions{Multiple: true}},
+		{Key: "icon", Type: field.TypeFile, Public: true, Options: field.FileOptions{Disk: "public", VirtualPath: "site/icons", SettingsCode: "image"}},
+		{Key: "documents", Type: field.TypeFile, Public: true, Options: field.FileOptions{Disk: "public", VirtualPath: "site/documents", SettingsCode: "document", Multiple: true}},
 		{Key: "logo", Type: field.TypeMedia, Public: true},
 		{Key: "gallery", Type: field.TypeMedia, Public: true, Options: field.MediaOptions{Multiple: true}},
 		{Key: "secret", Type: field.TypeString, Public: false},
 		{Key: "nested", Type: field.TypeRepeater, Public: true, Options: field.RepeaterOptions{Fields: []field.Definition{
-			{Key: "attachment", Type: field.TypeFile, Public: true},
+			{Key: "attachment", Type: field.TypeFile, Public: true, Options: field.FileOptions{Disk: "public", VirtualPath: "site/attachments", SettingsCode: "document"}},
 			{Key: "private", Type: field.TypeString, Public: false},
 		}}},
 	}

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/security"
 )
 
@@ -16,7 +16,6 @@ func NewCatalog(
 	repository Repository,
 	profiles ProfileResolver,
 	access Access,
-	fileServices ...file.Service,
 ) (*Catalog, error) {
 	if repository == nil {
 		return nil, errors.New("site repository is nil")
@@ -34,16 +33,20 @@ func NewCatalog(
 		profiles:   profiles,
 		access:     access,
 	}
-	if len(fileServices) > 0 {
-		catalog.files = fileServices[0]
-	}
-
 	catalog.snapshot.Store(&runtimeSnapshot{
 		byDomain: make(map[string]*Runtime),
 		byID:     make(map[ID]*Runtime),
 	})
 
 	return catalog, nil
+}
+
+func (c *Catalog) SetMediaService(service media.Service) error {
+	if c == nil || service == nil {
+		return errors.New("site media service is unavailable")
+	}
+	c.media = service
+	return nil
 }
 
 func (c *Catalog) RuntimeByDomain(

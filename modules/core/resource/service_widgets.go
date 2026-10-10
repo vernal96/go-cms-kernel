@@ -58,9 +58,20 @@ func (s *Service) CreateWidget(
 	if input.ExpectedVersion != current.Version {
 		return widget.Binding{}, ErrConflict
 	}
+	refs, err := runtime.FieldSchema().StoredReferences(params)
+	if err != nil {
+		return widget.Binding{}, err
+	}
+	fileRefs, err := runtime.FieldSchema().FileReferences(params)
+	if err != nil {
+		return widget.Binding{}, err
+	}
+	if err := s.validateFileReferences(ctx, actor, fileRefs, nil); err != nil {
+		return widget.Binding{}, err
+	}
 	created, err := s.widgets.CreateWidget(ctx, actor.AuditUserID(), resourceID, input.ExpectedVersion, widget.Binding{
 		Code: input.Code, Area: input.Area, Position: position,
-		Presentation: presentation, Params: params, ParamBindings: widget.CloneParamBindings(input.ParamBindings),
+		Presentation: presentation, Params: params, ParamBindings: widget.CloneParamBindings(input.ParamBindings), References: refs,
 	}, recordRevision)
 	if err != nil {
 		return widget.Binding{}, fmt.Errorf("create resource %d widget: %w", resourceID, err)
@@ -111,6 +122,17 @@ func (s *Service) UpdateWidget(
 	}
 	if input.ExpectedVersion != current.Version {
 		return widget.Binding{}, ErrConflict
+	}
+	binding.References, err = runtime.FieldSchema().StoredReferences(binding.Params)
+	if err != nil {
+		return widget.Binding{}, err
+	}
+	fileRefs, err := runtime.FieldSchema().FileReferences(binding.Params)
+	if err != nil {
+		return widget.Binding{}, err
+	}
+	if err := s.validateFileReferences(ctx, actor, fileRefs, nil); err != nil {
+		return widget.Binding{}, err
 	}
 	updated, err := s.widgets.UpdateWidget(ctx, actor.AuditUserID(), resourceID, input.ExpectedVersion, binding, recordRevision)
 	if err != nil {

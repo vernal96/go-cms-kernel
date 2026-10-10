@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/vernal96/go-cms-kernel/filesystem"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/forms"
 )
@@ -12,7 +11,7 @@ import (
 func TestFieldOptionsCodecPreservesContributedAndFileOptions(t *testing.T) {
 	tests := []forms.FormField{
 		{Code: "custom", Type: "custom.type", Options: map[string]any{"mode": "strict", "limit": float64(3)}},
-		{Code: "asset", Type: field.TypeFile, Options: field.FileOptions{Storages: []filesystem.Code{"public"}, MIMETypes: []string{"image/*"}}},
+		{Code: "asset", Type: field.TypeFile, Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image", MIMETypes: []string{"image/*"}}},
 	}
 	for _, testCase := range tests {
 		raw, err := encodeFieldOptions(testCase)

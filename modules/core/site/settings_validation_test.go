@@ -11,6 +11,7 @@ import (
 	kernel "github.com/vernal96/go-cms-kernel"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/security"
 )
 
@@ -27,6 +28,13 @@ func (settingsFiles) GetFile(_ context.Context, _ security.Actor, id file.ID) (f
 	return file.File{ID: id, MIMEType: mimeTypes[id]}, nil
 }
 
+type settingsMedia struct{ media.Service }
+
+func (settingsMedia) Resolve(_ context.Context, _ security.Actor, id media.ID) (media.ResolvedMedia, error) {
+	mimeTypes := map[media.ID]string{1: "image/png", 2: "image/svg+xml", 3: "image/jpeg"}
+	return media.ResolvedMedia{Media: media.Media{ID: id}, File: file.File{ID: file.ID(id), Storage: "public", MIMEType: mimeTypes[id]}}, nil
+}
+
 func TestSiteSettingsRequiredOnlyOnUpdate(t *testing.T) {
 	ctx := context.Background()
 	factory, err := kernel.NewProfileRuntimeFactory(testResolver{}, kernel.RuntimeServices{EventBus: testEventBus{}, Logger: slog.New(slog.NewJSONHandler(io.Discard, nil))})
@@ -34,15 +42,18 @@ func TestSiteSettingsRequiredOnlyOnUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "settings", Modules: []kernel.Module{settingsModule{transitionModule{code: "fields", recorder: &transitionRecorder{}}}}, Params: []field.Definition{
-		{Key: "logo", Type: field.TypeFile, Label: "Logo", Required: true, Options: field.FileOptions{MIMETypes: []string{"image/png", "image/svg+xml"}}},
+		{Key: "logo", Type: field.TypeFile, Label: "Logo", Required: true, Options: field.FileOptions{Disk: "public", VirtualPath: "site", SettingsCode: "logo", MIMETypes: []string{"image/png", "image/svg+xml"}}},
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, values := range []map[string]any{nil, {}, {"logo": nil}, {"logo": ""}} {
 		repo := &memoryRepository{items: []Site{{ID: 1, ProfileCode: "settings", Name: "Existing", Domain: "existing.test", Locale: "ru-RU", Settings: values}}}
-		catalog, err := NewCatalog(repo, testProfiles{"settings": blueprint}, testAccess{allow: true}, settingsFiles{})
+		catalog, err := NewCatalog(repo, testProfiles{"settings": blueprint}, testAccess{allow: true})
 		if err != nil {
+			t.Fatal(err)
+		}
+		if err := catalog.SetMediaService(settingsMedia{}); err != nil {
 			t.Fatal(err)
 		}
 		if err := catalog.Reload(ctx); err != nil {

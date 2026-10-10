@@ -14,11 +14,15 @@ import (
 	"github.com/vernal96/go-cms-kernel/filesystem"
 	"github.com/vernal96/go-cms-kernel/modules/admin"
 	"github.com/vernal96/go-cms-kernel/modules/core"
+	"github.com/vernal96/go-cms-kernel/modules/core/field"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/user/adapters/argon2id"
 	"github.com/vernal96/go-cms-kernel/modules/forms"
 	"github.com/vernal96/go-cms-kernel/modules/mail"
 	"github.com/vernal96/go-cms-kernel/modules/search"
 	"github.com/vernal96/go-cms-kernel/modules/seo"
+	"github.com/vernal96/go-cms-kernel/permission"
+	"github.com/vernal96/go-cms-kernel/security"
 )
 
 type declarationMailRepository struct{ mail.Repository }
@@ -29,6 +33,14 @@ func (declarationMailDatabase) Mail() mail.Repository         { return &declarat
 
 type declarationFormsRepository struct{ forms.Repository }
 type declarationFormsDatabase struct{}
+
+func (*declarationFormsRepository) Kind() string { return "forms.element" }
+func (*declarationFormsRepository) UpdatePermission() permission.Code {
+	return forms.FormUpdatePermission
+}
+func (*declarationFormsRepository) ClearFileOccurrence(context.Context, *security.UserID, media.FileOccurrence) (int64, error) {
+	return 0, media.ErrFileDeleteUnsupported
+}
 
 func (declarationFormsDatabase) ModuleCode() kernel.ModuleCode { return forms.ModuleCode }
 func (declarationFormsDatabase) Forms() forms.Repository       { return &declarationFormsRepository{} }
@@ -50,9 +62,13 @@ func declarationMailConfig() mail.Config {
 	return mail.Config{SendMaxAttempts: 3, MaxRecipients: 10, MaxMessageSize: 1024, MaxAttachmentSize: 1024}
 }
 func declarationFormsConfig() forms.Config {
-	return forms.Config{ActionMaxAttempts: 3, DefaultCaptchaProvider: "development", Public: forms.PublicLimits{
+	return forms.Config{ActionMaxAttempts: 3, DefaultCaptchaProvider: "development", ElementImage: field.FileOptions{Disk: "private", VirtualPath: "forms/images", SettingsCode: "forms_image", MIMETypes: []string{"image/*"}}, Public: forms.PublicLimits{
 		MaxRequestSize: 1024, MaxScalarFields: 10, MaxScalarValueSize: 100, MaxUploadFileSize: 100, MaxUploadCount: 2, MaxTotalUploadBytes: 200, SubmissionTimeout: time.Second, RateLimit: 10, RateWindow: time.Minute, RateEntries: 100,
 	}}
+}
+
+func declarationCoreConfig() core.Config {
+	return core.Config{MediaSettings: []media.SettingsDefinition{{Code: "forms_image", Fields: []field.Definition{{Key: "title", Type: field.TypeString, Label: "Title"}}}}}
 }
 
 func TestBootValidatesEveryModuleWithoutSites(t *testing.T) {
@@ -132,7 +148,7 @@ func TestBootValidatesEveryModuleWithoutSites(t *testing.T) {
 				}},
 				Filesystems:        []filesystem.Factory{localstorage.Factory{Config: localstorage.Config{Code: "private", Visibility: filesystem.VisibilityPrivate, Root: t.TempDir(), BaseURL: "http://files.test", SigningKey: strings.Repeat("s", 32)}}},
 				ModuleApplications: []kernel.ModuleApplication{mail.Application{Transport: declarationTransport{}}, forms.Application{Providers: []forms.CaptchaProvider{forms.DevelopmentCaptchaProvider{ExpectedToken: "test"}}}},
-				Profiles:           []kernel.Profile{{Code: "unused", Modules: []kernel.Module{core.New(core.Config{}), admin.New()}}},
+				Profiles:           []kernel.Profile{{Code: "unused", Modules: []kernel.Module{core.New(declarationCoreConfig()), admin.New()}}},
 			}
 			if test.modules != nil {
 				definition.Profiles[0].Modules = append(definition.Profiles[0].Modules, test.modules()...)

@@ -143,6 +143,7 @@ CREATE TABLE forms.result_values
     timestamp_value TIMESTAMPTZ NULL,
     reference_value BIGINT NULL,
     json_value      JSONB NULL,
+	file_references JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(file_references)='array'),
     CHECK (
         (storage_kind = 'string' AND string_value IS NOT NULL AND integer_value IS NULL AND float_value IS NULL AND boolean_value IS NULL AND timestamp_value IS NULL AND reference_value IS NULL AND json_value IS NULL) OR
         (storage_kind = 'integer' AND string_value IS NULL AND integer_value IS NOT NULL AND float_value IS NULL AND boolean_value IS NULL AND timestamp_value IS NULL AND reference_value IS NULL AND json_value IS NULL) OR

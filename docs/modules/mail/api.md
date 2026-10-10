@@ -11,6 +11,7 @@ Site-management contribution монтируется на `/api/sites/{siteID}/ma
 | `POST /api/sites/{siteID}/mail/preview` | Рендеринг без отправки |
 | `POST /api/sites/{siteID}/mail/send` | Постановка отправки в очередь |
 | `GET /api/sites/{siteID}/mail/send/templates` | Шаблоны для ручной отправки |
+| `POST /api/sites/{siteID}/mail/send/templates/{templateID}/variables/files` | Multipart `target` (JSON-строка с `field_path`) и `file`; сервер разрешает схему переменной по шаблону и путь поля. |
 | `GET /api/sites/{siteID}/mail/messages`, `GET/DELETE /api/sites/{siteID}/mail/messages/{messageID}` | Журнал, детали и удаление сообщений |
 
 Пример запроса:
@@ -33,6 +34,17 @@ Content-Type: application/json
 - `GET /api/sites/{siteID}/mail/variables`, `GET /api/sites/{siteID}/mail/validator-types`, `GET /api/sites/{siteID}/mail/templates/{templateID}`, `GET /api/sites/{siteID}/mail/messages/{messageID}` и DELETE не принимают query-параметров.
 
 ## Параметры тел запросов
+
+Для файла переменной во время ручного заполнения отправьте multipart-поля `target` и `file` на маршрут с `templateID`:
+
+```sh
+curl -X POST 'http://localhost:8080/api/sites/12/mail/send/templates/4/variables/files' \
+  -H 'Authorization: Bearer <token>' \
+  -F 'target={"field_path":["contract"]}' \
+  -F 'file=@./contract.pdf'
+```
+
+`field_path` — массив ключей поля и, при необходимости, индексов вложенных повторителей. Disk, VirtualPath и MIME-ограничения берутся из определения переменной указанного шаблона; клиент не передаёт эти параметры. Сервер определяет MIME по содержимому до записи и сохраняет файл в настроенный каталог. Успех возвращает `201 Created` с объектом файла. Маршрут предназначен для файловых переменных при ручной отправке; обычные вложения шаблона и другие mail-пути загрузки имеют отдельные контракты.
 
 - Создание и изменение шаблона принимают `code`, `name`, `enabled`, `from`, `to`, `cc`, `bcc`, `reply_to`, `subject`, `content_type`, `text_body`, `html_body`, `attachments`, `variables`. `from` и адресаты содержат `name` и `email`; `content_type` — `text` или `html`. Переменная задаётся ключом `key`, типом поля `type`, подписью `label`, флагом `required`, упорядоченным массивом `validators` (`{"type":"max_length","options":{"value":100}}`) и необязательными `options`.
 - `PATCH /api/sites/{siteID}/mail/templates/{templateID}/enabled`: только флаг `enabled` (boolean).

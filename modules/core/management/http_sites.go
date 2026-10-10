@@ -16,13 +16,15 @@ type contentHTTP struct {
 }
 
 func SiteManagementRoutePrefixes() []string {
-	return []string{"resources", "library-items", "menu", "media"}
+	return []string{"resources", "library-items", "menu", "media", "media-file-deletions"}
 }
 
 func registerContentRoutes(router chi.Router, sites *Sites, resources *Resources) {
 	handler := &contentHTTP{sites: sites, resources: resources}
 	router.Get("/sites/{siteID}/media/{mediaID}/settings", handler.getMediaSettings)
 	router.Put("/sites/{siteID}/media/{mediaID}/settings", handler.saveMediaSettings)
+	router.Post("/sites/{siteID}/media/{mediaID}/delete-file", handler.deleteMediaFile)
+	router.Get("/sites/{siteID}/media-file-deletions/{operationID}", handler.mediaFileDeletionStatus)
 	router.Get("/administration/resource-revisions", handler.administrationRevisionCount)
 	router.Delete("/administration/resource-revisions", handler.administrationPurgeRevisions)
 	router.Get("/sites/options", handler.listSiteOptions)

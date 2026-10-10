@@ -9,7 +9,9 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres/mediaoccurrence"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/forms"
 	"github.com/vernal96/go-cms-kernel/security"
@@ -123,6 +125,9 @@ func (r *Repository) DeleteForm(ctx context.Context, siteID site.ID, id forms.Fo
 	}
 	keys, err := spoolReferencesForForm(ctx, tx, siteID, id)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM core.media_field_occurrences WHERE site_id=$1 AND ((owner_kind='forms.element' AND owner_id IN (SELECT e.id FROM forms.elements e WHERE e.form_id=$2)) OR (owner_kind='forms.result' AND owner_id IN (SELECT r.id FROM forms.results r WHERE r.site_id=$1 AND r.form_id=$2));`, siteID, id); err != nil {
 		return nil, err
 	}
 	command, err := tx.Exec(ctx, `DELETE FROM forms.forms WHERE site_id=$1 AND id=$2;`, siteID, id)
@@ -287,7 +292,7 @@ func (r *Repository) DeleteField(ctx context.Context, siteID site.ID, formID for
 	return resultErr
 }
 
-func (r *Repository) CreateElement(ctx context.Context, siteID site.ID, formID forms.FormID, item forms.Element, placement forms.LayoutPlacement) (_ forms.Element, _ forms.LayoutNode, resultErr error) {
+func (r *Repository) CreateElement(ctx context.Context, siteID site.ID, formID forms.FormID, item forms.Element, placement forms.LayoutPlacement, references []field.Reference) (_ forms.Element, _ forms.LayoutNode, resultErr error) {
 	tx, err := r.connector.Pool().Begin(ctx)
 	if err != nil {
 		return forms.Element{}, forms.LayoutNode{}, err
@@ -311,15 +316,35 @@ func (r *Repository) CreateElement(ctx context.Context, siteID site.ID, formID f
 	if err != nil {
 		return forms.Element{}, forms.LayoutNode{}, err
 	}
+	if err := replaceElementOccurrences(ctx, tx, siteID, created.ID, references); err != nil {
+		return forms.Element{}, forms.LayoutNode{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return forms.Element{}, forms.LayoutNode{}, err
 	}
 	return created, node, nil
 }
 
-func (r *Repository) UpdateElement(ctx context.Context, siteID site.ID, item forms.Element) (forms.Element, error) {
-	updated, err := scanElement(r.connector.Pool().QueryRow(ctx, `UPDATE forms.elements SET code=$4,type=$5,config=$6,updated_at=clock_timestamp() WHERE id=$2 AND form_id=$3 AND EXISTS(SELECT 1 FROM forms.forms WHERE id=$3 AND site_id=$1) RETURNING `+elementColumns+`;`, siteID, item.ID, item.FormID, item.Code, item.Type, item.Config))
-	return updated, mapWriteError(err)
+func (r *Repository) UpdateElement(ctx context.Context, siteID site.ID, item forms.Element, references []field.Reference) (_ forms.Element, resultErr error) {
+	tx, err := r.connector.Pool().Begin(ctx)
+	if err != nil {
+		return forms.Element{}, err
+	}
+	defer rollback(ctx, tx, &resultErr)
+	if err := lockOwnedForm(ctx, tx, siteID, item.FormID); err != nil {
+		return forms.Element{}, err
+	}
+	updated, err := scanElement(tx.QueryRow(ctx, `UPDATE forms.elements SET code=$4,type=$5,config=$6,updated_at=clock_timestamp() WHERE id=$2 AND form_id=$3 RETURNING `+elementColumns+`;`, siteID, item.ID, item.FormID, item.Code, item.Type, item.Config))
+	if err != nil {
+		return forms.Element{}, mapWriteError(err)
+	}
+	if err := replaceElementOccurrences(ctx, tx, siteID, updated.ID, references); err != nil {
+		return forms.Element{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return forms.Element{}, err
+	}
+	return updated, nil
 }
 
 func (r *Repository) DeleteElement(ctx context.Context, siteID site.ID, formID forms.FormID, id forms.ElementID) (_ error) {
@@ -348,12 +373,22 @@ func (r *Repository) DeleteElement(ctx context.Context, siteID site.ID, formID f
 		resultErr = forms.ErrNotFound
 		return resultErr
 	}
+	if err := replaceElementOccurrences(ctx, tx, siteID, id, nil); err != nil {
+		resultErr = err
+		return resultErr
+	}
 	if err := shiftSiblingPositions(ctx, tx, formID, parent, position, -1); err != nil {
 		resultErr = err
 		return resultErr
 	}
 	resultErr = tx.Commit(ctx)
 	return resultErr
+}
+
+func replaceElementOccurrences(ctx context.Context, tx pgx.Tx, siteID site.ID, id forms.ElementID, references []field.Reference) error {
+	return mediaoccurrence.Replace(ctx, tx, media.FileOccurrence{
+		OwnerKind: "forms.element", OwnerID: int64(id), SiteID: int64(siteID), Container: "config",
+	}, references)
 }
 
 func (r *Repository) CreateContainer(ctx context.Context, siteID site.ID, formID forms.FormID, item forms.LayoutNode) (_ forms.LayoutNode, resultErr error) {

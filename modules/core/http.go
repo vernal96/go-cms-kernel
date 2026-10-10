@@ -13,7 +13,7 @@ import (
 	"github.com/vernal96/go-cms-kernel"
 	"github.com/vernal96/go-cms-kernel/cache"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
-	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
@@ -69,15 +69,15 @@ func (r *Runtime) HTTP() httptransport.Builder {
 			ResourceHandlers: []httptransport.ResourceHandler{
 				{
 					Type:    httptransport.ResourceHandlerCode(resourcetype.Page),
-					Handler: pageResourceHandler{logger: r.logger, files: r.Files(), resultStore: r.resultStore, generation: generation},
+					Handler: pageResourceHandler{logger: r.logger, media: r.services.Media, resultStore: r.resultStore, generation: generation},
 				},
 				{
 					Type:    httptransport.ResourceHandlerCode(resourcetype.LibraryMirror),
-					Handler: pageResourceHandler{logger: r.logger, files: r.Files(), resultStore: r.resultStore, generation: generation},
+					Handler: pageResourceHandler{logger: r.logger, media: r.services.Media, resultStore: r.resultStore, generation: generation},
 				},
 				{
 					Type:    httptransport.ResourceHandlerCode(resourcetype.Library),
-					Handler: pageResourceHandler{logger: r.logger, files: r.Files(), resultStore: r.resultStore, generation: generation},
+					Handler: pageResourceHandler{logger: r.logger, media: r.services.Media, resultStore: r.resultStore, generation: generation},
 				},
 				{
 					Type:    httptransport.ResourceHandlerCode(resourcetype.Link),
@@ -238,7 +238,9 @@ type pageResourceHandler struct {
 	resultStore cache.Store
 	generation  string
 	logger      *slog.Logger
-	files       file.Service
+	media       interface {
+		Resolve(context.Context, security.Actor, media.ID) (media.ResolvedMedia, error)
+	}
 }
 
 func (h pageResourceHandler) ServeHTTP(
@@ -586,7 +588,7 @@ var _ httptransport.Provider = (*Runtime)(nil)
 // Bound file values inherit the target field's disk/MIME restrictions, including
 // references nested in repeaters. The source resource has already been authorized.
 func (h pageResourceHandler) newWidgetInstance(ctx context.Context, runtime *widget.Runtime, placement widget.Placement, schema *field.Schema, values widget.ResourceValues) (widget.Instance, error) {
-	params, err := runtime.ResolveParams(placement.Params, placement.ParamBindings, schema, values)
+	params, err := runtime.ResolveStoredParams(placement.Params, placement.ParamBindings, schema, values)
 	if err != nil {
 		return nil, err
 	}
@@ -601,26 +603,27 @@ func (h pageResourceHandler) newWidgetInstance(ctx context.Context, runtime *wid
 		return nil, fmt.Errorf("%w: %v", widget.ErrInvalidParams, err)
 	}
 	for _, ref := range refs {
-		if h.files == nil {
-			return nil, fmt.Errorf("%w: file service is unavailable", widget.ErrInvalidParams)
+		if h.media == nil {
+			return nil, fmt.Errorf("%w: media service is unavailable", widget.ErrInvalidParams)
 		}
-		item, err := h.files.GetFile(ctx, security.System(), file.ID(ref.ID))
+		resolved, err := h.media.Resolve(ctx, security.System(), media.ID(ref.ID))
 		if err != nil {
-			return nil, fmt.Errorf("%w: file parameter %q: %v", widget.ErrInvalidParams, ref.Key, err)
+			return nil, fmt.Errorf("%w: file parameter %q media: %v", widget.ErrInvalidParams, ref.Key, err)
 		}
+		item := resolved.File
 		if !field.FileMatches(ref.Options, item.Storage, item.MIMEType) {
 			return nil, fmt.Errorf(
-				"%w: file parameter %q rejects MIME type %q in storage %q; allowed MIME types: %v; allowed storages: %v",
+				"%w: file parameter %q rejects MIME type %q in disk %q; allowed MIME types: %v; required disk: %q",
 				widget.ErrInvalidParams,
 				ref.Key,
 				item.MIMEType,
 				item.Storage,
 				ref.Options.MIMETypes,
-				ref.Options.Storages,
+				ref.Options.Disk,
 			)
 		}
 	}
-	return runtime.New(params)
+	return runtime.NewStored(params)
 }
 
 func widgetResourceSnapshot(item resource.Resource) widget.ResourceSnapshot {

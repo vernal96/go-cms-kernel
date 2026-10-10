@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 
 	kernel "github.com/vernal96/go-cms-kernel"
-	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 )
 
 type runtimeSnapshot struct {
@@ -43,7 +43,7 @@ type Catalog struct {
 	repository Repository
 	profiles   ProfileResolver
 	access     Access
-	files      file.Service
+	media      media.Service
 	preparers  []RuntimePreparer
 
 	snapshot   atomic.Pointer[runtimeSnapshot]

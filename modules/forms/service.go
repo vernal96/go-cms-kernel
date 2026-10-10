@@ -10,6 +10,7 @@ import (
 
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	corefile "github.com/vernal96/go-cms-kernel/modules/core/file"
+	coremedia "github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/permission"
 	"github.com/vernal96/go-cms-kernel/security"
@@ -43,6 +44,7 @@ type Service struct {
 	defaultCaptcha string
 	authorizer     security.Authorizer
 	files          corefile.ManagementService
+	media          coremedia.Service
 	spool          *UploadSpool
 	lifecycle      *runtimeLifecycle
 	limits         PublicLimits
@@ -60,11 +62,12 @@ func NewService(
 	defaultCaptcha string,
 	authorizer security.Authorizer,
 	files corefile.ManagementService,
+	mediaService coremedia.Service,
 	spool *UploadSpool,
 	limits PublicLimits,
 	logger *slog.Logger,
 ) (*Service, error) {
-	if siteID <= 0 || repository == nil || fieldTypes == nil || elements == nil || actions == nil || authorizer == nil || files == nil {
+	if siteID <= 0 || repository == nil || fieldTypes == nil || elements == nil || actions == nil || authorizer == nil || files == nil || mediaService == nil {
 		return nil, errors.New("Forms service dependencies are invalid")
 	}
 	if _, exists := captcha[defaultCaptcha]; !exists {
@@ -76,7 +79,7 @@ func NewService(
 	return &Service{
 		siteID: siteID, repository: repository, fieldTypes: fieldTypes, elements: elements,
 		actions: actions, captcha: captcha, defaultCaptcha: defaultCaptcha, authorizer: authorizer,
-		files: files, spool: spool, lifecycle: &runtimeLifecycle{}, limits: limits,
+		files: files, media: mediaService, spool: spool, lifecycle: &runtimeLifecycle{}, limits: limits,
 		rateLimiter: newSubmitRateLimiter(limits.RateLimit, limits.RateWindow, limits.RateEntries), logger: logger,
 	}, nil
 }
@@ -287,7 +290,11 @@ func (s *Service) CreateElement(ctx context.Context, actor security.Actor, formI
 			}
 		}
 	}
-	return s.repository.CreateElement(ctx, s.siteID, formID, item, placement)
+	references, err := s.elementReferences(item)
+	if err != nil {
+		return Element{}, LayoutNode{}, err
+	}
+	return s.repository.CreateElement(ctx, s.siteID, formID, item, placement, references)
 }
 
 func (s *Service) UpdateElement(ctx context.Context, actor security.Actor, formID FormID, item Element) (Element, error) {
@@ -317,7 +324,11 @@ func (s *Service) UpdateElement(ctx context.Context, actor security.Actor, formI
 			return Element{}, err
 		}
 	}
-	return s.repository.UpdateElement(ctx, s.siteID, item)
+	references, err := s.elementReferences(item)
+	if err != nil {
+		return Element{}, err
+	}
+	return s.repository.UpdateElement(ctx, s.siteID, item, references)
 }
 
 func (s *Service) DeleteElement(ctx context.Context, actor security.Actor, formID FormID, id ElementID) error {
@@ -485,27 +496,103 @@ func (s *Service) AvailableActionTypes() []ActionTypeMetadata   { return s.actio
 
 func (s *Service) AvailableFieldTypes() []field.TypeCode { return s.fieldTypes.FieldTypes() }
 
+func (s *Service) elementReferences(item Element) ([]field.Reference, error) {
+	schema, err := s.elementSchema(item.Type)
+	if err != nil {
+		return nil, err
+	}
+	values := map[string]any{}
+	if err := json.Unmarshal(item.Config, &values); err != nil {
+		return nil, fmt.Errorf("%w: element config must be an object", ErrInvalid)
+	}
+	normalized, err := schema.Validate(values)
+	if err != nil {
+		return nil, fmt.Errorf("%w: element config: %v", ErrInvalid, err)
+	}
+	return schema.References(normalized)
+}
+
+func (s *Service) elementSchema(code ElementTypeCode) (*field.Schema, error) {
+	elementType, exists := s.elements.Type(code)
+	if !exists {
+		return nil, fmt.Errorf("%w: element type %q is unavailable", ErrInvalid, code)
+	}
+	metadata := elementType.Metadata()
+	definitions := make([]field.Definition, len(metadata.Fields))
+	for index, config := range metadata.Fields {
+		optionsJSON, err := field.EncodeOptionsJSON(config.Options)
+		if err != nil {
+			return nil, fmt.Errorf("Forms element %q field %q options: %w", code, config.Key, err)
+		}
+		options, err := field.DecodeOptionsJSON(config.Type, optionsJSON)
+		if err != nil {
+			return nil, fmt.Errorf("Forms element %q field %q options: %w", code, config.Key, err)
+		}
+		definitions[index] = field.Definition{Key: config.Key, Type: config.Type, Label: config.Label, Required: config.Required, Validators: config.Validators, Options: options}
+	}
+	schema, err := field.CompilePersistent(definitions, s.fieldTypes)
+	if err != nil {
+		return nil, fmt.Errorf("Forms element %q schema: %w", code, err)
+	}
+	return schema, nil
+}
+
 func (s *Service) validateImage(ctx context.Context, actor security.Actor, raw json.RawMessage) error {
 	var config struct {
-		FileID corefile.ID `json:"file_id"`
+		MediaID coremedia.ID `json:"file_id"`
 	}
-	if json.Unmarshal(raw, &config) != nil || config.FileID <= 0 {
+	if json.Unmarshal(raw, &config) != nil || config.MediaID <= 0 {
 		return fmt.Errorf("%w: image file is invalid", ErrInvalid)
 	}
-	if _, err := s.files.URL(ctx, actor, config.FileID); err != nil {
+	resolved, err := s.media.Resolve(ctx, actor, config.MediaID)
+	if err != nil {
+		return fmt.Errorf("%w: image media is invalid: %v", ErrInvalid, err)
+	}
+	options, err := s.imageFileOptions()
+	if err != nil {
+		return err
+	}
+	if !field.FileMatches(options, resolved.File.Storage, resolved.File.MIMEType) {
+		return fmt.Errorf("%w: image media does not match configured disk or MIME constraints", ErrInvalid)
+	}
+	if _, err := s.files.URL(ctx, actor, resolved.File.ID); err != nil {
 		return fmt.Errorf("%w: image file must be readable and public: %v", ErrInvalid, err)
 	}
 	return nil
 }
 
+func (s *Service) imageFileOptions() (field.FileOptions, error) {
+	elementType, exists := s.elements.Type(ElementImage)
+	if !exists {
+		return field.FileOptions{}, fmt.Errorf("%w: Forms image element is unavailable", ErrInvalid)
+	}
+	metadata := elementType.Metadata()
+	if len(metadata.Fields) == 0 {
+		return field.FileOptions{}, fmt.Errorf("%w: Forms image file options are unavailable", ErrInvalid)
+	}
+	encoded, err := field.EncodeOptionsJSON(metadata.Fields[0].Options)
+	if err != nil {
+		return field.FileOptions{}, fmt.Errorf("Forms image file options: %w", err)
+	}
+	options, err := field.DecodeOptions[field.FileOptions](encoded)
+	if err != nil {
+		return field.FileOptions{}, fmt.Errorf("Forms image file options: %w", err)
+	}
+	return options, nil
+}
+
 func (s *Service) PublicImageURL(ctx context.Context, raw json.RawMessage) (string, error) {
 	var config struct {
-		FileID corefile.ID `json:"file_id"`
+		MediaID coremedia.ID `json:"file_id"`
 	}
-	if json.Unmarshal(raw, &config) != nil || config.FileID <= 0 {
+	if json.Unmarshal(raw, &config) != nil || config.MediaID <= 0 {
 		return "", ErrInvalid
 	}
-	return s.files.URL(ctx, security.System(), config.FileID)
+	resolved, err := s.media.Resolve(ctx, security.System(), config.MediaID)
+	if err != nil {
+		return "", err
+	}
+	return s.files.URL(ctx, security.System(), resolved.File.ID)
 }
 
 func (s *Service) validateActionConfig(ctx context.Context, actor security.Actor, detail FormDetail, item Action, fields []FormField) error {

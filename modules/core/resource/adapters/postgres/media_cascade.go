@@ -48,6 +48,14 @@ func (r *Repository) ClearMediaReferences(ctx context.Context, tx pgx.Tx, mediaI
    WHERE fv.resource_id=$1 AND fv.resource_id=mr.resource_id AND fv.field_key=mr.field_key AND fv.position=mr.position AND cardinality(mr.value_path)=0 AND mr.media_id=ANY($2::bigint[])`, id, mediaIDs); err != nil {
 			return err
 		}
+		// Re-number scalar multi-value members after pruning a selection. The
+		// reference FK follows position changes within this transaction.
+		if _, err := tx.Exec(ctx, `WITH offsets AS (SELECT field_key,max(position)+count(*)::integer+1 AS delta FROM core.resource_field_values WHERE resource_id=$1 AND is_multi GROUP BY field_key) UPDATE core.resource_field_values fv SET position=fv.position+o.delta FROM offsets o WHERE fv.resource_id=$1 AND fv.field_key=o.field_key AND fv.is_multi`, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `WITH ranked AS (SELECT field_key,position,row_number() OVER(PARTITION BY field_key ORDER BY position)-1 AS next FROM core.resource_field_values WHERE resource_id=$1 AND is_multi) UPDATE core.resource_field_values fv SET position=ranked.next FROM ranked WHERE fv.resource_id=$1 AND fv.field_key=ranked.field_key AND fv.position=ranked.position`, id); err != nil {
+			return err
+		}
 		query := `UPDATE core.resources SET image_media_id=CASE WHEN image_media_id=ANY($2::bigint[]) THEN NULL ELSE image_media_id END, updated_at=clock_timestamp(), updated_by=$3 WHERE id=$1`
 		if before.Data.StorageKind == resource.StorageLibraryItem {
 			query = `UPDATE core.library_items SET image_media_id=CASE WHEN image_media_id=ANY($2::bigint[]) THEN NULL ELSE image_media_id END, updated_at=clock_timestamp(), updated_by=$3 WHERE id=$1`
@@ -81,7 +89,7 @@ func (r *Repository) ClearMediaReferences(ctx context.Context, tx pgx.Tx, mediaI
 // before mutation so deleting several indices cannot target a shifted neighbor.
 func clearStructuredMediaReferences(ctx context.Context, tx pgx.Tx, id resource.ID, mediaIDs []int64) error {
 	rows, err := tx.Query(ctx, `SELECT fv.field_key,fv.position,fv.value_json,
- (SELECT jsonb_agg(jsonb_build_object('target','media','id',mr.media_id,'path',mr.value_path)) FROM core.resource_media_references mr WHERE mr.resource_id=fv.resource_id AND mr.field_key=fv.field_key AND mr.position=fv.position)
+ (SELECT jsonb_agg(jsonb_build_object('target',mr.reference_target,'id',mr.media_id,'path',mr.value_path)) FROM core.resource_media_references mr WHERE mr.resource_id=fv.resource_id AND mr.field_key=fv.field_key AND mr.position=fv.position)
  FROM core.resource_field_values fv WHERE fv.resource_id=$1 AND fv.value_kind='json' AND EXISTS
  (SELECT 1 FROM core.resource_media_references mr WHERE mr.resource_id=fv.resource_id AND mr.field_key=fv.field_key AND mr.position=fv.position AND mr.media_id=ANY($2::bigint[]))`, id, mediaIDs)
 	if err != nil {
@@ -146,7 +154,7 @@ func clearStructuredMediaReferences(ctx context.Context, tx pgx.Tx, id resource.
 			if !exists {
 				return fmt.Errorf("missing media reference path in field %q", item.key)
 			}
-			if _, err := tx.Exec(ctx, `INSERT INTO core.resource_media_references(resource_id,field_key,position,value_path,media_id) VALUES($1,$2,$3,$4,$5)`, id, item.key, item.position, path, ref.ID); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO core.resource_media_references(resource_id,field_key,position,value_path,media_id,reference_target) VALUES($1,$2,$3,$4,$5,$6)`, id, item.key, item.position, path, ref.ID, ref.Target); err != nil {
 				return err
 			}
 		}

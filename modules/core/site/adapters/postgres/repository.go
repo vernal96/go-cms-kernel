@@ -12,7 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	connectorpostgres "github.com/vernal96/go-cms-kernel/connectors/postgres"
-	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres/mediaoccurrence"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/security"
 )
@@ -203,6 +204,9 @@ RETURNING `+siteColumns+`;`,
 	if err := replaceFileReferences(ctx, tx, "site", int64(result.ID), item.FileReferences); err != nil {
 		return site.Site{}, err
 	}
+	if err := mediaoccurrence.Replace(ctx, tx, media.FileOccurrence{OwnerKind: "site", OwnerID: int64(result.ID), SiteID: int64(result.ID), Container: "settings"}, item.MediaOccurrences); err != nil {
+		return site.Site{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return site.Site{}, err
 	}
@@ -253,6 +257,9 @@ RETURNING `+siteColumns+`;`,
 		return site.Site{}, translateError(fmt.Sprintf("update core site %d", item.ID), err)
 	}
 	if err := replaceFileReferences(ctx, tx, "site", int64(result.ID), item.FileReferences); err != nil {
+		return site.Site{}, err
+	}
+	if err := mediaoccurrence.Replace(ctx, tx, media.FileOccurrence{OwnerKind: "site", OwnerID: int64(result.ID), SiteID: int64(result.ID), Container: "settings"}, item.MediaOccurrences); err != nil {
 		return site.Site{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -384,14 +391,14 @@ func replaceFileReferences(
 	tx pgx.Tx,
 	ownerKind string,
 	ownerID int64,
-	references map[string]file.ID,
+	references map[string]media.ID,
 ) error {
 	if _, err := tx.Exec(ctx, `DELETE FROM core.file_field_references WHERE owner_kind = $1 AND owner_id = $2;`, ownerKind, ownerID); err != nil {
 		return fmt.Errorf("delete file field references: %w", err)
 	}
 	for key, id := range references {
 		if _, err := tx.Exec(ctx, `
-INSERT INTO core.file_field_references (owner_kind, owner_id, field_key, file_id)
+INSERT INTO core.file_field_references (owner_kind, owner_id, field_key, media_id)
 VALUES ($1, $2, $3, $4);`, ownerKind, ownerID, key, id); err != nil {
 			return fmt.Errorf("insert file field reference: %w", err)
 		}
@@ -399,11 +406,11 @@ VALUES ($1, $2, $3, $4);`, ownerKind, ownerID, key, id); err != nil {
 	return nil
 }
 
-func cloneFileReferences(source map[string]file.ID) map[string]file.ID {
+func cloneFileReferences(source map[string]media.ID) map[string]media.ID {
 	if source == nil {
 		return nil
 	}
-	result := make(map[string]file.ID, len(source))
+	result := make(map[string]media.ID, len(source))
 	for key, value := range source {
 		result[key] = value
 	}

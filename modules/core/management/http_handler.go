@@ -43,7 +43,7 @@ func NewHTTPHandler(dependencies HTTPDependencies) (http.Handler, error) {
 	router := chi.NewRouter()
 	registerContentRoutes(router, dependencies.Sites, dependencies.Resources)
 	registerFileRoutes(router, &filesHTTP{
-		files: dependencies.Files, maxUploadSize: dependencies.MaxUploadSize,
+		files: dependencies.Files, sites: dependencies.Sites, resources: dependencies.Resources, maxUploadSize: dependencies.MaxUploadSize,
 		uploadTimeout: dependencies.UploadTimeout,
 	})
 	return httptransport.RequireAuthenticated(router), nil

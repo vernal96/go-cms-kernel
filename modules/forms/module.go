@@ -16,7 +16,9 @@ import (
 	"github.com/vernal96/go-cms-kernel/filesystem"
 	"github.com/vernal96/go-cms-kernel/job"
 	"github.com/vernal96/go-cms-kernel/modules/core"
+	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	corefile "github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/mail"
 	"github.com/vernal96/go-cms-kernel/permission"
@@ -26,6 +28,7 @@ import (
 
 type Config struct {
 	Filesystems            []filesystem.Binding
+	ElementImage           field.FileOptions
 	ActionMaxAttempts      int
 	Public                 PublicLimits
 	SpoolEnabled           bool
@@ -44,6 +47,7 @@ type coreDependency interface {
 	kernel.ModuleRuntime
 	Authorization() security.Authorizer
 	Files() corefile.ManagementService
+	MediaService() media.Service
 }
 
 type mailDependency interface {
@@ -113,7 +117,7 @@ func (m module) Build(ctx context.Context, moduleContext kernel.ModuleContext) (
 			return nil, err
 		}
 	}
-	elements, err := newElementCatalog()
+	elements, err := newElementCatalog(config.ElementImage, moduleContext.Registry())
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +125,7 @@ func (m module) Build(ctx context.Context, moduleContext kernel.ModuleContext) (
 	if err := actions.Register(mailActionType{mail: mailRuntime.Mail(), fieldTypes: moduleContext.Registry()}); err != nil {
 		return nil, err
 	}
-	service, err := NewService(site.ID(siteIDValue), database.Forms(), moduleContext.Registry(), elements, actions, providers, config.DefaultCaptchaProvider, coreRuntime.Authorization(), coreRuntime.Files(), spool, config.Public, moduleContext.Logger())
+	service, err := NewService(site.ID(siteIDValue), database.Forms(), moduleContext.Registry(), elements, actions, providers, config.DefaultCaptchaProvider, coreRuntime.Authorization(), coreRuntime.Files(), coreRuntime.MediaService(), spool, config.Public, moduleContext.Logger())
 	if err != nil {
 		return nil, err
 	}
@@ -148,6 +152,18 @@ type Runtime struct {
 
 func (*Runtime) ModuleCode() kernel.ModuleCode { return ModuleCode }
 func (r *Runtime) Forms() *Service             { return r.service }
+
+func (r *Runtime) FileOccurrenceOwners() []media.FileOccurrenceOwner {
+	if r == nil || r.service == nil {
+		return nil
+	}
+	owner, ok := r.service.repository.(media.FileOccurrenceOwner)
+	if !ok {
+		return nil
+	}
+	return []media.FileOccurrenceOwner{owner}
+}
+
 func (r *Runtime) RegisterActionType(actionType ActionType) error {
 	return r.actions.Register(actionType)
 }
@@ -245,6 +261,9 @@ func normalizeConfig(config Config) (Config, error) {
 	if err := config.Public.Validate(); err != nil {
 		return Config{}, err
 	}
+	if _, err := field.Compile([]field.Definition{{Key: "file_id", Type: field.TypeFile, Label: "Изображение", Required: true, Options: config.ElementImage}}, field.StandardTypes()); err != nil {
+		return Config{}, fmt.Errorf("Forms element image file options are invalid: %w", err)
+	}
 	config.DefaultCaptchaProvider = strings.TrimSpace(config.DefaultCaptchaProvider)
 	if config.DefaultCaptchaProvider == "" {
 		return Config{}, errors.New("Forms default CAPTCHA provider is empty")
@@ -295,6 +314,12 @@ func (m module) Validate(ctx context.Context, environment kernel.ModuleValidatio
 	if err != nil {
 		return err
 	}
+	if _, exists := environment.Disk(config.ElementImage.Disk); !exists {
+		return fmt.Errorf("Forms element image disk %q is unavailable", config.ElementImage.Disk)
+	}
+	if _, err := field.Compile([]field.Definition{{Key: "file_id", Type: field.TypeFile, Label: "Изображение", Required: true, Options: config.ElementImage}}, environment.Registry()); err != nil {
+		return fmt.Errorf("Forms element image file options are invalid: %w", err)
+	}
 	for _, binding := range config.Filesystems {
 		if binding.Alias != SpoolFilesystemAlias {
 			return fmt.Errorf("unknown filesystem alias %q", binding.Alias)
@@ -320,6 +345,9 @@ func (m module) Validate(ctx context.Context, environment kernel.ModuleValidatio
 func validateModuleDatabase(database Database) error {
 	if database.Forms() == nil {
 		return errors.New("Forms repository is nil")
+	}
+	if _, ok := database.Forms().(media.FileOccurrenceOwner); !ok {
+		return errors.New("Forms repository does not support Media file deletion occurrences")
 	}
 	return nil
 }

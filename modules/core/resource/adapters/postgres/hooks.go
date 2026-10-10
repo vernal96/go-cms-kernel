@@ -185,7 +185,7 @@ func (r *Repository) prepareWidgetDraft(ctx context.Context, tx pgx.Tx, before r
 		return err
 	}
 	if reflect.DeepEqual(next, state.Data) {
-		return nil
+		return r.syncWidgetOccurrences(ctx, tx, before.ID)
 	}
 	if len(next.Widgets) != len(state.Data.Widgets) {
 		return fmt.Errorf("%w: a widget hook cannot change the operation's widget count", resource.ErrInvalid)
@@ -216,7 +216,7 @@ func (r *Repository) prepareWidgetDraft(ctx context.Context, tx pgx.Tx, before r
 			return translateError(err)
 		}
 	}
-	return nil
+	return r.syncWidgetOccurrences(ctx, tx, before.ID)
 }
 
 // Library snapshots include their effective route and inherited trash state.

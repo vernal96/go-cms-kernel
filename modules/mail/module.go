@@ -18,6 +18,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/job"
 	"github.com/vernal96/go-cms-kernel/modules/core"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/core/user"
 	"github.com/vernal96/go-cms-kernel/permission"
@@ -54,6 +55,7 @@ type Database interface {
 type coreDependency interface {
 	kernel.ModuleRuntime
 	Files() file.ManagementService
+	MediaService() media.Service
 	Authorization() security.Authorizer
 	Users() user.Service
 }
@@ -120,7 +122,7 @@ func (m module) Build(buildCtx context.Context, ctx kernel.ModuleContext) (kerne
 		}
 	}
 	scope := ctx.Scope()
-	renderer, err := NewRenderer(ctx.Registry(), coreRuntime.Files(), site.Site{
+	renderer, err := NewRenderer(ctx.Registry(), coreRuntime.Files(), coreRuntime.MediaService(), site.Site{
 		ID: site.ID(siteIDValue), ProfileCode: ctx.Profile().Code, Name: scope.Name(), Domain: scope.Domain(),
 		Locale: scope.Locale(), IsPublic: scope.IsPublic(), Settings: scope.Settings(),
 	}, ctx.Profile().Params, config.Renderer)
@@ -137,6 +139,7 @@ func (m module) Build(buildCtx context.Context, ctx kernel.ModuleContext) (kerne
 	service.logger = ctx.Logger()
 	service.uploadStorage = config.UploadStorage
 	service.uploadPath = config.UploadPath
+	service.uploadFiles = coreRuntime.Files()
 	worker, err := newWorker(site.ID(siteIDValue), database.Mail(), coreRuntime.Files(), spool, application.Transport, service.lifecycle, config.SendMaxAttempts, ctx.Logger())
 	if err != nil {
 		return nil, err

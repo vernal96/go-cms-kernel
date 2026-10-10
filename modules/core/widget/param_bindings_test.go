@@ -24,11 +24,32 @@ func bindingRuntime(t *testing.T, definitions []field.Definition) *Runtime {
 	return runtime
 }
 
+func TestStoredWidgetCanRenderAfterExplicitRequiredFileRemoval(t *testing.T) {
+	runtime := bindingRuntime(t, []field.Definition{
+		{Key: "icon", Label: "Icon", Type: field.TypeFile, Required: true, Options: field.FileOptions{Disk: "public", VirtualPath: "icons", SettingsCode: "icon"}},
+		{Key: "title", Label: "Title", Type: field.TypeString, Required: true},
+	})
+	params := map[string]any{"title": "Still required"}
+	if _, err := runtime.New(params); !errors.Is(err, ErrInvalidParams) {
+		t.Fatalf("ordinary creation accepted a missing required file: %v", err)
+	}
+	instance, err := runtime.NewStored(params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rendered, err := instance.Render(context.Background(), RenderInput{}); err != nil || rendered["title"] != params["title"] {
+		t.Fatal(rendered, err)
+	}
+	if _, err := runtime.NewStored(nil); !errors.Is(err, ErrInvalidParams) {
+		t.Fatalf("stored mode weakened unrelated requirements: %v", err)
+	}
+}
+
 func TestParamBindingsPreserveWholeTypedValues(t *testing.T) {
 	definitions := []field.Definition{
 		{Key: "text", Label: "Text", Type: field.TypeString},
 		{Key: "number", Label: "Number", Type: field.TypeInteger},
-		{Key: "file", Label: "File", Type: field.TypeFile},
+		{Key: "file", Label: "File", Type: field.TypeFile, Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "file"}},
 		{Key: "media", Label: "Media", Type: field.TypeMedia},
 		{Key: "list", Label: "List", Type: field.TypeString, Options: field.StringOptions{Multiple: true}},
 		{Key: "json", Label: "JSON", Type: field.TypeJSON},
