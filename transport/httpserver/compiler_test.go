@@ -370,7 +370,7 @@ func TestRouteGroupPrefixParametersAndMiddleware(t *testing.T) {
 	}
 }
 
-func TestCustomRouteWinsOverTerminalResourceFallback(t *testing.T) {
+func TestCustomRouteAndExplicitResourceRouteAreIndependent(t *testing.T) {
 	fallbackCalls := 0
 	handler := compileProfileForTest(
 		t,
@@ -413,9 +413,13 @@ func TestCustomRouteWinsOverTerminalResourceFallback(t *testing.T) {
 			fallbackCalls,
 		)
 	}
+	response = serveProfile(handler, http.MethodGet, "/resources/resolve/article")
+	if response.Code != http.StatusOK || response.Body.String() != "resource" || fallbackCalls != 1 {
+		t.Fatalf("resource route: status = %d, body = %q, calls = %d", response.Code, response.Body.String(), fallbackCalls)
+	}
 }
 
-func TestUnknownCustomPathReachesTerminalFallback(t *testing.T) {
+func TestUnknownPathDoesNotReachExplicitResourceHandler(t *testing.T) {
 	fallbackCalls := 0
 	handler := compileProfileForTest(
 		t,
@@ -446,12 +450,16 @@ func TestUnknownCustomPathReachesTerminalFallback(t *testing.T) {
 	)
 
 	response := serveProfile(handler, http.MethodGet, "/unknown")
-	if response.Code != http.StatusAccepted || fallbackCalls != 1 {
+	if response.Code != http.StatusNotFound || fallbackCalls != 0 {
 		t.Fatalf(
-			"status = %d, fallback calls = %d",
+			"status = %d, resource calls = %d",
 			response.Code,
 			fallbackCalls,
 		)
+	}
+	response = serveProfile(handler, http.MethodGet, "/resources/resolve")
+	if response.Code != http.StatusAccepted || fallbackCalls != 1 {
+		t.Fatalf("status = %d, resource calls = %d", response.Code, fallbackCalls)
 	}
 }
 
@@ -528,7 +536,7 @@ func TestCustomMethodMismatchReturns405WithoutFallback(t *testing.T) {
 	}
 }
 
-func TestTerminalFallbackIsInstalledAfterEveryModuleRoute(t *testing.T) {
+func TestExplicitResourceRouteIsInstalledAfterEveryModuleRoute(t *testing.T) {
 	fallbackCalls := 0
 	handler := compileProfileForTest(
 		t,
@@ -893,7 +901,7 @@ func TestProfileKeepsDistinctRoutes(t *testing.T) {
 
 func TestPlatformNamespacesRejectProfileRoutesAndMounts(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) })
-	for _, pattern := range []string{"/api", "/api/custom", "/_cms", "/_cms/runtime", "/auth", "/auth/login", "/admin", "/admin/custom", "/sites", "/sites/1/custom", "/site-profiles", "/files", "/media", "/administration"} {
+	for _, pattern := range []string{"/api", "/api/custom", "/_cms", "/_cms/runtime", "/auth", "/auth/login", "/admin", "/admin/custom", "/sites", "/sites/1/custom", "/site-profiles", "/files", "/media", "/administration", "/resources", "/resources/resolve", "/resources/custom"} {
 		for _, mount := range []bool{false, true} {
 			contribution := httptransport.Contribution{Routes: func(r httptransport.Registrar) error {
 				return r.Group("/", nil, func(r httptransport.Registrar) error {
@@ -905,7 +913,7 @@ func TestPlatformNamespacesRejectProfileRoutesAndMounts(t *testing.T) {
 			}}
 			runtime := makeCompilerProfile(t, "reserved", compilerModule{code: "extension", contribution: contribution})
 			_, err := httpserver.CompileProfile(context.Background(), runtime)
-			if err == nil || !strings.Contains(err.Error(), "reserved by platform") || !strings.Contains(err.Error(), "extension") {
+			if err == nil || !strings.Contains(err.Error(), "reserved") || !strings.Contains(err.Error(), "extension") {
 				t.Fatalf("%s mount=%t: %v", pattern, mount, err)
 			}
 		}

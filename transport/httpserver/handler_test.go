@@ -1536,7 +1536,7 @@ func TestHandlerMiddlewareOrderForRoutesAndResources(t *testing.T) {
 	}
 
 	order = order[:0]
-	request = httptest.NewRequest(http.MethodGet, "/api/article", nil)
+	request = httptest.NewRequest(http.MethodGet, "/api/resources/resolve/article", nil)
 	request.Host = "example.com"
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -1698,7 +1698,7 @@ func TestPageResourceRendersWidgetEnvelopeAndIsolatesErrors(
 		t.Fatal(err)
 	}
 
-	request := httptest.NewRequest(http.MethodGet, "/api/page", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/resources/resolve/page", nil)
 	request.Host = "example.com"
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -1773,7 +1773,7 @@ func TestPageResourceRendersWidgetEnvelopeAndIsolatesErrors(
 		}
 	}
 
-	request = httptest.NewRequest(http.MethodGet, "/api/empty", nil)
+	request = httptest.NewRequest(http.MethodGet, "/api/resources/resolve/empty", nil)
 	request.Host = "example.com"
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -1786,7 +1786,7 @@ func TestPageResourceRendersWidgetEnvelopeAndIsolatesErrors(
 		)
 	}
 
-	request = httptest.NewRequest(http.MethodGet, "/api/core-content", nil)
+	request = httptest.NewRequest(http.MethodGet, "/api/resources/resolve/core-content", nil)
 	request.Host = "example.com"
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -1861,11 +1861,13 @@ func TestResourceRootTrailingSlashAndQueryPolicy(t *testing.T) {
 		path string
 		want int
 	}{
-		{path: "/api", want: http.StatusNoContent},
-		{path: "/api/", want: http.StatusNoContent},
-		{path: "/api/section", want: http.StatusNoContent},
-		{path: "/api/section?from=query", want: http.StatusNoContent},
-		{path: "/api/section/", want: http.StatusNotFound},
+		{path: "/api", want: http.StatusNotFound},
+		{path: "/api/", want: http.StatusNotFound},
+		{path: "/api/resources/resolve", want: http.StatusNoContent},
+		{path: "/api/resources/resolve/", want: http.StatusNotFound},
+		{path: "/api/resources/resolve/section", want: http.StatusNoContent},
+		{path: "/api/resources/resolve/section?from=query", want: http.StatusNoContent},
+		{path: "/api/resources/resolve/section/", want: http.StatusNotFound},
 		{path: "/_cms/claimed", want: http.StatusNotFound},
 		{path: "/api/_cms/claimed", want: http.StatusNotFound},
 		{path: "/api/api/section", want: http.StatusNotFound},
@@ -2241,7 +2243,9 @@ func TestStandardLinkResourceHandlersRedirect(t *testing.T) {
 	externalPath := "/external"
 	shortcutPath := "/shortcut"
 	targetPath := "/target"
+	rootPath := "/"
 	targetID := resource.ID(3)
+	rootTargetID := resource.ID(4)
 	resources := resourceRepository{
 		byPath: map[string]resource.Resource{
 			externalPath: {
@@ -2260,6 +2264,14 @@ func TestStandardLinkResourceHandlersRedirect(t *testing.T) {
 				TargetResourceID: &targetID,
 				IsPublic:         true,
 			},
+			"/shortcut-root": {
+				ID:               5,
+				SiteID:           1,
+				Type:             resourcetype.ResourceLink,
+				Path:             stringPointer("/shortcut-root"),
+				TargetResourceID: &rootTargetID,
+				IsPublic:         true,
+			},
 		},
 		byID: map[resource.ID]resource.Resource{
 			targetID: {
@@ -2268,6 +2280,10 @@ func TestStandardLinkResourceHandlersRedirect(t *testing.T) {
 				Type:     resourcetype.Page,
 				Path:     &targetPath,
 				IsPublic: true,
+			},
+			rootTargetID: {
+				ID: rootTargetID, SiteID: 1, Type: resourcetype.Page,
+				Path: &rootPath, IsPublic: true,
 			},
 		},
 	}
@@ -2303,8 +2319,9 @@ func TestStandardLinkResourceHandlersRedirect(t *testing.T) {
 		path     string
 		location string
 	}{
-		{path: "/api" + externalPath, location: externalURL},
-		{path: "/api" + shortcutPath, location: "/api" + targetPath},
+		{path: "/api/resources/resolve" + externalPath, location: externalURL},
+		{path: "/api/resources/resolve" + shortcutPath, location: "/api/resources/resolve" + targetPath},
+		{path: "/api/resources/resolve/shortcut-root", location: "/api/resources/resolve"},
 	}
 	for _, test := range tests {
 		request := httptest.NewRequest(http.MethodGet, test.path, nil)
@@ -2551,7 +2568,7 @@ func TestPageWidgetBindingsResolveCurrentResourceAndIsolateInvalidValues(t *test
 		current.Title = values.title
 		current.Fields["headline"] = values.headline
 		repo.byPath["/bound"] = current
-		request := httptest.NewRequest(http.MethodGet, "/api/bound", nil)
+		request := httptest.NewRequest(http.MethodGet, "/api/resources/resolve/bound", nil)
 		request.Host = "example.com"
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
@@ -2640,7 +2657,7 @@ func TestPublicDynamicWidgetAreas(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := httptest.NewRequest(http.MethodGet, "/api/zones", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/resources/resolve/zones", nil)
 	request.Host = "example.com"
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)

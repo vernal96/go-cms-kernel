@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.8.0
+
+- **Breaking API change:** Resolve public resources and library items explicitly at `GET/HEAD /api/resources/resolve` (site root) and `GET/HEAD /api/resources/resolve/{path}`. Unsupported methods return `405 Method Not Allowed` with `Allow: GET, HEAD`; old arbitrary resource URLs such as `/api/about` and `/api/news/article` now return 404. ResourceLink redirects use the resolver endpoint. Stored resource paths and page, menu, search, and SEO URLs remain unchanged. Consumers must move resource JSON requests to the resolver URL; no legacy route alias is provided.
+
 ## 0.7.0
 
 - Replace file-field storage lists with required disk, upload path and media-settings code. Store each selection as its own Media ID; validate disk and MIME on the server, resolve trusted upload targets for Core, Forms and Mail, and support reference-checked permanent file deletion.

@@ -49,6 +49,7 @@ func TestAPIPrefixKeepsContentPathsAndLibraryResolution(t *testing.T) {
 	order := []string{}
 	repo := &apiResourceRepository{searchRouteRepository: searchRouteRepository{
 		resourceRepository: resourceRepository{byPath: map[string]resource.Resource{
+			"/":             {ID: 9, SiteID: 1, Type: resourcetype.Page, Path: stringPointer("/"), IsPublic: true},
 			"/section/page": {ID: 10, SiteID: 1, Type: resourcetype.Page, Path: stringPointer("/section/page"), IsPublic: true},
 		}},
 	}}
@@ -58,8 +59,9 @@ func TestAPIPrefixKeepsContentPathsAndLibraryResolution(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, test := range []struct{ url, path string }{
-		{"/api/section/%70age?source=menu", "/section/page"},
-		{"/api/news/release?source=search", "/news/release"},
+		{"/api/resources/resolve?source=home", "/"},
+		{"/api/resources/resolve/section/%70age?source=menu", "/section/page"},
+		{"/api/resources/resolve/news/release?source=search", "/news/release"},
 	} {
 		t.Run(test.path, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, test.url, nil)
@@ -82,6 +84,59 @@ func TestAPIPrefixKeepsContentPathsAndLibraryResolution(t *testing.T) {
 				t.Fatalf("outer request URL was mutated: %s", request.URL.RequestURI())
 			}
 		})
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/resources/resolve/missing", nil)
+	request.Host = "example.com"
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("missing resource status = %d: %s", response.Code, response.Body.String())
+	}
+	for _, path := range []string{"/api/about", "/api/resources/resolve/"} {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.Host = "example.com"
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("legacy or trailing-slash path %q status = %d", path, response.Code)
+		}
+	}
+
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	getRequest, err := http.NewRequest(http.MethodGet, server.URL+"/api/resources/resolve/section/page", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	getRequest.Host = "example.com"
+	getResponse, err := http.DefaultClient.Do(getRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	getBody, err := io.ReadAll(getResponse.Body)
+	_ = getResponse.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	headRequest, err := http.NewRequest(http.MethodHead, server.URL+"/api/resources/resolve/section/page", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headRequest.Host = "example.com"
+	headResponse, err := http.DefaultClient.Do(headRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headBody, err := io.ReadAll(headResponse.Body)
+	_ = headResponse.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if headResponse.StatusCode != getResponse.StatusCode || len(headBody) != 0 ||
+		headResponse.Header.Get("Content-Type") != getResponse.Header.Get("Content-Type") ||
+		headResponse.Header.Get("Content-Length") != getResponse.Header.Get("Content-Length") ||
+		len(getBody) == 0 {
+		t.Fatalf("GET status/headers/body = %d/%v/%d; HEAD = %d/%v/%d", getResponse.StatusCode, getResponse.Header, len(getBody), headResponse.StatusCode, headResponse.Header, len(headBody))
 	}
 }
 
@@ -128,6 +183,14 @@ func TestPublicAPIMethodMismatchKeeps405AndAllow(t *testing.T) {
 			t.Fatalf("%s: status = %d, Allow = %q", path, response.Code, response.Header().Get("Allow"))
 		}
 	}
+	request := httptest.NewRequest(http.MethodPost, "/api/resources/resolve/article", nil)
+	request.Host = "example.com"
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusMethodNotAllowed || response.Header().Get("Allow") != "GET, HEAD" {
+		t.Fatalf("resource resolve: status = %d, Allow = %q", response.Code, response.Header().Get("Allow"))
+	}
+
 }
 
 func TestPublicAPIPreservesModuleRouteParametersAndRequest(t *testing.T) {

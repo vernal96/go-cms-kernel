@@ -41,18 +41,23 @@ Current source mounts all CMS APIs below `/api`. Public routes include
 The starter health probe `/healthz` and file delivery `/_cms/files/...` remain
 outside the API prefix, including signed file URLs.
 
-A resource at `/about` is read through `/api/about`; `/api` and `/api/` resolve
-the root resource. Stored resource paths, menu/search URLs and SEO canonical URLs
-remain website paths. Internal ResourceLink redirects point to the target's API
-URL; external Link redirects keep their configured URL. Old unprefixed APIs
-return 404 without aliases or redirects.
+A resource at `/about` is read through `/api/resources/resolve/about`;
+`/api/resources/resolve` resolves the root resource. The resolver accepts `GET`
+and `HEAD`; other methods return `405 Method Not Allowed` with `Allow: GET, HEAD`.
+Stored resource paths, menu/search URLs and SEO canonical URLs remain website
+paths. Internal ResourceLink redirects point to the target's API URL; external
+Link redirects keep their configured URL. Former resource URLs such as `/api`,
+`/api/`, `/api/about` and `/api/news/article` return 404, as do other unmatched
+routes. Registered API endpoints such as `/api/site` and `/api/menu` remain
+available.
 
 Module `Registrar` routes and mounts remain relative to `/api`. The public
 handler receives the path after stripping that prefix once; generated API links
 use `httptransport.APIPrefix`. API-relative namespaces `/auth`, `/admin`,
-`/sites`, `/site-profiles`, `/files`, `/media`, `/administration`, `/_cms` and
-`/api` are reserved by the platform and cannot be claimed by literal module
-routes or mounts. Unknown management URLs never fall through to public resources.
+`/sites`, `/site-profiles`, `/files`, `/media`, `/administration`, `/_cms`,
+`/api` and `/resources` are reserved by the platform and cannot be claimed by
+literal module routes or mounts. Unknown management URLs never fall through to
+public resources.
 
 The `/api` routing contract is included in v0.4.0. Update consumers to the new
 paths; old unprefixed routes are not retained.

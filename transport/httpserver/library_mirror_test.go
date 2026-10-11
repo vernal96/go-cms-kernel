@@ -107,7 +107,7 @@ func TestLibraryMirrorHTTPSourceProfileWidgetsSEOAndPublication(t *testing.T) {
 	request := func(path string) *httptest.ResponseRecorder {
 		t.Helper()
 		res := httptest.NewRecorder()
-		handler.ServeHTTP(res, httptest.NewRequest("GET", "http://mirror.test/api"+path, nil))
+		handler.ServeHTTP(res, httptest.NewRequest("GET", "http://mirror.test/api/resources/resolve"+path, nil))
 		return res
 	}
 	res := request("/mirror/story")

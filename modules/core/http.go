@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/vernal96/go-cms-kernel"
 	"github.com/vernal96/go-cms-kernel/cache"
@@ -119,6 +120,12 @@ func (h *terminalResourceHandler) ServeHTTP(
 	response http.ResponseWriter,
 	request *http.Request,
 ) {
+	if request.Method != http.MethodGet && request.Method != http.MethodHead {
+		response.Header().Set("Allow", http.MethodGet+", "+http.MethodHead)
+		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	siteRuntime, siteExists := SiteRuntimeFromContext(
 		request.Context(),
 	)
@@ -132,7 +139,14 @@ func (h *terminalResourceHandler) ServeHTTP(
 		return
 	}
 
-	path, err := resource.NormalizeLookupPath(request.URL.Path)
+	path := strings.TrimPrefix(request.URL.Path, "/resources/resolve")
+	if path == "" {
+		path = "/"
+	} else if path == "/" {
+		http.NotFound(response, request)
+		return
+	}
+	path, err := resource.NormalizeLookupPath(path)
 	if err != nil {
 		http.NotFound(response, request)
 		return
@@ -554,10 +568,14 @@ func (h resourceLinkHandler) ServeHTTP(
 		http.NotFound(response, request)
 		return
 	}
+	location := httptransport.APIPrefix + "/resources/resolve"
+	if *target.Path != "/" {
+		location += *target.Path
+	}
 	http.Redirect(
 		response,
 		request,
-		httptransport.APIPrefix+*target.Path,
+		location,
 		http.StatusFound,
 	)
 }

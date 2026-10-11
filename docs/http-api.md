@@ -18,8 +18,8 @@ Docker-сборка использует эти адреса без локаль
 | Публичные данные сайта и меню | `GET /api/site`, `GET /api/menu` |
 | Поиск | `GET /api/search?q=...` |
 | Публичные формы | `GET /api/forms/{code}`, `POST /api/forms/{code}/submit`, `GET /api/forms/{code}/results` |
-| Корневой ресурс | `GET /api/` (также `/api`) |
-| Ресурс или элемент библиотеки | `GET /api/{resource-path}` |
+| Корневой ресурс | `GET/HEAD /api/resources/resolve` |
+| Ресурс или элемент библиотеки | `GET/HEAD /api/resources/resolve/{resource-path}` |
 | Данные runtime | `GET /api/_cms/runtime` |
 
 Публичные API выбирают сайт по домену запроса и соблюдают его права доступа.
@@ -32,15 +32,29 @@ Docker-сборка использует эти адреса без локаль
 Контракт окончательного удаления файлового поля и состояния `pending` описан в
 [документации Core](modules/core/file-field-deletion.md).
 
-Путь ресурса `/about` хранится без префикса API. Для получения его JSON клиент
-запрашивает `/api/about`; поля путей в ответах, ссылки меню, поисковой выдачи и SEO
-остаются адресами страниц сайта. Аналогично обрабатываются LibraryItem.
-Внутреннее HTTP-перенаправление типа ResourceLink ведёт на `/api/{target-path}`,
-а Link сохраняет заданный внешний URL.
+Путь ресурса `/about` хранится как `/about`. Для получения JSON клиент
+запрашивает `GET /api/resources/resolve/about`; корневой ресурс сайта доступен
+через `GET /api/resources/resolve`. Путь `/api/resources/resolve/` с завершающим
+слешем не является корневым маршрутом и возвращает 404. Для ресурса
+`/news/article` используйте `GET /api/resources/resolve/news/article`. Те же
+адреса принимают `HEAD`; ответ
+не содержит тела. Прочие методы на resolver возвращают `405 Method Not Allowed`
+и заголовок `Allow: GET, HEAD`.
 
-Прежние API-адреса `/site`, `/menu`, `/search`, `/forms/...`, `/_cms/runtime`
-и выдача ресурсов вне `/api` больше не обслуживаются: backend возвращает 404,
-без алиасов и перенаправлений. `/api/api/...` также не обслуживается.
+Пути ресурсов в ответах, ссылки меню, поисковой выдачи и SEO остаются адресами
+страниц сайта: например, `/news/article` на сайте остаётся
+`https://example.com/news/article`. Это относится и к LibraryItem. Внутреннее
+HTTP-перенаправление типа ResourceLink ведёт на resolver API: для корня сайта —
+`/api/resources/resolve`, для целевого пути `/news/article` —
+`/api/resources/resolve/news/article`. Тип Link сохраняет заданный внешний URL.
+
+Старые URL ресурсов, например `/api`, `/api/`, `/api/about` и
+`/api/news/article`, возвращают 404; другие нераспознанные маршруты также
+возвращают обычный 404. Зарегистрированные API, например `/api/site` и
+`/api/menu`, продолжают работать. Прежние API-адреса
+`/site`, `/menu`, `/search`, `/forms/...`, `/_cms/runtime` и выдача ресурсов вне
+`/api` не обслуживаются: backend возвращает 404 без алиасов и перенаправлений.
+`/api/api/...` также не обслуживается.
 
 Исключения: доставка файлов по `/_cms/files/...` (включая подписанные ссылки)
 и проверка запуска `/healthz` сохраняют свои адреса. Базовые URL файловых дисков
@@ -97,7 +111,11 @@ Management metadata `widget_areas` — упорядоченный массив �
 ## Зеркала библиотек
 
 `library_mirror` позволяет получать ресурс чужой библиотеки на текущем Host:
-`GET /api/{mirror-path}/{item-pattern}`. Ответ содержит исходный ID и локальный
-`resource.path`, шаблон/виджеты/SEO берутся из профиля источника. `canonical`
-сохраняет исходное значение. Корневая страница зеркала имеет свои данные и шаблон.
-Списки и независимые query-курсоры описаны в [Core: виджеты](modules/core/widgets.md).
+`GET /api/resources/resolve/{mirror-path}/{item-pattern}`. Например, элемент
+`annual-report` зеркала `/press` получают запросом
+`GET /api/resources/resolve/press/annual-report`. Ответ содержит исходный ID и
+локальный `resource.path`, шаблон/виджеты/SEO берутся из профиля источника.
+`canonical` сохраняет исходное значение. Корневая страница зеркала имеет свои
+данные и шаблон; её JSON получают через
+`GET /api/resources/resolve/press`. Списки и независимые query-курсоры описаны в
+[Core: виджеты](modules/core/widgets.md).

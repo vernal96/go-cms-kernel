@@ -135,12 +135,8 @@ func CompileProfile(
 	if err != nil {
 		return nil, err
 	}
-	compiler.router.NotFound(func(
-		response http.ResponseWriter,
-		request *http.Request,
-	) {
-		terminal.ServeHTTP(response, request)
-	})
+	compiler.router.Handle("/resources/resolve", terminal)
+	compiler.router.Handle("/resources/resolve/*", terminal)
 
 	return compiler.router, nil
 }
@@ -519,7 +515,7 @@ func (r *scopedRegistrar) Route(route httptransport.Route) error {
 		)
 	}
 
-	if err := validatePlatformRoute(pattern); err != nil {
+	if err := validateProfileRoute(pattern); err != nil {
 		return r.routeError("REGISTER", pattern, err)
 	}
 	shape, err := routeShape(pattern)
@@ -592,7 +588,7 @@ func (r *scopedRegistrar) Mount(mount httptransport.Mount) error {
 	if err != nil {
 		return r.routeError("MOUNT", mount.Pattern, err)
 	}
-	if err := validatePlatformRoute(pattern); err != nil {
+	if err := validateProfileRoute(pattern); err != nil {
 		return r.routeError("REGISTER", pattern, err)
 	}
 	shape, err := routeShape(pattern)
@@ -884,6 +880,16 @@ func validatePlatformRoute(pattern string) error {
 		if pathInNamespace(pattern, prefix) {
 			return fmt.Errorf("path is reserved by platform mount %q", prefix)
 		}
+	}
+	return nil
+}
+
+func validateProfileRoute(pattern string) error {
+	if err := validatePlatformRoute(pattern); err != nil {
+		return err
+	}
+	if pathInNamespace(pattern, "/resources") {
+		return fmt.Errorf("path is reserved by resource resolve API namespace %q", "/resources")
 	}
 	return nil
 }
