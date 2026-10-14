@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/vernal96/go-cms-kernel/modules/core/resourceviews"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/vernal96/go-cms-kernel"
 	"github.com/vernal96/go-cms-kernel/cache"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
@@ -103,6 +106,7 @@ func (r *Runtime) HTTP() httptransport.Builder {
 					return &terminalResourceHandler{
 						resolver: resolver, handlers: handlers,
 						libraryItems: libraryItems,
+						views:        r.views, logger: r.logger,
 					}, nil
 				},
 			},
@@ -111,6 +115,8 @@ func (r *Runtime) HTTP() httptransport.Builder {
 }
 
 type terminalResourceHandler struct {
+	views        resourceviews.Accumulator
+	logger       *slog.Logger
 	resolver     *resource.RouteResolver
 	handlers     httptransport.ResourceHandlers
 	libraryItems *resource.LibraryService
@@ -185,11 +191,14 @@ func (h *terminalResourceHandler) ServeHTTP(
 		return
 	}
 
+	countedItem := item
 	if item.Type == resourcetype.LibraryMirror && h.libraryItems != nil {
-		if _, err := h.libraryItems.Collection(request.Context(), actor, item.SiteID, item.ID, true); err != nil {
+		collection, err := h.libraryItems.Collection(request.Context(), actor, item.SiteID, item.ID, true)
+		if err != nil {
 			writeResourceRouteError(response, request, err)
 			return
 		}
+		countedItem = collection.Source
 	}
 	handler, exists := h.handlers.Handler(
 		httptransport.ResourceHandlerCode(item.Type),
@@ -199,12 +208,21 @@ func (h *terminalResourceHandler) ServeHTTP(
 		return
 	}
 
+	count := h.views != nil && resourceViewNavigation(request) && resource.Published(item, time.Now())
+	var observed middleware.WrapResponseWriter
+	if count {
+		observed = middleware.NewWrapResponseWriter(response, request.ProtoMajor)
+		response = observed
+	}
 	handler.ServeHTTP(
 		response,
 		request.WithContext(
 			WithResource(request.Context(), item),
 		),
 	)
+	if observed != nil && (observed.Status() >= 200 && observed.Status() < 300) {
+		recordResourceView(request, h.views, countedItem, h.logger)
+	}
 }
 
 const (

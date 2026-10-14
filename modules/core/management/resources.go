@@ -455,6 +455,7 @@ func (m *Resources) CreateResource(
 }
 
 type ResourceDTO struct {
+	ViewsTotal       int64             `json:"views_total"`
 	ImageMediaID     *media.ID         `json:"image_media_id"`
 	ID               resource.ID       `json:"id"`
 	SiteID           site.ID           `json:"site_id"`
@@ -558,6 +559,12 @@ func (m *Resources) Resource(
 	}
 	canDelete := allowed[ResourceDeletePermission]
 	result := ResourceDetails{Resource: resourceDTO(item)}
+	if m.views != nil {
+		result.Resource.ViewsTotal, err = m.resourceViewsTotal(ctx, item)
+		if err != nil {
+			return ResourceDetails{}, err
+		}
+	}
 	result.Permissions.Update = allowed[ResourceUpdatePermission]
 	result.Permissions.Delete = canDelete
 	result.Permissions.Restore = canDelete
@@ -614,6 +621,12 @@ func (m *Resources) RestoreRevision(ctx context.Context, actor security.Actor, s
 		return ResourceDetails{}, validationError(err)
 	}
 	result := ResourceDetails{Resource: resourceDTO(updated)}
+	if m.views != nil {
+		result.Resource.ViewsTotal, err = m.resourceViewsTotal(ctx, updated)
+		if err != nil {
+			return ResourceDetails{}, err
+		}
+	}
 	result.Permissions.Update = true
 	result.Permissions.HistoryRead = true
 	result.Permissions.HistoryDelete, err = m.allowed(ctx, actor, resource.HistoryDeletePermission)
@@ -691,6 +704,12 @@ func (m *Resources) UpdateResource(
 		return ResourceDetails{}, validationError(err)
 	}
 	result := ResourceDetails{Resource: resourceDTO(updated)}
+	if m.views != nil {
+		result.Resource.ViewsTotal, err = m.resourceViewsTotal(ctx, updated)
+		if err != nil {
+			return ResourceDetails{}, err
+		}
+	}
 	result.Permissions.Update = true
 	canDelete, permissionErr := m.allowed(ctx, actor, ResourceDeletePermission)
 	if permissionErr != nil {
@@ -699,4 +718,18 @@ func (m *Resources) UpdateResource(
 	result.Permissions.Delete = canDelete
 	result.Permissions.Restore = canDelete
 	return result, nil
+}
+
+func (m *Resources) resourceViewsTotal(ctx context.Context, item resource.Resource) (int64, error) {
+	if item.Type == resourcetype.LibraryMirror {
+		source, err := m.resourceRepo.ByID(ctx, resource.ID(resourcetype.SourceLibraryID(item.TypeSettings)))
+		if errors.Is(err, resource.ErrNotFound) {
+			return 0, nil
+		}
+		if err != nil {
+			return 0, err
+		}
+		item = source
+	}
+	return m.views.Total(ctx, item.SiteID, item.ID)
 }

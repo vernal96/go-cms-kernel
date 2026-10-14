@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.9.0
+
+- Add an application-owned resource view accumulator contract, separate from `cache.Store`, with a Redis implementation and a configurable Core flush interval (45 seconds by default).
+- Persist view batches in `resource_views.counts` using PostgreSQL UPSERT and an idempotent batch ledger. Concurrent instances can resume abandoned work without double counting; resource content versions and caches remain unchanged.
+- Count successful published resource navigation GETs while excluding HEAD, preview, known bots and prefetch requests. Library mirrors share the original resource and LibraryItem counters.
+- Return saved `views_total` values in resource and LibraryItem management details. Document deployment, failure behavior and the limits of request heuristics.
+
 ## 0.8.0
 
 - **Breaking API change:** Resolve public resources and library items explicitly at `GET/HEAD /api/resources/resolve` (site root) and `GET/HEAD /api/resources/resolve/{path}`. Unsupported methods return `405 Method Not Allowed` with `Allow: GET, HEAD`; old arbitrary resource URLs such as `/api/about` and `/api/news/article` now return 404. ResourceLink redirects use the resolver endpoint. Stored resource paths and page, menu, search, and SEO URLs remain unchanged. Consumers must move resource JSON requests to the resolver URL; no legacy route alias is provided.

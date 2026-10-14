@@ -7,8 +7,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/vernal96/go-cms-kernel/security"
 
-	connectorpostgres "github.com/vernal96/go-cms-kernel/connectors/postgres"
 	"github.com/vernal96/go-cms-kernel"
+	connectorpostgres "github.com/vernal96/go-cms-kernel/connectors/postgres"
 	"github.com/vernal96/go-cms-kernel/entityhooks"
 	hookspostgres "github.com/vernal96/go-cms-kernel/entityhooks/adapters/postgres"
 	"github.com/vernal96/go-cms-kernel/migrations"
@@ -23,6 +23,8 @@ import (
 	mediapostgres "github.com/vernal96/go-cms-kernel/modules/core/media/adapters/postgres"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	resourcepostgres "github.com/vernal96/go-cms-kernel/modules/core/resource/adapters/postgres"
+	"github.com/vernal96/go-cms-kernel/modules/core/resourceviews"
+	viewspostgres "github.com/vernal96/go-cms-kernel/modules/core/resourceviews/adapters/postgres"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	sitepostgres "github.com/vernal96/go-cms-kernel/modules/core/site/adapters/postgres"
 	"github.com/vernal96/go-cms-kernel/modules/core/user"
@@ -38,6 +40,7 @@ var migrationFiles embed.FS
 var seedFiles embed.FS
 
 type Database struct {
+	views     resourceviews.Repository
 	connector *connectorpostgres.Connector
 	sites     site.Repository
 	resources resource.Repository
@@ -112,7 +115,12 @@ func NewDatabase(
 		return nil, err
 	}
 
+	views, err := viewspostgres.NewRepository(connector)
+	if err != nil {
+		return nil, err
+	}
 	return &Database{
+		views:     views,
 		connector: connector,
 		sites:     sites,
 		resources: resources,
@@ -196,3 +204,5 @@ var _ outbox.Provider = (*Database)(nil)
 func (d *Database) EntityHookSources() []entityhooks.Source {
 	return []entityhooks.Source{hookspostgres.NewSource(d.connector.Pool(), "core:"+string(d.connector.Code()), "core")}
 }
+
+func (d *Database) ResourceViews() resourceviews.Repository { return d.views }

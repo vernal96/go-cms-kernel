@@ -21,6 +21,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/modules/core"
 	corecommands "github.com/vernal96/go-cms-kernel/modules/core/commands"
 	coremanagement "github.com/vernal96/go-cms-kernel/modules/core/management"
+	"github.com/vernal96/go-cms-kernel/modules/core/resourceviews"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	coreuser "github.com/vernal96/go-cms-kernel/modules/core/user"
 	"github.com/vernal96/go-cms-kernel/outbox"
@@ -60,6 +61,7 @@ type Definition struct {
 	AdditionalDatabases []DatabaseDefinition
 	Filesystems         []filesystem.Factory
 	Caches              []cache.Factory
+	ResourceViews       []resourceviews.Definition
 	ModuleApplications  []kernel.ModuleApplication
 	Profiles            []kernel.Profile
 	PasswordHasher      coreuser.PasswordHasherFactory

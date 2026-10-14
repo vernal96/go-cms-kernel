@@ -103,6 +103,7 @@ func (a *App) boot(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	coreServices.ConfigureResourceViews(a.definition.ResourceViews)
 	a.coreDatabase = coreServices.Database()
 	a.main.adapters[core.ModuleCode] = a.coreDatabase
 	profiles, err := bindCoreServices(a.definition.Profiles, coreServices)
@@ -191,6 +192,7 @@ func (a *App) boot(ctx context.Context) error {
 	cmsResources, err := coremanagement.NewResources(coremanagement.ResourceDependencies{
 		Sites: catalog, Resources: resourceService, LibraryItems: coreServices.LibraryItems,
 		Revisions:          coreServices.Revisions,
+		ResourceViews:      coreServices.ResourceViews,
 		Administrator:      coreServices.Authorization,
 		ResourceRepository: resourceManagementRepository,
 		Authorizer:         coreServices.Authorization, SiteAccessPolicy: siteAccessPolicy,

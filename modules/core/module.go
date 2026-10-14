@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/vernal96/go-cms-kernel"
+	"github.com/vernal96/go-cms-kernel/background"
 	"github.com/vernal96/go-cms-kernel/cache"
 	"github.com/vernal96/go-cms-kernel/modules/core/access"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
@@ -18,6 +19,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
+	"github.com/vernal96/go-cms-kernel/modules/core/resourceviews"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/core/user"
 	"github.com/vernal96/go-cms-kernel/modules/core/widget"
@@ -36,6 +38,7 @@ const (
 const defaultRepositoryCacheTTL = 5 * time.Minute
 
 type Config struct {
+	ResourceViews      *resourceviews.Config
 	Caches             []cache.Binding
 	MediaSettings      []media.SettingsDefinition
 	Images             *image.Limits
@@ -112,7 +115,7 @@ func (module) baseRegistry() kernel.ModuleRegistry {
 }
 
 func (m module) Build(
-	_ context.Context,
+	buildContext context.Context,
 	ctx kernel.ModuleContext,
 ) (kernel.ModuleRuntime, error) {
 	database, err := kernel.ModuleDatabaseFrom[Database](
@@ -176,7 +179,27 @@ func (m module) Build(
 		}
 	}
 
+	var views resourceviews.Accumulator
+	var viewSiteID site.ID
+	if config.ResourceViews != nil {
+		factory := m.services.viewFactories[config.ResourceViews.Accumulator]
+		if factory == nil || m.services.ResourceViews == nil {
+			return nil, errors.New("resource views accumulator or repository unavailable")
+		}
+		id, err := strconv.ParseInt(ctx.Scope().SiteID(), 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		viewSiteID = site.ID(id)
+		views, err = factory.Open(buildContext)
+		if err != nil {
+			return nil, err
+		}
+	}
 	runtime := &Runtime{
+		views:           views,
+		viewConfig:      config.ResourceViews,
+		viewSiteID:      viewSiteID,
 		resultStore:     hotStore,
 		database:        database,
 		repositoryCache: descriptor,
@@ -205,6 +228,9 @@ func (m module) Build(
 }
 
 type Runtime struct {
+	views           resourceviews.Accumulator
+	viewConfig      *resourceviews.Config
+	viewSiteID      site.ID
 	resultStore     cache.Store
 	mediaSettings   *media.SettingsService
 	menuStore       cache.Store
@@ -315,6 +341,10 @@ func (m module) Registry() (kernel.ModuleRegistry, error) {
 
 // clone detaches mutable declarations from the caller.
 func (c Config) clone() Config {
+	if c.ResourceViews != nil {
+		value := *c.ResourceViews
+		c.ResourceViews = &value
+	}
 	c.Caches = append([]cache.Binding(nil), c.Caches...)
 	c.MediaSettings = append([]media.SettingsDefinition(nil), c.MediaSettings...)
 	for i := range c.MediaSettings {
@@ -384,6 +414,13 @@ func validateModuleDatabase(database Database) error {
 }
 
 func normalizeModuleConfig(config Config) (Config, error) {
+	if config.ResourceViews != nil {
+		normalized, err := config.ResourceViews.Normalize()
+		if err != nil {
+			return Config{}, err
+		}
+		config.ResourceViews = &normalized
+	}
 	if config.RepositoryCacheTTL == 0 {
 		config.RepositoryCacheTTL = defaultRepositoryCacheTTL
 	}
@@ -407,4 +444,20 @@ func normalizeModuleConfig(config Config) (Config, error) {
 		}
 	}
 	return config, nil
+}
+
+func (m module) ResourceViewAccumulator() string {
+	if m.config.ResourceViews == nil {
+		return ""
+	}
+	return m.config.ResourceViews.Accumulator
+}
+
+func (r *Runtime) BackgroundTasks() []background.Task {
+	if r.views == nil {
+		return nil
+	}
+	return []background.Task{{Name: "core.resource_views", Run: func(ctx context.Context) error {
+		return resourceviews.Run(ctx, r.views, r.services.ResourceViews, r.viewSiteID, r.viewConfig.FlushInterval, r.logger)
+	}}}
 }

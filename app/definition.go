@@ -9,12 +9,29 @@ import (
 	"github.com/vernal96/go-cms-kernel/cache"
 	"github.com/vernal96/go-cms-kernel/filesystem"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
+	"github.com/vernal96/go-cms-kernel/modules/core/resourceviews"
 	"github.com/vernal96/go-cms-kernel/modules/core/template"
 	"github.com/vernal96/go-cms-kernel/outbox"
 	"github.com/vernal96/go-cms-kernel/seeds"
 )
 
 func validateDefinition(definition Definition) error {
+	views := make(map[string]bool)
+	for _, declaration := range definition.ResourceViews {
+		if declaration.Code == "" || declaration.Factory == nil || views[declaration.Code] {
+			return errors.New("invalid or duplicate resource views accumulator")
+		}
+		views[declaration.Code] = true
+	}
+	for _, profile := range definition.Profiles {
+		for _, module := range profile.Modules {
+			if provider, ok := module.(resourceviews.BindingProvider); ok {
+				if code := provider.ResourceViewAccumulator(); code != "" && !views[code] {
+					return fmt.Errorf("resource views accumulator %q is not declared", code)
+				}
+			}
+		}
+	}
 	if definition.Logger == nil {
 		return errors.New("logger factory is nil")
 	}
@@ -208,6 +225,7 @@ func validateDefinition(definition Definition) error {
 }
 
 func cloneDefinition(definition Definition) Definition {
+	definition.ResourceViews = append([]resourceviews.Definition(nil), definition.ResourceViews...)
 	definition.ModuleApplications = append(
 		[]kernel.ModuleApplication(nil),
 		definition.ModuleApplications...,

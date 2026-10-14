@@ -10,6 +10,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/modules/core/group"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
+	"github.com/vernal96/go-cms-kernel/modules/core/resourceviews"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/permission"
 	"github.com/vernal96/go-cms-kernel/security"
@@ -121,6 +122,7 @@ func NewSites(dependencies SiteDependencies) (*Sites, error) {
 }
 
 type Resources struct {
+	views resourceviews.Repository
 	authorization
 	resources     *resource.Service
 	libraryItems  *resource.LibraryService
@@ -132,6 +134,7 @@ type Resources struct {
 }
 
 type ResourceDependencies struct {
+	ResourceViews resourceviews.Repository
 	Sites         SiteCatalog
 	Resources     *resource.Service
 	LibraryItems  *resource.LibraryService
@@ -152,6 +155,7 @@ func NewResources(dependencies ResourceDependencies) (*Resources, error) {
 		return nil, errors.New("CMS resource authorization dependencies are nil")
 	}
 	return &Resources{
+		views: dependencies.ResourceViews,
 		authorization: authorization{
 			sites: dependencies.Sites, authorizer: dependencies.Authorizer,
 			policy: dependencies.SiteAccessPolicy,

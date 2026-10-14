@@ -26,6 +26,11 @@
 `/api/resources/resolve/{target-path}` (для корня сайта —
 `/api/resources/resolve`); внешняя — на исходный внешний URL.
 
+Успешная пользовательская GET-навигация к опубликованному ресурсу увеличивает
+[счётчик просмотров](resource-views.md), если он подключён. HEAD, preview,
+распознанные боты и prefetch не учитываются. В management detail возвращается
+`resource.views_total` или `item.views_total` — сохранённый итог PostgreSQL.
+
 Публичные GET-маршруты не принимают query-параметры для выбора сайта. Переданный клиентом `site_id` не переключает runtime.
 
 ## Management API

@@ -14,6 +14,7 @@ import (
 )
 
 type LibraryItemDTO struct {
+	ViewsTotal    int64            `json:"views_total"`
 	ImageMediaID  *media.ID        `json:"image_media_id"`
 	ID            resource.ID      `json:"id"`
 	Version       int64            `json:"version"`
@@ -230,6 +231,12 @@ func (m *Resources) libraryItemDetails(ctx context.Context, actor security.Actor
 		return LibraryItemDetails{}, err
 	}
 	result := LibraryItemDetails{Item: libraryItemDTO(library, item)}
+	if m.views != nil {
+		result.Item.ViewsTotal, err = m.views.Total(ctx, item.SiteID, item.ID)
+		if err != nil {
+			return LibraryItemDetails{}, err
+		}
+	}
 	result.Permissions.Update = allowed[ResourceUpdatePermission]
 	result.Permissions.Delete = allowed[ResourceDeletePermission]
 	result.Permissions.Restore = result.Permissions.Delete && library.DeletedAt == nil

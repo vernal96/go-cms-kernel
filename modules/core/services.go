@@ -13,6 +13,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/modules/core/group"
 	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
+	"github.com/vernal96/go-cms-kernel/modules/core/resourceviews"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/core/user"
 	"github.com/vernal96/go-cms-kernel/permission"
@@ -23,6 +24,8 @@ import (
 // Site-specific module runtimes may reference these concurrency-safe services,
 // while their registries, module instances, and bindings remain site-scoped.
 type Services struct {
+	ResourceViews resourceviews.Repository
+	viewFactories map[string]resourceviews.Factory
 	Sessions      security.SessionStore
 	Sites         *site.Catalog
 	Resources     *resource.Service
@@ -76,6 +79,11 @@ func NewServices(
 		return nil, err
 	}
 	services := &Services{}
+	if provider, ok := database.(interface {
+		ResourceViews() resourceviews.Repository
+	}); ok {
+		services.ResourceViews = provider.ResourceViews()
+	}
 	readers := make(map[string]media.FileOccurrenceReader)
 	if reader, ok := database.Resources().(media.FileOccurrenceReader); ok {
 		readers["resource"] = reader
@@ -151,6 +159,7 @@ func NewServices(
 
 	sessions, _ := database.Users().(security.SessionStore)
 	*services = Services{
+		ResourceViews:          services.ResourceViews,
 		Sessions:               sessions,
 		Files:                  files,
 		Media:                  mediaService,
@@ -263,4 +272,12 @@ func validateDatabase(database Database) error {
 		}
 	}
 	return nil
+}
+
+// ConfigureResourceViews binds application-owned accumulator factories before runtime builds.
+func (s *Services) ConfigureResourceViews(declarations []resourceviews.Definition) {
+	s.viewFactories = make(map[string]resourceviews.Factory, len(declarations))
+	for _, declaration := range declarations {
+		s.viewFactories[declaration.Code] = declaration.Factory
+	}
 }

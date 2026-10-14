@@ -3,6 +3,7 @@ package httpserver_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/vernal96/go-cms-kernel/modules/core/resourceviews"
 	"net/http/httptest"
 	"net/url"
 	"sort"
@@ -74,6 +75,7 @@ func (mirrorSEODatabase) Build(kernel.DBConnector) (kernel.ModuleDatabase, error
 
 func TestLibraryMirrorHTTPSourceProfileWidgetsSEOAndPublication(t *testing.T) {
 	ctx := context.Background()
+	views := &recordingViews{counts: make(map[[2]int64]int64)}
 	sourceTemplate := template.Code("source_only")
 	mountTemplate := template.Code("mount_only")
 	repo := &mirrorHTTPRepository{resourceRepository: resourceRepository{byID: map[resource.ID]resource.Resource{
@@ -89,9 +91,9 @@ func TestLibraryMirrorHTTPSourceProfileWidgetsSEOAndPublication(t *testing.T) {
 			return map[string]any{"domain": input.Site.Domain, "site_id": input.Site.ID, "title": input.Resource.Title, "cursor": input.Cursor}, nil
 		}}, nil
 	}}}}
-	app, err := appkernel.New(ctx, appkernel.Definition{Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{}, MainDatabase: appkernel.DatabaseDefinition{Connector: connectorFactory{}, Adapters: []kernel.ModuleDatabaseFactory{databaseFactory{sites: sites, resources: repo}, mirrorSEODatabase{}}}, Profiles: []kernel.Profile{
-		{Code: "source", Modules: []kernel.Module{core.New(core.Config{}), admin.New(), module, seo.New(seo.Config{DefaultCanonicalTemplate: "https://{{ site.domain }}{{ resource.path }}"})}, Templates: []template.Definition{{Code: sourceTemplate, Label: "Source", Layout: template.Layout{{Code: "main", Label: "Main", Items: []template.Item{template.Widget{Widget: corewidgets.Content}, template.Widget{Widget: probe}, template.ResourceWidgets{}}}}}}},
-		{Code: "destination", Modules: []kernel.Module{core.New(core.Config{}), admin.New()}, Templates: []template.Definition{{Code: mountTemplate, Label: "Mount", Layout: template.Layout{{Code: "main", Label: "Main", Items: []template.Item{template.Widget{Widget: corewidgets.Content}, template.Widget{Widget: corewidgets.LibraryMirrorResources, Params: map[string]any{"per_page": int64(1)}}, template.Widget{Widget: corewidgets.LibraryMirrorResources, Params: map[string]any{"per_page": int64(2)}}}}}}}},
+	app, err := appkernel.New(ctx, appkernel.Definition{ResourceViews: []resourceviews.Definition{{Code: "views", Factory: views}}, Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{}, MainDatabase: appkernel.DatabaseDefinition{Connector: connectorFactory{}, Adapters: []kernel.ModuleDatabaseFactory{viewsHTTPDatabaseFactory{databaseFactory: databaseFactory{sites: sites, resources: repo}, views: views}, mirrorSEODatabase{}}}, Profiles: []kernel.Profile{
+		{Code: "source", Modules: []kernel.Module{core.New(core.Config{ResourceViews: &resourceviews.Config{Accumulator: "views"}}), admin.New(), module, seo.New(seo.Config{DefaultCanonicalTemplate: "https://{{ site.domain }}{{ resource.path }}"})}, Templates: []template.Definition{{Code: sourceTemplate, Label: "Source", Layout: template.Layout{{Code: "main", Label: "Main", Items: []template.Item{template.Widget{Widget: corewidgets.Content}, template.Widget{Widget: probe}, template.ResourceWidgets{}}}}}}},
+		{Code: "destination", Modules: []kernel.Module{core.New(core.Config{ResourceViews: &resourceviews.Config{Accumulator: "views"}}), admin.New()}, Templates: []template.Definition{{Code: mountTemplate, Label: "Mount", Layout: template.Layout{{Code: "main", Label: "Main", Items: []template.Item{template.Widget{Widget: corewidgets.Content}, template.Widget{Widget: corewidgets.LibraryMirrorResources, Params: map[string]any{"per_page": int64(1)}}, template.Widget{Widget: corewidgets.LibraryMirrorResources, Params: map[string]any{"per_page": int64(2)}}}}}}}},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -138,6 +140,38 @@ func TestLibraryMirrorHTTPSourceProfileWidgetsSEOAndPublication(t *testing.T) {
 		t.Fatalf("mount: %d %s", res.Code, res.Body.String())
 	}
 
+	if total, _ := views.Total(ctx, 1, 100); total != 1 {
+		t.Fatalf("mirror item did not count original: %d", total)
+	}
+	if total, _ := views.Total(ctx, 1, 10); total != 1 {
+		t.Fatalf("mirror mount did not count original library: %d", total)
+	}
+	if total, _ := views.Total(ctx, 2, 20); total != 0 {
+		t.Fatalf("mirror mount got a separate counter: %d", total)
+	}
+	// Excluded requests still render normally; only ordinary GET navigation counts.
+	for _, test := range []struct{ method, header, value string }{{"HEAD", "", ""}, {"GET", "User-Agent", "Googlebot/2.1"}, {"GET", "Purpose", "prefetch"}} {
+		response := httptest.NewRecorder()
+		req := httptest.NewRequest(test.method, "http://mirror.test/api/resources/resolve/mirror/story", nil)
+		if test.header != "" {
+			req.Header.Set(test.header, test.value)
+		}
+		handler.ServeHTTP(response, req)
+		if response.Code != 200 {
+			t.Fatalf("excluded request %s status=%d", test.method, response.Code)
+		}
+	}
+	if total, _ := views.Total(ctx, 1, 100); total != 1 {
+		t.Fatalf("excluded requests counted: %d", total)
+	}
+	views.failure = true
+	if response := request("/mirror/story"); response.Code != 200 {
+		t.Fatalf("Redis failure broke public resource: %d", response.Code)
+	}
+	views.failure = false
+	if total, _ := views.Total(ctx, 1, 100); total != 1 {
+		t.Fatalf("failed store recorded a view: %d", total)
+	}
 	var lists struct {
 		Widgets map[string][]struct{ Data map[string]any }
 	}
