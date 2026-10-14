@@ -5,7 +5,7 @@ CREATE TABLE core.media_field_occurrences (
     container TEXT NOT NULL,
     value_path TEXT[] NOT NULL,
     media_id BIGINT NOT NULL REFERENCES core.media(id) ON DELETE RESTRICT,
-    reference_target TEXT NOT NULL CHECK (reference_target IN ('file','media')),
+    reference_target TEXT NOT NULL CHECK (reference_target = 'media'),
     PRIMARY KEY(owner_kind,owner_id,container,value_path)
 );
 CREATE INDEX idx_media_field_occurrences_media ON core.media_field_occurrences(media_id);
@@ -24,4 +24,4 @@ CREATE TABLE core.media_file_deletions (
 );
 CREATE INDEX idx_media_file_deletions_pending ON core.media_file_deletions(attempts,created_at) WHERE status='pending';
 
-ALTER TABLE core.resource_media_references ADD COLUMN reference_target TEXT NOT NULL DEFAULT 'media' CHECK(reference_target IN ('file','media'));
+ALTER TABLE core.resource_media_references ADD COLUMN reference_target TEXT NOT NULL DEFAULT 'media' CHECK(reference_target = 'media');

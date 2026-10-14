@@ -38,7 +38,7 @@ func (s *recordingFieldUploads) UploadAvailable(_ context.Context, _ security.Ac
 
 func TestFieldUploadRejectsMIMEBeforeAnyMutation(t *testing.T) {
 	files := &recordingFieldUploads{}
-	options := field.FileOptions{Disk: "media", VirtualPath: "site/images", SettingsCode: "image", MIMETypes: []string{"image/*"}}
+	options := field.MediaOptions{Disk: "media", VirtualPath: "site/images", SettingsCode: "image", MIMETypes: []string{"image/*"}}
 	_, err := field.UploadFile(context.Background(), security.User(1), files, options, "spoofed.png", bytes.NewBufferString("plain text"))
 	var validation field.ValidationErrors
 	if !errors.As(err, &validation) || validation[0].Code != "mime_type" {
@@ -53,7 +53,7 @@ func TestFieldUploadUsesExactConfiguredDestinationAndPreservesBytes(t *testing.T
 	for _, allowed := range []string{"image/*", "image/png"} {
 		t.Run(allowed, func(t *testing.T) {
 			files := &recordingFieldUploads{}
-			options := field.FileOptions{Disk: "images", VirtualPath: "deep/site/images", SettingsCode: "image", MIMETypes: []string{allowed}}
+			options := field.MediaOptions{Disk: "images", VirtualPath: "deep/site/images", SettingsCode: "image", MIMETypes: []string{allowed}}
 			content := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{0}, 1024)...)
 			item, err := field.UploadFile(context.Background(), security.User(1), files, options, "image.png", bytes.NewReader(content))
 			if err != nil {
@@ -70,19 +70,19 @@ func TestFieldUploadUsesExactConfiguredDestinationAndPreservesBytes(t *testing.T
 }
 
 func TestFileUploadOptionsResolvesOnlyFileAndRepeaterPaths(t *testing.T) {
-	options := field.FileOptions{Disk: "images", VirtualPath: "site/images", SettingsCode: "image"}
+	options := field.MediaOptions{Disk: "images", VirtualPath: "site/images", SettingsCode: "image"}
 	definitions := []field.Definition{
-		{Key: "logo", Type: field.TypeFile, Options: options},
-		{Key: "rows", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: []field.Definition{{Key: "asset", Type: field.TypeFile, Options: options}}}},
+		{Key: "logo", Type: field.TypeMedia, Options: options},
+		{Key: "rows", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: []field.Definition{{Key: "asset", Type: field.TypeMedia, Options: options}}}},
 	}
 	for _, path := range [][]string{{"logo"}, {"rows", "0", "asset"}, {"rows", "12", "asset"}} {
-		actual, err := field.FileUploadOptions(definitions, path)
+		actual, err := field.MediaUploadOptions(definitions, path)
 		if err != nil || !reflect.DeepEqual(actual, options) {
 			t.Fatalf("path %v = %#v, %v", path, actual, err)
 		}
 	}
 	for _, path := range [][]string{nil, {"unknown"}, {"logo", "storage"}, {"rows", "-1", "asset"}, {"rows", "01", "asset"}, {"rows", "x", "asset"}, {"rows", "0", "unknown"}, {"rows", "0"}} {
-		if _, err := field.FileUploadOptions(definitions, path); err == nil {
+		if _, err := field.MediaUploadOptions(definitions, path); err == nil {
 			t.Fatalf("invalid field path accepted: %v", path)
 		}
 	}

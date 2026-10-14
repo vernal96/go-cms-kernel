@@ -63,7 +63,7 @@ func TestPublicSettingsProjection(t *testing.T) {
 }
 
 func TestPublicSettingsReferences(t *testing.T) {
-	for _, kind := range []field.TypeCode{field.TypeFile, field.TypeMedia} {
+	for _, kind := range []field.TypeCode{field.TypeMedia} {
 		t.Run(string(kind), func(t *testing.T) {
 			for _, tc := range []struct {
 				name              string
@@ -79,9 +79,6 @@ func TestPublicSettingsReferences(t *testing.T) {
 				{name: "denied media", mediaErr: security.ErrForbidden, unavailable: true},
 				{name: "media storage failure", mediaErr: errors.New("offline"), fail: true},
 			} {
-				if kind == field.TypeFile && tc.mediaErr != nil {
-					continue
-				}
 				t.Run(tc.name, func(t *testing.T) {
 					files := &settingsFiles{t: t, err: tc.fileErr}
 					got, err := projectPublicSettings(context.Background(), map[string]any{"logo": int64(7)}, []field.Definition{{Key: "logo", Type: kind, Public: true}}, files, settingsMedia{t: t, err: tc.mediaErr})
@@ -115,13 +112,13 @@ func TestPublicSettingsReferences(t *testing.T) {
 
 func TestPublicSettingsProjectsNestedRepeaterReferences(t *testing.T) {
 	publicFields := []field.Definition{
-		{Key: "icon", Type: field.TypeFile, Public: true, Options: field.FileOptions{Disk: "public", VirtualPath: "site/icons", SettingsCode: "image"}},
-		{Key: "documents", Type: field.TypeFile, Public: true, Options: field.FileOptions{Disk: "public", VirtualPath: "site/documents", SettingsCode: "document", Multiple: true}},
+		{Key: "icon", Type: field.TypeMedia, Public: true, Options: field.MediaOptions{Disk: "public", VirtualPath: "site/icons", SettingsCode: "image"}},
+		{Key: "documents", Type: field.TypeMedia, Public: true, Options: field.MediaOptions{Disk: "public", VirtualPath: "site/documents", SettingsCode: "document", Multiple: true}},
 		{Key: "logo", Type: field.TypeMedia, Public: true},
 		{Key: "gallery", Type: field.TypeMedia, Public: true, Options: field.MediaOptions{Multiple: true}},
 		{Key: "secret", Type: field.TypeString, Public: false},
 		{Key: "nested", Type: field.TypeRepeater, Public: true, Options: field.RepeaterOptions{Fields: []field.Definition{
-			{Key: "attachment", Type: field.TypeFile, Public: true, Options: field.FileOptions{Disk: "public", VirtualPath: "site/attachments", SettingsCode: "document"}},
+			{Key: "attachment", Type: field.TypeMedia, Public: true, Options: field.MediaOptions{Disk: "public", VirtualPath: "site/attachments", SettingsCode: "document"}},
 			{Key: "private", Type: field.TypeString, Public: false},
 		}}},
 	}

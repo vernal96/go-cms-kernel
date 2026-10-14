@@ -273,6 +273,11 @@ func resolveModuleDependencies(
 }
 
 func cloneProfile(profile Profile) Profile {
+	if options := profile.Settings.FileSystem.ResourceImage; options != nil {
+		copy := *options
+		copy.MIMETypes = append([]string(nil), options.MIMETypes...)
+		profile.Settings.FileSystem.ResourceImage = &copy
+	}
 	profile.Modules = append(
 		[]Module(nil),
 		profile.Modules...,

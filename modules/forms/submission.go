@@ -193,7 +193,7 @@ func (s *Service) validateFileReferences(ctx context.Context, schema *field.Sche
 	fieldErrors := make(FieldValidationErrors)
 	for _, reference := range references {
 		resolved, err := s.media.Resolve(ctx, security.System(), coremedia.ID(reference.ID))
-		if err != nil || !field.FileMatches(reference.Options, resolved.File.Storage, resolved.File.MIMEType) {
+		if err != nil || !field.MediaMatches(reference.Options, resolved.File.Storage, resolved.File.MIMEType) {
 			fieldErrors[reference.Key] = append(fieldErrors[reference.Key], "file")
 		}
 	}
@@ -259,7 +259,7 @@ func submissionResultValues(prepared validatedSubmission) ([]ResultValue, error)
 		fieldID := formField.ID
 		fileReferences := []field.Reference{}
 		for _, reference := range references {
-			if len(reference.Path) == 0 || reference.Path[0] != storedValue.Key || (reference.Target != field.ReferenceFile && reference.Target != field.ReferenceMedia) {
+			if len(reference.Path) == 0 || reference.Path[0] != storedValue.Key || (reference.Target != field.ReferenceMedia) {
 				continue
 			}
 			path := reference.Path[1:]

@@ -647,7 +647,7 @@ func (h pageResourceHandler) newWidgetInstance(ctx context.Context, runtime *wid
 			return nil, fmt.Errorf("%w: file parameter %q media: %v", widget.ErrInvalidParams, ref.Key, err)
 		}
 		item := resolved.File
-		if !field.FileMatches(ref.Options, item.Storage, item.MIMEType) {
+		if !field.MediaMatches(ref.Options, item.Storage, item.MIMEType) {
 			return nil, fmt.Errorf(
 				"%w: file parameter %q rejects MIME type %q in disk %q; allowed MIME types: %v; required disk: %q",
 				widget.ErrInvalidParams,

@@ -46,6 +46,15 @@ func (s *Services) validateMediaFileOccurrence(ctx context.Context, target file.
 			return fmt.Errorf("%w: occurrence profile changed", media.ErrInvalidReference)
 		}
 		schema = runtime.Profile().ParamSchema()
+	} else if ref.Container == "image" {
+		definition, ok := resource.ImageField(runtime)
+		if !ok {
+			return fmt.Errorf("%w: resource image field unavailable", media.ErrInvalidReference)
+		}
+		schema, err = field.Compile([]field.Definition{definition}, runtime.Profile().Registry())
+		if err != nil {
+			return err
+		}
 	} else if strings.HasPrefix(ref.Container, "fields:") {
 		definition, ok := runtime.Profile().Template(template.Code(values.Code))
 		if !ok {
@@ -64,14 +73,6 @@ func (s *Services) validateMediaFileOccurrence(ctx context.Context, target file.
 	references, err := schema.StoredReferences(values.Values)
 	if err != nil {
 		return err
-	}
-	if ref.Target == field.ReferenceMedia {
-		for _, reference := range references {
-			if reference.Target == ref.Target && reference.ID == int64(ref.MediaID) && slices.Equal(reference.Path, ref.Path) {
-				return resource.ValidateImageMediaFile(ctx, target, usage)
-			}
-		}
-		return fmt.Errorf("%w: saved Media occurrence no longer matches its schema", media.ErrInvalidReference)
 	}
 	return media.ValidateFileOccurrence(ref, references, target)
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/vernal96/go-cms-kernel/filesystem"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/security"
 	httptransport "github.com/vernal96/go-cms-kernel/transport/http"
@@ -46,7 +47,8 @@ type templatePayload struct {
 
 type templateResponse struct {
 	Template
-	Variables []variableDTO `json:"variables"`
+	Variables              []variableDTO      `json:"variables"`
+	AttachmentMediaOptions field.MediaOptions `json:"attachment_media_options"`
 }
 
 type paginationDTO struct {
@@ -64,6 +66,7 @@ func NewHTTPHandler(service *Service) (http.Handler, error) {
 	router.Get("/templates", handler.listTemplates)
 	router.Get("/variables", handler.siteVariables)
 	router.Get("/validator-types", handler.validatorTypes)
+	router.Post("/attachments/files", handler.uploadStaticAttachmentFile)
 	router.Post("/send/templates/{templateID}/variables/files", handler.uploadVariableFile)
 	router.Post("/templates", handler.createTemplate)
 	router.Get("/templates/{templateID}", handler.getTemplate)
@@ -143,7 +146,7 @@ func (h *mailHTTP) listTemplates(response http.ResponseWriter, request *http.Req
 	}
 	items := make([]templateResponse, len(page.Items))
 	for index, item := range page.Items {
-		items[index], err = toTemplateResponse(item)
+		items[index], err = toTemplateResponse(item, service.StaticAttachmentMediaOptions())
 		if err != nil {
 			writeMailError(response, err)
 			return
@@ -170,7 +173,7 @@ func (h *mailHTTP) getTemplate(response http.ResponseWriter, request *http.Reque
 		writeMailError(response, err)
 		return
 	}
-	result, err := toTemplateResponse(item)
+	result, err := toTemplateResponse(item, service.StaticAttachmentMediaOptions())
 	if err != nil {
 		writeMailError(response, err)
 		return
@@ -198,7 +201,7 @@ func (h *mailHTTP) createTemplate(response http.ResponseWriter, request *http.Re
 		writeMailError(response, err)
 		return
 	}
-	result, err := toTemplateResponse(created)
+	result, err := toTemplateResponse(created, service.StaticAttachmentMediaOptions())
 	if err != nil {
 		writeMailError(response, err)
 		return
@@ -232,7 +235,7 @@ func (h *mailHTTP) updateTemplate(response http.ResponseWriter, request *http.Re
 		writeMailError(response, err)
 		return
 	}
-	result, err := toTemplateResponse(updated)
+	result, err := toTemplateResponse(updated, service.StaticAttachmentMediaOptions())
 	if err != nil {
 		writeMailError(response, err)
 		return
@@ -314,7 +317,7 @@ func (h *mailHTTP) sendTemplates(response http.ResponseWriter, request *http.Req
 	}
 	items := make([]templateResponse, len(page.Items))
 	for index, item := range page.Items {
-		items[index], err = toTemplateResponse(item)
+		items[index], err = toTemplateResponse(item, service.StaticAttachmentMediaOptions())
 		if err != nil {
 			writeMailError(response, err)
 			return
@@ -358,10 +361,11 @@ func (h *mailHTTP) siteVariables(response http.ResponseWriter, request *http.Req
 		return
 	}
 	writeJSON(response, http.StatusOK, struct {
-		Items         []site.TemplateVariable `json:"items"`
-		UploadStorage filesystem.Code         `json:"upload_storage"`
-		UploadPath    string                  `json:"upload_path"`
-	}{Items: items, UploadStorage: service.EditorConfig().UploadStorage, UploadPath: service.EditorConfig().UploadPath})
+		Items                  []site.TemplateVariable `json:"items"`
+		UploadStorage          filesystem.Code         `json:"upload_storage"`
+		UploadPath             string                  `json:"upload_path"`
+		AttachmentMediaOptions field.MediaOptions      `json:"attachment_media_options"`
+	}{Items: items, UploadStorage: service.EditorConfig().UploadStorage, UploadPath: service.EditorConfig().UploadPath, AttachmentMediaOptions: service.StaticAttachmentMediaOptions()})
 }
 
 func (h *mailHTTP) getMessage(response http.ResponseWriter, request *http.Request) {
@@ -445,7 +449,7 @@ func (v variableDTO) definition() (field.Definition, error) {
 	return field.Definition{Key: v.Key, Type: v.Type, Label: v.Label, Required: v.Required, Validators: field.CloneValidatorDefinitions(v.Validators), Options: options}, nil
 }
 
-func toTemplateResponse(item Template) (templateResponse, error) {
+func toTemplateResponse(item Template, attachmentOptions field.MediaOptions) (templateResponse, error) {
 	variables := make([]variableDTO, len(item.Variables))
 	for index, definition := range item.Variables {
 		value, err := toVariableDTO(definition)
@@ -454,7 +458,7 @@ func toTemplateResponse(item Template) (templateResponse, error) {
 		}
 		variables[index] = value
 	}
-	return templateResponse{Template: item, Variables: variables}, nil
+	return templateResponse{Template: item, Variables: variables, AttachmentMediaOptions: attachmentOptions}, nil
 }
 
 func toVariableDTO(definition field.Definition) (variableDTO, error) {
@@ -525,7 +529,7 @@ func writeMailError(response http.ResponseWriter, err error) {
 		httptransport.WriteJSONError(response, http.StatusNotFound, "not_found", "mail item not found")
 	case errors.Is(err, ErrConflict), errors.Is(err, ErrRuntimeDraining):
 		httptransport.WriteJSONError(response, http.StatusConflict, "conflict", "mail item conflicts with its current state")
-	case errors.Is(err, ErrInvalid), errors.Is(err, ErrTemplateDisabled), errors.Is(err, ErrNoRecipients), errors.Is(err, ErrSenderNotAllowed):
+	case errors.Is(err, ErrInvalid), errors.Is(err, ErrTemplateDisabled), errors.Is(err, ErrNoRecipients), errors.Is(err, ErrSenderNotAllowed), errors.Is(err, media.ErrAlreadyAttached):
 		httptransport.WriteJSONError(response, http.StatusUnprocessableEntity, "validation_failed", err.Error())
 	default:
 		httptransport.WriteJSONError(response, http.StatusInternalServerError, "internal_error", "mail operation failed")

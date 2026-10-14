@@ -64,8 +64,9 @@ All routes use existing authentication and file/Media permissions.
 
 Edit conflicts return 409; unsupported/invalid/oversized transforms return 422.
 Filesystem item responses distinguish `folder_id` from `source_file_id`.
-Resource and LibraryItem DTOs expose `image_media_id`; generic File fields still
-store File IDs.
+Resource and LibraryItem DTOs expose `image_media_id`. Other configured file
+fields use their own Media IDs. The self-avatar API remains specialized and
+stores its avatar independently of field definitions.
 
 Self-avatar operations use `/api/admin/profile/avatar/image` (GET/POST),
 `/image/restore` (POST), `/image/source` (GET), and `/avatar/thumbnail` (GET,
@@ -99,7 +100,7 @@ thumbnail profile; the current admin targets the single dev profile.
 ## Filesystem deletion
 
 Impact includes selected count, all affected physical files, hidden derivatives,
-Media references, blocking generic File-field references, and a snapshot token.
+Media references, blocking Media-field references, and a snapshot token.
 The admin confirms `policy: "confirmed_media_cascade"` with `impact_token`.
 Execution locks the file tree, Media and owners and rechecks the snapshot,
 including owner identities. Core composes the resource and user mutation scopes;
@@ -135,22 +136,28 @@ there is no automatic retry worker or retained edit history.
 One Cropper.js 1.6.2 editor provides visual cropping, quarter-turn rotation,
 zoom, flips, output dimensions/proportions, fit/anchor, reset, save and restore
 for Resources, LibraryItems and self-avatar. The browser submits transform data;
-the backend generates the saved image. FileExplorer/FileField use thumbnails
+the backend generates the saved image. The file manager and Media field use thumbnails
 for small previews and load full images only on explicit preview/editor actions.
 
 Focused tests cover transforms/limits, cache identity and authorization,
 root/sibling edits, compensation, cleanup, restore, concurrency, deletion and
 cache invalidation. PostgreSQL integration tests include all three owner kinds,
-generic File-field blocking, stale impact and concurrent Media switches.
+Media-field blocking, stale impact and concurrent Media switches.
 Frontend tests exercise thumbnail/full-preview routes, editor requests, restore,
-delete warnings, and generic File field semantics.
+delete warnings and Media field semantics.
 
 ### Template Media field
 
-Templates can declare an optional image-backed Media field:
+Templates can declare a configured Media field:
 
 ```go
-{Key: "page_media", Type: field.TypeMedia, Label: "Медиа"}
+{
+    Key: "page_media", Type: field.TypeMedia, Label: "Медиа",
+    Options: field.MediaOptions{
+        Disk: "public", VirtualPath: "site/pages/media",
+        SettingsCode: "page_media",
+    },
+}
 ```
 
 Its value is a numeric Media ID, persisted with the existing `reference` storage
@@ -164,5 +171,9 @@ Confirmed filesystem cascading removes the typed field value and ownership row
 transactionally, then invalidates the affected resource caches.
 
 The dev template **Страница** includes **Медиа** under **Параметры полей → Контент**.
-Its control uses the same `MediaImageField` and `ImageEditor` as the built-in
-resource image. Generic `file` fields retain their separate File ID semantics.
+In the admin, this field uses the shared folder-free Media tile control and image
+editor. File selection is limited to the configured disk; new uploads use the
+configured virtual path. The same physical file selected in another field has a
+different Media ID, so editing this field does not change the other selection.
+See the [Core field guide](../../../docs/modules/core/fields.md#файловое-поле) for
+MIME, metadata, upload and deletion behavior.

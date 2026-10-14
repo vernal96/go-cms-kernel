@@ -13,39 +13,39 @@ import (
 	"github.com/vernal96/go-cms-kernel/security"
 )
 
-// FileUploadOptions resolves a file definition using object keys and repeater
+// MediaUploadOptions resolves a file definition using object keys and repeater
 // indices. Definitions, not client-supplied storage options, are authoritative.
-func FileUploadOptions(definitions []Definition, path []string) (FileOptions, error) {
+func MediaUploadOptions(definitions []Definition, path []string) (MediaOptions, error) {
 	if len(path) == 0 {
-		return FileOptions{}, errors.New("file field path is empty")
+		return MediaOptions{}, errors.New("file field path is empty")
 	}
 	for _, definition := range definitions {
 		if definition.Key != path[0] {
 			continue
 		}
-		if len(path) == 1 && definition.Type == TypeFile {
-			return FileOptionsValue(definition.Options)
+		if len(path) == 1 && definition.Type == TypeMedia {
+			return MediaOptionsValue(definition.Options)
 		}
 		if definition.Type == TypeRepeater && len(path) >= 3 {
 			index, err := strconv.Atoi(path[1])
 			if err != nil || index < 0 || strconv.Itoa(index) != path[1] {
-				return FileOptions{}, errors.New("file field repeater index is invalid")
+				return MediaOptions{}, errors.New("file field repeater index is invalid")
 			}
 			options, err := DecodeOptions[RepeaterOptions](definition.Options)
 			if err != nil {
-				return FileOptions{}, err
+				return MediaOptions{}, err
 			}
-			return FileUploadOptions(options.Fields, path[2:])
+			return MediaUploadOptions(options.Fields, path[2:])
 		}
 		break
 	}
-	return FileOptions{}, fmt.Errorf("file field %q does not exist", ReferenceKey(path))
+	return MediaOptions{}, fmt.Errorf("file field %q does not exist", ReferenceKey(path))
 }
 
 // UploadFile stores a file in the exact configured virtual folder. Callers must
 // resolve options from a trusted owner and authorize that owner's mutation.
 // MIME rejection happens before folder creation or physical byte storage.
-func UploadFile(ctx context.Context, actor security.Actor, files file.ManagementService, options FileOptions, name string, content io.Reader) (file.File, error) {
+func UploadFile(ctx context.Context, actor security.Actor, files file.ManagementService, options MediaOptions, name string, content io.Reader) (file.File, error) {
 	if content == nil {
 		return file.File{}, errors.New("file upload content is nil")
 	}
@@ -55,7 +55,7 @@ func UploadFile(ctx context.Context, actor security.Actor, files file.Management
 		return file.File{}, fmt.Errorf("read file header: %w", err)
 	}
 	header = header[:count]
-	if !FileMatches(options, options.Disk, http.DetectContentType(header)) {
+	if !MediaMatches(options, options.Disk, http.DetectContentType(header)) {
 		return file.File{}, ValidationErrors{{Code: "mime_type"}}
 	}
 	folder, err := files.EnsureFolderPath(ctx, actor, options.Disk, options.VirtualPath)

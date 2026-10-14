@@ -43,7 +43,6 @@ const (
 	TypeTextarea TypeCode = "textarea"
 	TypeEmail    TypeCode = "email"
 	TypePhone    TypeCode = "phone"
-	TypeFile     TypeCode = "file"
 	TypeMedia    TypeCode = "media"
 	TypeJSON     TypeCode = "json"
 	TypeRepeater TypeCode = "repeater"
@@ -79,10 +78,6 @@ type ListOptions struct {
 }
 
 type StringOptions = ListOptions
-type MediaOptions struct {
-	Multiple     bool   `json:"multiple,omitempty"`
-	SettingsCode string `json:"settings_code,omitempty"`
-}
 
 type IntegerOptions struct {
 	Multiple bool `json:"multiple,omitempty"`
@@ -114,7 +109,7 @@ type PhoneOptions struct {
 	Multiple bool `json:"multiple,omitempty"`
 }
 
-type FileOptions struct {
+type MediaOptions struct {
 	Disk         filesystem.Code `json:"disk"`
 	VirtualPath  string          `json:"virtual_path"`
 	SettingsCode string          `json:"settings_code"`
@@ -182,7 +177,6 @@ const ReferenceMedia = "media"
 type StoredValue struct {
 	ReferenceTarget string      `json:"reference_target,omitempty"`
 	References      []Reference `json:"references,omitempty"`
-	FileField       bool        `json:"-"`
 	Key             string
 	Position        int
 	Kind            StorageKind
@@ -268,12 +262,6 @@ func cloneEditorValue(value any) any {
 
 func cloneOptions(options any) any {
 	switch typed := options.(type) {
-	case *MediaOptions:
-		if typed == nil {
-			return (*MediaOptions)(nil)
-		}
-		result := *typed
-		return &result
 	case *ListOptions:
 		if typed == nil {
 			return (*ListOptions)(nil)
@@ -360,13 +348,13 @@ func cloneOptions(options any) any {
 		result := *typed
 		return &result
 
-	case FileOptions:
+	case MediaOptions:
 		typed.MIMETypes = append([]string(nil), typed.MIMETypes...)
 		return typed
 
-	case *FileOptions:
+	case *MediaOptions:
 		if typed == nil {
-			return (*FileOptions)(nil)
+			return (*MediaOptions)(nil)
 		}
 		result := *typed
 		result.MIMETypes = append([]string(nil), typed.MIMETypes...)

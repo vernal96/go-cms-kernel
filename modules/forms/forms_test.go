@@ -52,8 +52,8 @@ func formsFieldResolver() testFieldResolver {
 	return result
 }
 
-func testImageFileOptions() field.FileOptions {
-	return field.FileOptions{Disk: "public", VirtualPath: "forms/images", SettingsCode: "forms_image", MIMETypes: []string{"image/*"}}
+func testImageFileOptions() field.MediaOptions {
+	return field.MediaOptions{Disk: "public", VirtualPath: "forms/images", SettingsCode: "forms_image", MIMETypes: []string{"image/*"}}
 }
 
 func TestConditionalFieldsUseNormalizedControllersAndIgnoreInactiveValues(t *testing.T) {

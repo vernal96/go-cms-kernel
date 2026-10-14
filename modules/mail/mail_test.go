@@ -97,6 +97,7 @@ func testRenderer(t *testing.T, policy SenderPolicy) (*Renderer, *testFiles) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	renderer.staticAttachmentMedia = field.MediaOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "attachment"}
 	return renderer, files
 }
 
@@ -111,7 +112,7 @@ func mailTemplate() Template {
 			{Key: "name", Type: field.TypeString, Label: "Name"},
 			{Key: "email", Type: field.TypeEmail, Label: "Email"},
 			{Key: "count", Type: field.TypeInteger, Label: "Count"},
-			{Key: "invoice", Type: field.TypeFile, Label: "Invoice", Options: field.FileOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "attachment"}},
+			{Key: "invoice", Type: field.TypeMedia, Label: "Invoice", Options: field.MediaOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "attachment"}},
 		},
 	}
 }
@@ -196,6 +197,29 @@ func TestRendererValidatesUsedAddressRowsBeforeRendering(t *testing.T) {
 	}
 }
 
+func TestRendererRejectsReusingMediaForMultipleStaticAttachmentTiles(t *testing.T) {
+	t.Parallel()
+	renderer, _ := testRenderer(t, SenderPolicy{})
+	id := media.ID(41)
+	template := mailTemplate()
+	template.Attachments = []AttachmentTemplate{
+		{Source: AttachmentStatic, MediaID: &id},
+		{Source: AttachmentStatic, MediaID: &id},
+	}
+	if err := renderer.ValidateTemplate(template); !errors.Is(err, media.ErrAlreadyAttached) {
+		t.Fatalf("duplicate static attachment Media validation error = %v", err)
+	}
+}
+
+func TestMailHTTPMapsAlreadyAttachedMediaToValidationError(t *testing.T) {
+	t.Parallel()
+	response := httptest.NewRecorder()
+	writeMailError(response, media.ErrAlreadyAttached)
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("duplicate Media status = %d, want %d", response.Code, http.StatusUnprocessableEntity)
+	}
+}
+
 func TestRendererDefaultsSenderPolicyToCurrentSiteDomain(t *testing.T) {
 	t.Parallel()
 	renderer, _ := testRenderer(t, SenderPolicy{})
@@ -211,10 +235,10 @@ func TestRendererResolvesStaticAndVariableAttachments(t *testing.T) {
 	t.Parallel()
 	renderer, _ := testRenderer(t, SenderPolicy{})
 	template := mailTemplate()
-	staticID := file.ID(7)
+	staticID := media.ID(7)
 	template.ContentType, template.TextBody, template.HTMLBody = ContentText, "Invoice {{data.invoice}}", ""
 	template.Attachments = []AttachmentTemplate{
-		{Source: AttachmentStatic, FileID: &staticID, FilenameTemplate: "static-{{data.name}}.pdf"},
+		{Source: AttachmentStatic, MediaID: &staticID, FilenameTemplate: "static-{{data.name}}.pdf"},
 		{Source: AttachmentVariable, Variable: "data.invoice"},
 	}
 	result, err := renderer.Render(context.Background(), template, map[string]any{"name": "Alice", "email": "a@example.net", "invoice": float64(7)}, security.User(9))
@@ -230,6 +254,21 @@ func TestRendererResolvesStaticAndVariableAttachments(t *testing.T) {
 	}
 	if len(missing.Attachments) != 1 {
 		t.Fatalf("missing variable attachment = %#v", missing)
+	}
+}
+
+func TestRendererRejectsStaticMediaOutsideConfiguredDiskAndMIME(t *testing.T) {
+	t.Parallel()
+	renderer, _ := testRenderer(t, SenderPolicy{})
+	template := mailTemplate()
+	template.Attachments = []AttachmentTemplate{{Source: AttachmentStatic, MediaID: mediaIDPointer(7)}}
+	renderer.staticAttachmentMedia = field.MediaOptions{Disk: "private", VirtualPath: "mail", SettingsCode: "mail_attachment"}
+	if _, err := renderer.Render(context.Background(), template, map[string]any{"name": "A", "email": "a@example.net"}, security.User(9)); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("wrong static disk was accepted: %v", err)
+	}
+	renderer.staticAttachmentMedia = field.MediaOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "mail_attachment", MIMETypes: []string{"image/*"}}
+	if _, err := renderer.Render(context.Background(), template, map[string]any{"name": "A", "email": "a@example.net"}, security.User(9)); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("wrong static MIME was accepted: %v", err)
 	}
 }
 
@@ -282,13 +321,13 @@ func TestRendererRejectsMissingRequiredStringEmailAndFile(t *testing.T) {
 	t.Parallel()
 	required := true
 	renderer, _ := testRenderer(t, SenderPolicy{})
-	for _, code := range []field.TypeCode{field.TypeString, field.TypeEmail, field.TypeFile} {
+	for _, code := range []field.TypeCode{field.TypeString, field.TypeEmail, field.TypeMedia} {
 		template := mailTemplate()
 		template.To = []AddressTemplate{{Email: "person@example.net"}}
 		template.HTMLBody = "<p>Body</p>"
 		definition := field.Definition{Key: "required_value", Type: code, Label: "Required", Required: required}
-		if code == field.TypeFile {
-			definition.Options = field.FileOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "attachment"}
+		if code == field.TypeMedia {
+			definition.Options = field.MediaOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "attachment"}
 		}
 		template.Variables = []field.Definition{definition}
 		if _, err := renderer.Render(context.Background(), template, nil, security.User(9)); !errors.Is(err, ErrInvalid) {
@@ -300,14 +339,14 @@ func TestRendererRejectsMissingRequiredStringEmailAndFile(t *testing.T) {
 func TestAttachmentAuthorizationDistinguishesEditingManualAndTrustedSiteSources(t *testing.T) {
 	t.Parallel()
 	files := &testFiles{items: map[file.ID]file.File{7: {ID: 7, Name: "contract.pdf", MIMEType: "application/pdf", Size: 3}}, body: map[file.ID]string{7: "pdf"}, urls: map[file.ID]string{}, denyUsers: true}
-	params := []field.Definition{{Key: "contract", Type: field.TypeFile, Label: "Contract", Options: field.FileOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "attachment"}}}
+	params := []field.Definition{{Key: "contract", Type: field.TypeMedia, Label: "Contract", Options: field.MediaOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "attachment"}}}
 	renderer, err := NewRenderer(standardFields(), files, testMediaResolver{files}, site.Site{Name: "Test site", ID: 5, ProfileCode: "dev", Domain: "example.com", Locale: "ru-RU", Settings: map[string]any{"contract": int64(7)}}, params, RendererConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	staticID := file.ID(7)
+	renderer.staticAttachmentMedia = field.MediaOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "attachment"}
 	staticTemplate := mailTemplate()
-	staticTemplate.Attachments = []AttachmentTemplate{{Source: AttachmentStatic, FileID: &staticID}}
+	staticTemplate.Attachments = []AttachmentTemplate{{Source: AttachmentStatic, MediaID: mediaIDPointer(7)}}
 	if err := renderer.ValidateTemplateFiles(context.Background(), security.User(9), staticTemplate); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("unauthorized static edit = %v", err)
 	}
@@ -522,7 +561,7 @@ func TestTemplateEnableValidatesCurrentRuntimeWithoutReauthorizingStaticFile(t *
 	template := mailTemplate()
 	template.ID = 3
 	template.Enabled = false
-	template.Attachments = []AttachmentTemplate{{Source: AttachmentStatic, FileID: fileIDPointer(7)}}
+	template.Attachments = []AttachmentTemplate{{Source: AttachmentStatic, MediaID: mediaIDPointer(7)}}
 	repository := &memoryRepository{template: template}
 	service, err := NewService(5, repository, renderer, allowAuthorizer{}, testUsers{}, nil, Limits{MaxRecipients: 100, MaxMessageSize: 1 << 20, MaxAttachmentSize: 1 << 20}, "example.com")
 	if err != nil {
@@ -548,6 +587,8 @@ func TestTemplateEnableValidatesCurrentRuntimeWithoutReauthorizingStaticFile(t *
 }
 
 func fileIDPointer(value file.ID) *file.ID { return &value }
+
+func mediaIDPointer(value media.ID) *media.ID { return &value }
 
 func TestMailRuntimeTransitionBlocksActiveStatusesAndRestoresQueueAfterAbort(t *testing.T) {
 	t.Parallel()
@@ -760,7 +801,8 @@ func TestTemplateResponseUsesStableLowercaseChoiceDTO(t *testing.T) {
 	t.Parallel()
 	template := mailTemplate()
 	template.Variables = []field.Definition{{Key: "kind", Type: field.TypeSelect, Label: "Kind", Options: field.SelectOptions{Choices: []field.Choice{{Value: "a", Label: "A"}}}}}
-	response, err := toTemplateResponse(template)
+	template.Attachments = []AttachmentTemplate{{Source: AttachmentStatic, MediaID: mediaIDPointer(7)}}
+	response, err := toTemplateResponse(template, field.MediaOptions{Disk: "private", VirtualPath: "mail", SettingsCode: "mail_attachment"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -768,7 +810,7 @@ func TestTemplateResponseUsesStableLowercaseChoiceDTO(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), `"choices":[{"value":"a","label":"A"}]`) || strings.Contains(string(raw), `"Value"`) || strings.Contains(string(raw), `"transport"`) {
+	if !strings.Contains(string(raw), `"choices":[{"value":"a","label":"A"}]`) || !strings.Contains(string(raw), `"media_id":7`) || strings.Contains(string(raw), `"file_id"`) || !strings.Contains(string(raw), `"attachment_media_options"`) || strings.Contains(string(raw), `"Value"`) || strings.Contains(string(raw), `"transport"`) {
 		t.Fatalf("response JSON = %s", raw)
 	}
 }
@@ -1325,5 +1367,20 @@ func TestModuleSenderPolicyRemainsImmutableDuringRuntimeNormalization(t *testing
 	first.AllowedDomains[0] = "changed"
 	if second.AllowedAddresses[0] != "a@example.com" || second.AllowedDomains[0] != "example.com" {
 		t.Fatal("runtime sender policies share mutable state")
+	}
+}
+
+func TestStaticAttachmentMediaConfigurationIsRequiredAndSingleValue(t *testing.T) {
+	t.Parallel()
+	if err := validateStaticAttachmentMedia(field.MediaOptions{}, standardFields()); err == nil {
+		t.Fatal("missing static attachment media configuration was accepted")
+	}
+	valid := field.MediaOptions{Disk: "private", VirtualPath: "mail/attachments", SettingsCode: "mail_attachment", MIMETypes: []string{"application/pdf"}}
+	if err := validateStaticAttachmentMedia(valid, standardFields()); err != nil {
+		t.Fatalf("valid static attachment media configuration rejected: %v", err)
+	}
+	valid.Multiple = true
+	if err := validateStaticAttachmentMedia(valid, standardFields()); err == nil {
+		t.Fatal("multiple-value static attachment media configuration was accepted")
 	}
 }

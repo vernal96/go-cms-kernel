@@ -8,6 +8,11 @@ import (
 )
 
 func validateProfileFileDisks(profile Profile, disks filesystem.Resolver) error {
+	if options := profile.Settings.FileSystem.ResourceImage; options != nil {
+		if err := validateFileFieldDisks([]field.Definition{{Key: "image_media_id", Type: field.TypeMedia, Options: *options}}, disks); err != nil {
+			return fmt.Errorf("profile %q resource image: %w", profile.Code, err)
+		}
+	}
 	if err := validateFileFieldDisks(profile.Params, disks); err != nil {
 		return fmt.Errorf("profile %q params: %w", profile.Code, err)
 	}
@@ -21,8 +26,8 @@ func validateProfileFileDisks(profile Profile, disks filesystem.Resolver) error 
 
 func validateFileFieldDisks(definitions []field.Definition, disks filesystem.Resolver) error {
 	for _, definition := range definitions {
-		if definition.Type == field.TypeFile {
-			options, err := field.FileOptionsValue(definition.Options)
+		if definition.Type == field.TypeMedia {
+			options, err := field.MediaOptionsValue(definition.Options)
 			if err != nil {
 				return fmt.Errorf("field %q file options: %w", definition.Key, err)
 			}

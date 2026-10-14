@@ -67,7 +67,7 @@ func (a uploadDeniedAuthorizer) Check(_ context.Context, _ security.Actor, code 
 func builderUploadService(t *testing.T) (*Service, *uploadFormRepository, *uploadBuilderFiles) {
 	t.Helper()
 	service, _ := publicHTTPService(t, &repositoryStub{})
-	repository := &uploadFormRepository{detail: FormDetail{Form: Form{ID: 9, SiteID: 5}, Fields: []FormField{{ID: 11, FormID: 9, Code: "asset", Type: field.TypeFile, Options: testImageFileOptions()}}}}
+	repository := &uploadFormRepository{detail: FormDetail{Form: Form{ID: 9, SiteID: 5}, Fields: []FormField{{ID: 11, FormID: 9, Code: "asset", Type: field.TypeMedia, Options: testImageFileOptions()}}}}
 	files := &uploadBuilderFiles{}
 	service.repository, service.files = repository, files
 	return service, repository, files
@@ -75,7 +75,7 @@ func builderUploadService(t *testing.T) (*Service, *uploadFormRepository, *uploa
 
 func TestBuilderUploadUsesRegisteredElementOrSavedFieldOptions(t *testing.T) {
 	for _, target := range []FileFieldTarget{
-		{Owner: "element", ElementType: ElementImage, FieldPath: []string{"file_id"}},
+		{Owner: "element", ElementType: ElementImage, FieldPath: []string{"media_id"}},
 		{Owner: "field", FieldPath: []string{"asset"}},
 	} {
 		service, repository, files := builderUploadService(t)
@@ -90,7 +90,7 @@ func TestBuilderUploadUsesRegisteredElementOrSavedFieldOptions(t *testing.T) {
 }
 
 func TestBuilderUploadRejectsMissingOwnerAndPermissionsBeforeStorage(t *testing.T) {
-	target := FileFieldTarget{Owner: "element", ElementType: ElementImage, FieldPath: []string{"file_id"}}
+	target := FileFieldTarget{Owner: "element", ElementType: ElementImage, FieldPath: []string{"media_id"}}
 	for _, code := range []permission.Code{FormUpdatePermission, permission.MustCode("core", "file", permission.Create)} {
 		service, _, files := builderUploadService(t)
 		service.authorizer = uploadDeniedAuthorizer{code: code}
@@ -112,9 +112,9 @@ func TestBuilderUploadHTTPEnforcesMultipartAndMIME(t *testing.T) {
 		content string
 		status  int
 	}{
-		{`{"owner":"element","element_type":"image","field_path":["file_id"]}`, "\x89PNG\r\n\x1a\n", 201},
-		{`{"owner":"element","element_type":"image","field_path":["file_id"]}`, "spoofed png", 422},
-		{`{"owner":"element","element_type":"image","field_path":["file_id"],"disk":"untrusted"}`, "\x89PNG\r\n\x1a\n", 400},
+		{`{"owner":"element","element_type":"image","field_path":["media_id"]}`, "\x89PNG\r\n\x1a\n", 201},
+		{`{"owner":"element","element_type":"image","field_path":["media_id"]}`, "spoofed png", 422},
+		{`{"owner":"element","element_type":"image","field_path":["media_id"],"disk":"untrusted"}`, "\x89PNG\r\n\x1a\n", 400},
 		{`{"owner":"element","element_type":"image","field_path":["alt"]}`, "\x89PNG\r\n\x1a\n", 422},
 	} {
 		service, _, files := builderUploadService(t)

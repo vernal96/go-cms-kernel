@@ -46,12 +46,13 @@ type RendererConfig struct {
 }
 
 type Renderer struct {
-	fields        field.TypeResolver
-	files         FileService
-	media         MediaResolver
-	siteID        site.ID
-	siteVariables site.TemplateVariables
-	config        RendererConfig
+	fields                field.TypeResolver
+	files                 FileService
+	media                 MediaResolver
+	staticAttachmentMedia field.MediaOptions
+	siteID                site.ID
+	siteVariables         site.TemplateVariables
+	config                RendererConfig
 }
 
 func NewRenderer(fields field.TypeResolver, files FileService, mediaResolver MediaResolver, item site.Site, params []field.Definition, config RendererConfig) (*Renderer, error) {
@@ -126,18 +127,23 @@ func (r *Renderer) ValidateTemplate(template Template) error {
 		if !supportedVariableType(definition.Type) {
 			return fmt.Errorf("%w: variable %q has unsupported type %q", ErrInvalid, definition.Key, definition.Type)
 		}
-		if definition.Type == field.TypeFile {
+		if definition.Type == field.TypeMedia {
 			fileVariables["data."+definition.Key] = struct{}{}
 		}
 	}
+	staticMediaIDs := make(map[media.ID]struct{})
 	for index, attachment := range template.Attachments {
 		switch attachment.Source {
 		case AttachmentStatic:
-			if attachment.FileID == nil || *attachment.FileID <= 0 || attachment.Variable != "" {
+			if attachment.MediaID == nil || *attachment.MediaID <= 0 || attachment.Variable != "" {
 				return fmt.Errorf("%w: attachment %d static source is invalid", ErrInvalid, index)
 			}
+			if _, exists := staticMediaIDs[*attachment.MediaID]; exists {
+				return media.ErrAlreadyAttached
+			}
+			staticMediaIDs[*attachment.MediaID] = struct{}{}
 		case AttachmentVariable:
-			if attachment.FileID != nil {
+			if attachment.MediaID != nil {
 				return fmt.Errorf("%w: attachment %d variable source is invalid", ErrInvalid, index)
 			}
 			variable := normalizeDataVariable(attachment.Variable)
@@ -145,12 +151,12 @@ func (r *Renderer) ValidateTemplate(template Template) error {
 				return fmt.Errorf("%w: attachment %d references non-file variable %q", ErrInvalid, index, attachment.Variable)
 			}
 		case AttachmentSite:
-			if attachment.FileID != nil {
+			if attachment.MediaID != nil {
 				return fmt.Errorf("%w: attachment %d site source is invalid", ErrInvalid, index)
 			}
 			variable := strings.TrimSpace(attachment.Variable)
 			definition, exists := r.siteVariables.Definition(variable)
-			if !exists || definition.Type != field.TypeFile {
+			if !exists || definition.Type != field.TypeMedia {
 				return fmt.Errorf("%w: attachment %d references non-file site variable %q", ErrInvalid, index, attachment.Variable)
 			}
 		default:
@@ -184,7 +190,7 @@ func (r *Renderer) Render(ctx context.Context, template Template, values map[str
 		if loadErr != nil {
 			return RenderedMessage{}, fmt.Errorf("%w: media variable %q: %v", ErrInvalid, reference.Key, loadErr)
 		}
-		if !field.FileMatches(reference.Options, resolved.File.Storage, resolved.File.MIMEType) {
+		if !field.MediaMatches(reference.Options, resolved.File.Storage, resolved.File.MIMEType) {
 			return RenderedMessage{}, fmt.Errorf("%w: file variable %q violates its file constraints", ErrInvalid, reference.Key)
 		}
 	}
@@ -323,7 +329,14 @@ func (r *Renderer) renderAttachments(ctx context.Context, template Template, val
 		accessActor := security.System()
 		switch source.Source {
 		case AttachmentStatic:
-			id = *source.FileID
+			resolved, err := r.media.Resolve(ctx, security.System(), *source.MediaID)
+			if err != nil {
+				return nil, fmt.Errorf("resolve static mail attachment media %d: %w", *source.MediaID, err)
+			}
+			if !field.MediaMatches(r.staticAttachmentMedia, resolved.File.Storage, resolved.File.MIMEType) {
+				return nil, fmt.Errorf("%w: static attachment %d violates its file constraints", ErrInvalid, index)
+			}
+			id = resolved.File.ID
 		case AttachmentVariable:
 			accessActor = actor
 			key := strings.TrimPrefix(normalizeDataVariable(source.Variable), "data.")
@@ -382,18 +395,22 @@ func (r *Renderer) renderAttachments(ctx context.Context, template Template, val
 
 func (r *Renderer) ValidateTemplateFiles(ctx context.Context, actor security.Actor, template Template) error {
 	for index, attachment := range template.Attachments {
-		if attachment.Source != AttachmentStatic || attachment.FileID == nil {
+		if attachment.Source != AttachmentStatic || attachment.MediaID == nil {
 			continue
 		}
-		if _, err := r.files.GetFile(ctx, actor, *attachment.FileID); err != nil {
+		resolved, err := r.media.Resolve(ctx, actor, *attachment.MediaID)
+		if err != nil {
 			return fmt.Errorf("%w: static attachment %d: %v", ErrInvalid, index, err)
+		}
+		if !field.MediaMatches(r.staticAttachmentMedia, resolved.File.Storage, resolved.File.MIMEType) {
+			return fmt.Errorf("%w: static attachment %d violates its file constraints", ErrInvalid, index)
 		}
 	}
 	return nil
 }
 
 func (r *Renderer) scalarValue(ctx context.Context, definition field.Definition, value any) (any, bool, error) {
-	if definition.Type == field.TypeFile {
+	if definition.Type == field.TypeMedia {
 		id, ok := value.(int64)
 		if !ok || id <= 0 {
 			return nil, false, nil
@@ -498,7 +515,7 @@ func supportedVariableType(code field.TypeCode) bool {
 	switch code {
 	case field.TypeString, field.TypeInteger, field.TypeFloat, field.TypeCheckbox,
 		field.TypeRadio, field.TypeSelect, field.TypeTextarea, field.TypeEmail,
-		field.TypePhone, field.TypeFile:
+		field.TypePhone, field.TypeMedia:
 		return true
 	default:
 		return false

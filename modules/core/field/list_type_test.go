@@ -23,7 +23,6 @@ func TestStandardMultipleFields(t *testing.T) {
 		{field.TypePhone, "+79991234567", "invalid", "", field.StorageString},
 		{field.TypeInteger, int64(0), 1.5, "", field.StorageInteger},
 		{field.TypeFloat, 0.0, "invalid", "", field.StorageFloat},
-		{field.TypeFile, int64(7), -1, "", field.StorageReference},
 		{field.TypeMedia, int64(8), -1, "", field.StorageReference},
 		{field.TypeSelect, "one", "unknown", `,"choices":[{"value":"one","label":"One"},{"value":"two","label":"Two"}]`, field.StorageString},
 	}
@@ -33,8 +32,8 @@ func TestStandardMultipleFields(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if tc.code == field.TypeFile {
-				options = field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image", Multiple: true}
+			if tc.code == field.TypeMedia {
+				options = field.MediaOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image", Multiple: true}
 			}
 			def := field.Definition{Key: "values", Label: "Values", Type: tc.code, Options: options, Validators: []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": 1}}, {Type: "max_items", Options: map[string]any{"value": 2}}}}
 			schema, err := field.CompilePersistent([]field.Definition{def}, field.StandardTypes())
@@ -81,7 +80,7 @@ func TestStandardMultipleFields(t *testing.T) {
 					t.Fatalf("stored media refs: %#v %v", refs, err)
 				}
 			}
-			if tc.code == field.TypeFile || tc.code == field.TypeMedia {
+			if tc.code == field.TypeMedia {
 				refs, err := schema.References(normalized)
 				if err != nil || len(refs) != 1 || refs[0].Key != "values[0]" {
 					t.Fatalf("refs: %#v %v", refs, err)
@@ -147,7 +146,7 @@ func TestListValidatorsBoundsAndOrdering(t *testing.T) {
 
 func TestListsInsideRepeater(t *testing.T) {
 	schema, err := field.CompilePersistent([]field.Definition{{Key: "rows", Label: "Rows", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: []field.Definition{
-		{Key: "images", Label: "Images", Type: field.TypeMedia, Options: field.MediaOptions{Multiple: true}},
+		{Key: "images", Label: "Images", Type: field.TypeMedia, Options: field.MediaOptions{Disk: "public", VirtualPath: "images", SettingsCode: "image", Multiple: true}},
 		{Key: "emails", Label: "Emails", Type: field.TypeEmail, Options: field.StringOptions{Multiple: true}},
 	}}}}, field.StandardTypes())
 	if err != nil {

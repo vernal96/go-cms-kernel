@@ -47,13 +47,14 @@ type Service struct {
 	users      interface {
 		Current(context.Context, security.Actor) (coreuser.User, error)
 	}
-	spool           *AttachmentSpool
-	uploadFiles     file.ManagementService
-	limits          Limits
-	messageIDDomain string
-	uploadStorage   filesystem.Code
-	uploadPath      string
-	logger          *slog.Logger
+	spool                 *AttachmentSpool
+	uploadFiles           file.ManagementService
+	limits                Limits
+	messageIDDomain       string
+	uploadStorage         filesystem.Code
+	uploadPath            string
+	staticAttachmentMedia field.MediaOptions
+	logger                *slog.Logger
 }
 
 type EditorConfig struct {
@@ -80,6 +81,12 @@ func (s *Service) AvailableValidatorMetadata() []field.ValidatorMetadata {
 
 func (s *Service) EditorConfig() EditorConfig {
 	return EditorConfig{UploadStorage: s.uploadStorage, UploadPath: s.uploadPath}
+}
+
+func (s *Service) StaticAttachmentMediaOptions() field.MediaOptions {
+	options := s.staticAttachmentMedia
+	options.MIMETypes = append([]string(nil), options.MIMETypes...)
+	return options
 }
 
 func NewService(siteID site.ID, repository Repository, renderer *Renderer, authorizer security.Authorizer, users interface {
@@ -141,7 +148,7 @@ func (s *Service) UploadVariableFile(ctx context.Context, actor security.Actor, 
 	if err := s.validateTemplateRuntime(template); err != nil {
 		return file.File{}, err
 	}
-	options, err := field.FileUploadOptions(template.Variables, path)
+	options, err := field.MediaUploadOptions(template.Variables, path)
 	if err != nil {
 		return file.File{}, fmt.Errorf("%w: file variable path is invalid: %v", ErrInvalid, err)
 	}
@@ -160,6 +167,41 @@ func (s *Service) UploadVariableFile(ctx context.Context, actor security.Actor, 
 		return file.File{}, err
 	}
 	return item, nil
+}
+
+// UploadStaticAttachmentFile stores a file in the trusted Mail attachment
+// folder. The caller cannot choose the disk, path, settings code, or MIME rules.
+func (s *Service) UploadStaticAttachmentFile(ctx context.Context, actor security.Actor, name string, content io.Reader) (file.File, error) {
+	if err := s.authorizeTemplateMutation(ctx, actor); err != nil {
+		return file.File{}, err
+	}
+	if err := s.authorizer.Check(ctx, actor, coreFileCreatePermission); err != nil {
+		return file.File{}, err
+	}
+	if s.uploadFiles == nil {
+		return file.File{}, errors.New("mail file upload service is unavailable")
+	}
+	item, err := field.UploadFile(ctx, actor, s.uploadFiles, s.staticAttachmentMedia, name, content)
+	if err != nil {
+		var validation field.ValidationErrors
+		if errors.As(err, &validation) {
+			return file.File{}, fmt.Errorf("%w: static attachment MIME type is not allowed", ErrInvalid)
+		}
+		if errors.Is(err, file.ErrInvalidInput) {
+			return file.File{}, fmt.Errorf("%w: static attachment upload is invalid", ErrInvalid)
+		}
+		return file.File{}, err
+	}
+	return item, nil
+}
+
+func (s *Service) authorizeTemplateMutation(ctx context.Context, actor security.Actor) error {
+	if err := s.authorizer.Check(ctx, actor, TemplateCreatePermission); err == nil {
+		return nil
+	} else if !errors.Is(err, security.ErrForbidden) {
+		return err
+	}
+	return s.authorizer.Check(ctx, actor, TemplateUpdatePermission)
 }
 
 // IntegrationTemplate returns safe metadata for another same-site module's

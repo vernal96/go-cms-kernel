@@ -42,7 +42,7 @@ func TestSiteSettingsRequiredOnlyOnUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "settings", Modules: []kernel.Module{settingsModule{transitionModule{code: "fields", recorder: &transitionRecorder{}}}}, Params: []field.Definition{
-		{Key: "logo", Type: field.TypeFile, Label: "Logo", Required: true, Options: field.FileOptions{Disk: "public", VirtualPath: "site", SettingsCode: "logo", MIMETypes: []string{"image/png", "image/svg+xml"}}},
+		{Key: "logo", Type: field.TypeMedia, Label: "Logo", Required: true, Options: field.MediaOptions{Disk: "public", VirtualPath: "site", SettingsCode: "logo", MIMETypes: []string{"image/png", "image/svg+xml"}}},
 	}})
 	if err != nil {
 		t.Fatal(err)

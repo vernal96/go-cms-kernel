@@ -6,7 +6,7 @@ import (
 )
 
 func TestMediaFieldReferenceStorage(t *testing.T) {
-	schema, err := field.Compile([]field.Definition{{Key: "image", Type: field.TypeMedia, Label: "Media"}}, standardResolver())
+	schema, err := field.Compile([]field.Definition{{Key: "image", Type: field.TypeMedia, Label: "Media", Options: field.MediaOptions{Disk: "public", VirtualPath: "images", SettingsCode: "image"}}}, standardResolver())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,11 +24,33 @@ func TestMediaFieldReferenceStorage(t *testing.T) {
 		t.Fatalf("invalid storage: %+v, %v", rows, err)
 	}
 	refs, err := schema.FileReferences(normalized)
-	if err != nil || len(refs) != 0 {
-		t.Fatal("Media became a File reference", err)
+	if err != nil || len(refs) != 1 || refs[0].Options.Disk != "public" {
+		t.Fatal("Media constraints were not collected", err)
 	}
 	values, err := schema.Validate(map[string]any{"image": nil})
 	if err != nil || len(values) != 0 {
 		t.Fatal("optional Media cannot be cleared", err)
+	}
+}
+
+func TestMediaIsTheOnlyBuiltInFileField(t *testing.T) {
+	types := field.StandardTypes()
+	if _, exists := types.FieldType("file"); exists {
+		t.Fatal("removed file field remains registered")
+	}
+	for _, typ := range []field.Type{field.MediaType(nil), field.MediaType(map[string][]field.Definition{"image": nil})} {
+		metadata := field.DescribeType(typ)
+		if metadata.Editor != "media" {
+			t.Fatalf("editor=%s", metadata.Editor)
+		}
+		multiple := 0
+		for _, option := range metadata.Options {
+			if option.Key == "multiple" {
+				multiple++
+			}
+		}
+		if multiple != 1 {
+			t.Fatalf("multiple options=%d", multiple)
+		}
 	}
 }

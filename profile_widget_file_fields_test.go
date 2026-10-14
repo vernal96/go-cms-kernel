@@ -25,7 +25,7 @@ func (d widgetFileDisks) Disk(code filesystem.Code) (filesystem.Disk, bool) {
 
 func TestProfileWidgetFieldsValidateDiskIncludingRepeater(t *testing.T) {
 	for _, nested := range []bool{false, true} {
-		definition := field.Definition{Key: "asset", Type: field.TypeFile, Label: "Asset", Options: field.FileOptions{Disk: "widget-assets", VirtualPath: "widgets/images", SettingsCode: "image"}}
+		definition := field.Definition{Key: "asset", Type: field.TypeMedia, Label: "Asset", Options: field.MediaOptions{Disk: "widget-assets", VirtualPath: "widgets/images", SettingsCode: "image"}}
 		if nested {
 			definition = field.Definition{Key: "rows", Type: field.TypeRepeater, Label: "Rows", Options: field.RepeaterOptions{Fields: []field.Definition{definition}}}
 		}

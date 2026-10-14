@@ -47,8 +47,8 @@ func TestPostgresRepeaterPersistenceAndReferences(t *testing.T) {
 			third, fourth := makeMedia(), makeMedia()
 			fileMedia := makeMedia()
 			schema, err := field.CompilePersistent([]field.Definition{{Key: "slides", Type: field.TypeRepeater, Label: "Slides", Options: field.RepeaterOptions{Fields: []field.Definition{
-				{Key: "gallery", Type: field.TypeMedia, Label: "Gallery", Options: field.MediaOptions{Multiple: true}},
-				{Key: "title", Type: field.TypeString, Label: "Title"}, {Key: "image", Type: field.TypeMedia, Label: "Image"}, {Key: "file", Type: field.TypeFile, Label: "File", Options: field.FileOptions{Disk: "public", VirtualPath: "repeater/files", SettingsCode: "repeater_file"}},
+				{Key: "gallery", Type: field.TypeMedia, Label: "Gallery", Options: field.MediaOptions{Disk: "public", VirtualPath: "repeater/gallery", SettingsCode: "gallery", Multiple: true}},
+				{Key: "title", Type: field.TypeString, Label: "Title"}, {Key: "image", Type: field.TypeMedia, Label: "Image", Options: field.MediaOptions{Disk: "public", VirtualPath: "repeater/images", SettingsCode: "image"}}, {Key: "file", Type: field.TypeMedia, Label: "File", Options: field.MediaOptions{Disk: "public", VirtualPath: "repeater/files", SettingsCode: "repeater_file"}},
 			}}, Validators: []field.ValidatorDefinition{{Type: "max_items", Options: map[string]any{"value": 10}}}}}, field.StandardTypes())
 			if err != nil {
 				t.Fatal(err)
@@ -153,7 +153,7 @@ func TestPostgresRepeaterPersistenceAndReferences(t *testing.T) {
 				t.Fatalf("EAV rows=%d err=%v", count, err)
 			}
 			var key string
-			if err := conn.Pool().QueryRow(ctx, `SELECT field_key FROM core.file_field_references WHERE owner_kind='resource' AND owner_id=$1`, id).Scan(&key); err != nil || key != "slides[0].file" {
+			if err := conn.Pool().QueryRow(ctx, `SELECT field_key FROM core.file_field_references WHERE owner_kind='resource' AND owner_id=$1 AND media_id=$2`, id, fileMedia).Scan(&key); err != nil || key != "slides[0].file" {
 				t.Fatalf("file key=%s err=%v", key, err)
 			}
 			if err := db.Files().DeleteFile(ctx, f.ID, func(context.Context, []file.File) error { return nil }); err == nil {
@@ -162,7 +162,7 @@ func TestPostgresRepeaterPersistenceAndReferences(t *testing.T) {
 			reordered := []any{initial[1], initial[0]}
 			update(reordered)
 			assertRows(reordered)
-			if err := conn.Pool().QueryRow(ctx, `SELECT field_key FROM core.file_field_references WHERE owner_kind='resource' AND owner_id=$1`, id).Scan(&key); err != nil || key != "slides[1].file" {
+			if err := conn.Pool().QueryRow(ctx, `SELECT field_key FROM core.file_field_references WHERE owner_kind='resource' AND owner_id=$1 AND media_id=$2`, id, fileMedia).Scan(&key); err != nil || key != "slides[1].file" {
 				t.Fatalf("reordered file key=%s err=%v", key, err)
 			}
 			// The same cascade used by confirmed filesystem deletion removes a nested

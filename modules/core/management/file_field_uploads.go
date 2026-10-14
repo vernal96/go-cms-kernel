@@ -81,9 +81,19 @@ func (m *Resources) resourceFileFields(ctx context.Context, actor security.Actor
 		if current.SiteID != target.SiteID {
 			return nil, resource.ErrNotFound
 		}
-		if target.TemplateCode == "" && current.Template != nil {
+		if target.Owner != "resource_image" && target.TemplateCode == "" && current.Template != nil {
 			target.TemplateCode = *current.Template
 		}
+	}
+	if target.Owner == "resource_image" {
+		if target.TemplateCode != "" || target.WidgetCode != "" {
+			return nil, fmt.Errorf("%w: invalid resource image target", ErrValidation)
+		}
+		definition, exists := resource.ImageField(runtime)
+		if !exists {
+			return nil, fmt.Errorf("%w: resource image field is unavailable", ErrValidation)
+		}
+		return []field.Definition{definition}, nil
 	}
 	if target.Owner == "widget" {
 		if target.TemplateCode != "" && target.ResourceID == 0 {
@@ -114,7 +124,7 @@ func (m *Files) UploadFieldFile(ctx context.Context, actor security.Actor, sites
 	switch target.Owner {
 	case "site":
 		definitions, err = sites.siteFileFields(ctx, actor, target)
-	case "resource", "widget":
+	case "resource", "resource_image", "widget":
 		definitions, err = resources.resourceFileFields(ctx, actor, target)
 	default:
 		err = fmt.Errorf("%w: invalid file field owner", ErrValidation)
@@ -122,7 +132,7 @@ func (m *Files) UploadFieldFile(ctx context.Context, actor security.Actor, sites
 	if err != nil {
 		return FilesystemItemDTO{}, err
 	}
-	options, err := field.FileUploadOptions(definitions, target.FieldPath)
+	options, err := field.MediaUploadOptions(definitions, target.FieldPath)
 	if err != nil {
 		return FilesystemItemDTO{}, fmt.Errorf("%w: %v", ErrValidation, err)
 	}

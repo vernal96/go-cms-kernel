@@ -65,7 +65,7 @@ func TestSiteSettingsHTTPCreateIncompleteAndUpdateRequired(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "settings", Modules: []kernel.Module{siteSettingsHTTPModule{}}, Params: []field.Definition{{Key: "logo", Type: field.TypeFile, Label: "Logo", Required: true, Options: field.FileOptions{Disk: "public", VirtualPath: "site", SettingsCode: "logo"}}}})
+	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "settings", Modules: []kernel.Module{siteSettingsHTTPModule{}}, Params: []field.Definition{{Key: "logo", Type: field.TypeMedia, Label: "Logo", Required: true, Options: field.MediaOptions{Disk: "public", VirtualPath: "site", SettingsCode: "logo"}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestSiteSettingsHTTPRejectsUnsupportedFileFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "settings", Modules: []kernel.Module{siteSettingsHTTPModule{}}, Params: []field.Definition{
-		{Key: "logo", Type: field.TypeFile, Label: "Logo", Required: true, Options: field.FileOptions{Disk: "public", VirtualPath: "site", SettingsCode: "logo", MIMETypes: []string{"image/*"}}},
+		{Key: "logo", Type: field.TypeMedia, Label: "Logo", Required: true, Options: field.MediaOptions{Disk: "public", VirtualPath: "site", SettingsCode: "logo", MIMETypes: []string{"image/*"}}},
 	}})
 	if err != nil {
 		t.Fatal(err)

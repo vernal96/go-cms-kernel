@@ -3,12 +3,11 @@ package forms
 import (
 	"context"
 	"fmt"
+	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"slices"
 
-	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	"github.com/vernal96/go-cms-kernel/modules/core/media"
-	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 )
 
 func (*Runtime) FileOccurrenceKinds() []string { return []string{"forms.element", "forms.result"} }
@@ -29,9 +28,6 @@ func (r *Runtime) ValidateMediaFileOccurrence(ctx context.Context, ref media.Fil
 		for _, snapshot := range values.References {
 			if snapshot.ID != int64(ref.MediaID) || !slices.Equal(snapshot.Path, ref.Path) {
 				continue
-			}
-			if snapshot.Target == field.ReferenceMedia {
-				return resource.ValidateImageMediaFile(ctx, target, media.Usage{})
 			}
 			ref.Target = snapshot.Target
 			return media.ValidateFileOccurrence(ref, []field.Reference{snapshot}, target)

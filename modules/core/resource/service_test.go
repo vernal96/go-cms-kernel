@@ -947,8 +947,13 @@ func cloneResourceMap(source map[ID]Resource) map[ID]Resource {
 
 func newTestService(
 	t *testing.T,
+	imageOptions ...*field.MediaOptions,
 ) (*Service, *memoryRepository, *testMediaService) {
 	t.Helper()
+	image := &field.MediaOptions{Disk: "public", VirtualPath: "resources/images", SettingsCode: "resource_image"}
+	if len(imageOptions) > 0 {
+		image = imageOptions[0]
+	}
 
 	required := true
 	factory, err := kernel.NewProfileRuntimeFactory(
@@ -964,8 +969,9 @@ func newTestService(
 	blueprint, err := factory.Compile(
 		context.Background(),
 		kernel.Profile{
-			Code:    "test",
-			Modules: []kernel.Module{testModule{}},
+			Code:     "test",
+			Settings: kernel.ProfileSettings{FileSystem: kernel.ProfileFileSystem{ResourceImage: image}},
+			Modules:  []kernel.Module{testModule{}},
 			Templates: []template.Definition{
 				{
 					Code:  "article",
@@ -2389,6 +2395,7 @@ func addResolvedMedia(
 		},
 		File: corefile.File{
 			ID:       fileID,
+			Storage:  "public",
 			MIMEType: mimeType,
 		},
 	}

@@ -47,7 +47,7 @@ func (s *Service) publicSchema(ctx context.Context, detail FormDetail) (PublicFo
 			if urlErr != nil {
 				return PublicFormSchema{}, ErrNotFound
 			}
-			delete(raw, "file_id")
+			delete(raw, "media_id")
 			raw["url"] = url
 			config = raw
 		} else if json.Unmarshal(item.Config, &config) != nil {

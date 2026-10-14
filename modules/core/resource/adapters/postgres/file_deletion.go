@@ -30,7 +30,7 @@ func (r *Repository) ClearFileOccurrence(ctx context.Context, actor *security.Us
 		}
 		return 0, err
 	}
-	if strings.HasPrefix(ref.Container, "fields:") {
+	if ref.Container == "image" || strings.HasPrefix(ref.Container, "fields:") {
 		if err := r.ClearMediaReferences(ctx, tx, []int64{int64(ref.MediaID)}, actor); err != nil {
 			return 0, err
 		}
@@ -55,7 +55,7 @@ func (r *Repository) ClearFileOccurrence(ctx context.Context, actor *security.Us
 }
 
 func rebuildResourceFileReferences(ctx context.Context, tx pgx.Tx, id int64) error {
-	rows, err := tx.Query(ctx, `SELECT mr.field_key,fv.is_multi,mr.position,mr.value_path,mr.media_id FROM core.resource_media_references mr JOIN core.resource_field_values fv USING(resource_id,field_key,position) WHERE mr.resource_id=$1 AND mr.reference_target='file' ORDER BY mr.field_key,mr.position,mr.value_path`, id)
+	rows, err := tx.Query(ctx, `SELECT mr.field_key,fv.is_multi,mr.position,mr.value_path,mr.media_id FROM core.resource_media_references mr JOIN core.resource_field_values fv USING(resource_id,field_key,position) WHERE mr.resource_id=$1 AND mr.reference_target='media' ORDER BY mr.field_key,mr.position,mr.value_path`, id)
 	if err != nil {
 		return err
 	}

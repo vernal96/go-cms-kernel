@@ -85,7 +85,7 @@ func (r *fileDeletionRepository) DeleteMediaFile(ctx context.Context, actor *sec
 	if other {
 		return result, media.ErrFileInUse
 	}
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.resources WHERE image_media_id=$1 UNION ALL SELECT 1 FROM core.library_items WHERE image_media_id=$1 UNION ALL SELECT 1 FROM core.users WHERE avatar_media_id=$1)`, input.MediaID).Scan(&other); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.users WHERE avatar_media_id=$1)`, input.MediaID).Scan(&other); err != nil {
 		return result, err
 	}
 	if other {
@@ -102,7 +102,7 @@ func (r *fileDeletionRepository) DeleteMediaFile(ctx context.Context, actor *sec
 	var owner *media.FileOccurrence
 	if len(occurrences) == 1 {
 		owner = &occurrences[0]
-		if owner.Target != field.ReferenceFile {
+		if owner.Target != field.ReferenceMedia {
 			return result, media.ErrFileInUse
 		}
 		if owner.SiteID != input.SiteID {
@@ -171,7 +171,9 @@ func (r *fileDeletionRepository) occurrences(ctx context.Context, tx interface {
 	Query(context.Context, string, ...any) (pgx.Rows, error)
 }, id media.ID) ([]media.FileOccurrence, error) {
 	rows, err := tx.Query(ctx, `SELECT o.owner_kind,o.owner_id,o.site_id,o.container,o.value_path,o.reference_target,COALESCE(l.library_id,0) FROM core.media_field_occurrences o LEFT JOIN core.library_items l ON o.owner_kind='resource' AND l.id=o.owner_id WHERE o.media_id=$1
- UNION ALL SELECT 'resource',mr.resource_id,e.site_id,'fields:'||mr.field_key||':'||mr.position::text,mr.value_path,mr.reference_target,COALESCE(l.library_id,0) FROM core.resource_media_references mr JOIN core.resource_entities e ON e.id=mr.resource_id LEFT JOIN core.library_items l ON l.id=e.id WHERE mr.media_id=$1
+ UNION ALL SELECT 'resource',r.id,r.site_id,'image',ARRAY['image_media_id'],'media',0 FROM core.resources r WHERE r.image_media_id=$1
+ UNION ALL SELECT 'resource',l.id,l.site_id,'image',ARRAY['image_media_id'],'media',l.library_id FROM core.library_items l WHERE l.image_media_id=$1
+ UNION ALL SELECT 'resource',mr.resource_id,e.site_id,'fields:'||mr.field_key||':'||mr.position::text,ARRAY[mr.field_key] || CASE WHEN fv.is_multi THEN ARRAY[mr.position::text] ELSE '{}'::text[] END || mr.value_path,mr.reference_target,COALESCE(l.library_id,0) FROM core.resource_media_references mr JOIN core.resource_entities e ON e.id=mr.resource_id JOIN core.resource_field_values fv USING(resource_id,field_key,position) LEFT JOIN core.library_items l ON l.id=e.id WHERE mr.media_id=$1
  UNION ALL SELECT f.owner_kind,f.owner_id,CASE WHEN f.owner_kind='site' THEN f.owner_id ELSE e.site_id END,'unindexed',ARRAY[f.field_key],'media',0
  FROM core.file_field_references f LEFT JOIN core.resource_entities e ON f.owner_kind='resource' AND e.id=f.owner_id WHERE f.media_id=$1
  AND NOT EXISTS(SELECT 1 FROM core.media_field_occurrences o WHERE o.owner_kind=f.owner_kind AND o.owner_id=f.owner_id AND o.media_id=f.media_id)

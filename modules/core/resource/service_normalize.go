@@ -66,6 +66,11 @@ func (s *Service) normalize(
 	if err := s.validateResourceBasics(ctx, item); err != nil {
 		return Resource{}, err
 	}
+	if item.ImageMediaID != nil {
+		if err := s.validateImageField(ctx, actor, siteRuntime, *item.ImageMediaID); err != nil {
+			return Resource{}, err
+		}
+	}
 
 	profileRuntime := siteRuntime.Profile()
 	resourceType, parent, payload, err := s.normalizeResourcePayload(ctx, item, profileRuntime, known)
@@ -210,9 +215,6 @@ func (s *Service) normalizeResourceTemplate(
 	if err != nil {
 		return Resource{}, fmt.Errorf("encode resource template %q fields: %w", *payload.Template, err)
 	}
-	if err := s.validateMediaFields(ctx, actor, item.FieldValues); err != nil {
-		return Resource{}, err
-	}
 	fileReferences, err := templateRuntime.FieldSchema().FileReferences(fields)
 	if err != nil {
 		return Resource{}, fmt.Errorf("collect resource file references: %w", err)
@@ -268,7 +270,7 @@ func (s *Service) validateFileReferences(ctx context.Context, actor security.Act
 		if err != nil {
 			return fmt.Errorf("file field %q media: %w", reference.Key, err)
 		}
-		if !field.FileMatches(reference.Options, resolved.File.Storage, resolved.File.MIMEType) {
+		if !field.MediaMatches(reference.Options, resolved.File.Storage, resolved.File.MIMEType) {
 			return fmt.Errorf("file field %q rejects selected file with MIME type %q on disk %q", reference.Key, resolved.File.MIMEType, resolved.File.Storage)
 		}
 	}

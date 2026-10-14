@@ -98,3 +98,51 @@ func (h *mailHTTP) uploadVariableFile(response http.ResponseWriter, request *htt
 		CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt,
 	})
 }
+
+func (h *mailHTTP) uploadStaticAttachmentFile(response http.ResponseWriter, request *http.Request) {
+	actor, service, ok := h.request(response, request)
+	if !ok {
+		return
+	}
+	deadline := time.Now().Add(mailUploadTimeout)
+	controller := http.NewResponseController(response)
+	_ = controller.SetReadDeadline(deadline)
+	_ = controller.SetWriteDeadline(deadline)
+	maxUploadSize := service.limits.MaxAttachmentSize
+	request.Body = http.MaxBytesReader(response, request.Body, maxUploadSize+(1<<20))
+	if err := request.ParseMultipartForm(1 << 20); err != nil {
+		var maxBytes *http.MaxBytesError
+		if errors.As(err, &maxBytes) {
+			httptransport.WriteJSONError(response, http.StatusRequestEntityTooLarge, "file_too_large", "uploaded file is too large")
+			return
+		}
+		writeMailError(response, fmt.Errorf("%w: multipart request is invalid", ErrInvalid))
+		return
+	}
+	defer request.MultipartForm.RemoveAll()
+	if len(request.MultipartForm.Value) != 0 || len(request.MultipartForm.File) != 1 || len(request.MultipartForm.File["file"]) != 1 {
+		writeMailError(response, fmt.Errorf("%w: only one file is accepted", ErrInvalid))
+		return
+	}
+	uploaded, header, err := request.FormFile("file")
+	if err != nil {
+		writeMailError(response, fmt.Errorf("%w: file is required", ErrInvalid))
+		return
+	}
+	defer uploaded.Close()
+	if header.Size > maxUploadSize {
+		httptransport.WriteJSONError(response, http.StatusRequestEntityTooLarge, "file_too_large", "uploaded file is too large")
+		return
+	}
+	item, err := service.UploadStaticAttachmentFile(request.Context(), actor, header.Filename, io.LimitReader(uploaded, maxUploadSize+1))
+	if err != nil {
+		writeMailError(response, err)
+		return
+	}
+	mimeType, size := item.MIMEType, item.Size
+	writeJSON(response, http.StatusCreated, variableFileResponse{
+		Kind: file.ItemFile, ID: int64(item.ID), FolderID: item.FolderID, SourceFileID: item.ParentID,
+		Storage: item.Storage, Name: item.Name, MIMEType: &mimeType, Size: &size,
+		CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt,
+	})
+}

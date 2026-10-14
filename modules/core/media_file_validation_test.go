@@ -59,10 +59,10 @@ func TestMediaFileValidationUsesCurrentSiteResourceAndWidgetSchemas(t *testing.T
 	}
 	compile := func(mime string) *kernel.ProfileBlueprint {
 		t.Helper()
-		options := field.FileOptions{Disk: "public", VirtualPath: "files", SettingsCode: "document", MIMETypes: []string{mime}}
-		rows := []field.Definition{{Key: "rows", Label: "Rows", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: []field.Definition{{Key: "icon", Label: "Icon", Type: field.TypeFile, Options: options}}}}}
+		options := field.MediaOptions{Disk: "public", VirtualPath: "files", SettingsCode: "document", MIMETypes: []string{mime}}
+		rows := []field.Definition{{Key: "rows", Label: "Rows", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: []field.Definition{{Key: "icon", Label: "Icon", Type: field.TypeMedia, Options: options}}}}}
 		options.Multiple = true
-		blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "guard", Modules: []kernel.Module{mediaValidationModule{fields: rows}}, Params: rows, Templates: []template.Definition{{Code: "page", Label: "Page", Fields: []field.Definition{{Key: "documents", Label: "Documents", Type: field.TypeFile, Options: options}}}}})
+		blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "guard", Modules: []kernel.Module{mediaValidationModule{fields: rows}}, Params: rows, Templates: []template.Definition{{Code: "page", Label: "Page", Fields: []field.Definition{{Key: "documents", Label: "Documents", Type: field.TypeMedia, Options: options}}}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -81,9 +81,9 @@ func TestMediaFileValidationUsesCurrentSiteResourceAndWidgetSchemas(t *testing.T
 	}
 	services := &Services{Sites: catalog, fileOccurrenceReaders: map[string]media.FileOccurrenceReader{"site": mediaValidationReader{}, "resource": mediaValidationReader{}}}
 	refs := []media.FileOccurrence{
-		{OwnerKind: "site", OwnerID: 1, SiteID: 1, Container: "settings", Path: []string{"rows", "0", "icon"}, MediaID: 1, Target: field.ReferenceFile},
-		{OwnerKind: "resource", OwnerID: 2, SiteID: 1, Container: "fields:documents:1", Path: []string{"documents", "1"}, MediaID: 1, Target: field.ReferenceFile},
-		{OwnerKind: "resource", OwnerID: 2, SiteID: 1, Container: "widget:3", Path: []string{"rows", "0", "icon"}, MediaID: 1, Target: field.ReferenceFile},
+		{OwnerKind: "site", OwnerID: 1, SiteID: 1, Container: "settings", Path: []string{"rows", "0", "icon"}, MediaID: 1, Target: field.ReferenceMedia},
+		{OwnerKind: "resource", OwnerID: 2, SiteID: 1, Container: "fields:documents:1", Path: []string{"documents", "1"}, MediaID: 1, Target: field.ReferenceMedia},
+		{OwnerKind: "resource", OwnerID: 2, SiteID: 1, Container: "widget:3", Path: []string{"rows", "0", "icon"}, MediaID: 1, Target: field.ReferenceMedia},
 	}
 	for _, ref := range refs {
 		usage := media.Usage{Kind: media.FileFieldUsage, OwnerID: ref.OwnerID, Occurrence: &ref}

@@ -84,6 +84,7 @@ func mailUploadService(t *testing.T, authorizer security.Authorizer) (*Service, 
 		t.Fatal(err)
 	}
 	service.uploadFiles = &uploadRecordingFiles{}
+	service.staticAttachmentMedia = field.MediaOptions{Disk: "mail-private", VirtualPath: "templates/attachments", SettingsCode: "mail_attachment", MIMETypes: []string{"image/png"}}
 	return service, service.uploadFiles.(*uploadRecordingFiles), repository
 }
 
@@ -91,8 +92,8 @@ func TestUploadVariableFileUsesTemplateDiskAndSniffsMIMEBeforeStorage(t *testing
 	t.Parallel()
 	service, uploads, repository := mailUploadService(t, allowAuthorizer{})
 	repository.template.Variables = append(repository.template.Variables, field.Definition{
-		Key: "logo", Type: field.TypeFile, Label: "Logo",
-		Options: field.FileOptions{Disk: "mail-private", VirtualPath: "templates/welcome", SettingsCode: "attachment", MIMETypes: []string{"image/png"}},
+		Key: "logo", Type: field.TypeMedia, Label: "Logo",
+		Options: field.MediaOptions{Disk: "mail-private", VirtualPath: "templates/welcome", SettingsCode: "attachment", MIMETypes: []string{"image/png"}},
 	})
 	png := []byte("\x89PNG\r\n\x1a\ntrusted png bytes")
 	created, err := service.UploadVariableFile(context.Background(), security.User(9), 3, []string{"logo"}, "logo.png", bytes.NewReader(png))
@@ -106,7 +107,7 @@ func TestUploadVariableFileUsesTemplateDiskAndSniffsMIMEBeforeStorage(t *testing
 		t.Fatalf("stored bytes differ: got %q", uploads.content)
 	}
 
-	repository.template.Variables[3].Options = field.FileOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "attachment", MIMETypes: []string{"application/pdf"}}
+	repository.template.Variables[3].Options = field.MediaOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "attachment", MIMETypes: []string{"application/pdf"}}
 	uploads.folderCalls = 0
 	_, err = service.UploadVariableFile(context.Background(), security.User(9), 3, []string{"invoice"}, "invoice.pdf", strings.NewReader("plain text masquerading as pdf"))
 	var validation field.ValidationErrors
@@ -115,6 +116,54 @@ func TestUploadVariableFileUsesTemplateDiskAndSniffsMIMEBeforeStorage(t *testing
 	}
 	if uploads.folderCalls != 0 {
 		t.Fatalf("rejected MIME touched storage %d times", uploads.folderCalls)
+	}
+}
+
+func TestUploadStaticAttachmentUsesTrustedOptionsAndRejectsMIMEBeforeStorage(t *testing.T) {
+	t.Parallel()
+	service, uploads, _ := mailUploadService(t, allowAuthorizer{})
+	png := []byte("\x89PNG\r\n\x1a\ntrusted png bytes")
+	created, err := service.UploadStaticAttachmentFile(context.Background(), security.User(9), "logo.png", bytes.NewReader(png))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ID != 77 || uploads.disk != "mail-private" || uploads.path != "templates/attachments" || uploads.input.Storage != "mail-private" {
+		t.Fatalf("static upload target = %#v, disk=%q path=%q", created, uploads.disk, uploads.path)
+	}
+	if !bytes.Equal(uploads.content, png) {
+		t.Fatalf("stored bytes differ: got %q", uploads.content)
+	}
+
+	uploads.folderCalls = 0
+	_, err = service.UploadStaticAttachmentFile(context.Background(), security.User(9), "file.txt", strings.NewReader("plain text"))
+	var validation field.ValidationErrors
+	if !errors.As(err, &validation) && !errors.Is(err, ErrInvalid) {
+		t.Fatalf("disallowed MIME error = %v", err)
+	}
+	if uploads.folderCalls != 0 {
+		t.Fatalf("rejected MIME touched storage %d times", uploads.folderCalls)
+	}
+}
+
+func TestMailStaticAttachmentUploadHTTPUsesTrustedTarget(t *testing.T) {
+	t.Parallel()
+	service, uploads, _ := mailUploadService(t, allowAuthorizer{})
+	handler, err := NewHTTPHandler(service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := chi.NewRouter()
+	router.Mount("/api/sites/{siteID}/mail", handler)
+
+	request, contentType := multipartUploadRequest(t, nil, "\x89PNG\r\n\x1a\nbytes")
+	response := httptest.NewRecorder()
+	request = request.WithContext(httptransport.WithActor(request.Context(), security.User(9)))
+	router.ServeHTTP(response, requestWithPath(request, "/api/sites/5/mail/attachments/files", contentType))
+	if response.Code != http.StatusCreated || !strings.Contains(response.Body.String(), `"kind":"file"`) || !strings.Contains(response.Body.String(), `"id":77`) || !strings.Contains(response.Body.String(), `"storage":"mail-private"`) {
+		t.Fatalf("upload response = %d, %s", response.Code, response.Body.String())
+	}
+	if uploads.folderCalls != 1 || uploads.path != "templates/attachments" {
+		t.Fatalf("trusted target reached storage unexpectedly: %#v", uploads)
 	}
 }
 
@@ -137,8 +186,8 @@ func TestMailVariableUploadHTTPRejectsStorageOverridesAndReturnsCoreFileShape(t 
 	t.Parallel()
 	service, uploads, repository := mailUploadService(t, allowAuthorizer{})
 	repository.template.Variables = append(repository.template.Variables, field.Definition{
-		Key: "logo", Type: field.TypeFile, Label: "Logo",
-		Options: field.FileOptions{Disk: "mail-private", VirtualPath: "templates/welcome", SettingsCode: "attachment", MIMETypes: []string{"image/png"}},
+		Key: "logo", Type: field.TypeMedia, Label: "Logo",
+		Options: field.MediaOptions{Disk: "mail-private", VirtualPath: "templates/welcome", SettingsCode: "attachment", MIMETypes: []string{"image/png"}},
 	})
 	handler, err := NewHTTPHandler(service)
 	if err != nil {
@@ -171,13 +220,15 @@ func multipartUploadRequest(t *testing.T, target map[string]string, content stri
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	targetJSON := `{"field_path":` + target["field_path"]
-	if disk, exists := target["disk"]; exists {
-		targetJSON += `,"disk":"` + disk + `"`
-	}
-	targetJSON += `}`
-	if err := writer.WriteField("target", targetJSON); err != nil {
-		t.Fatal(err)
+	if target != nil {
+		targetJSON := `{"field_path":` + target["field_path"]
+		if disk, exists := target["disk"]; exists {
+			targetJSON += `,"disk":"` + disk + `"`
+		}
+		targetJSON += `}`
+		if err := writer.WriteField("target", targetJSON); err != nil {
+			t.Fatal(err)
+		}
 	}
 	part, err := writer.CreateFormFile("file", "logo.png")
 	if err != nil {

@@ -26,7 +26,7 @@ func bindingRuntime(t *testing.T, definitions []field.Definition) *Runtime {
 
 func TestStoredWidgetCanRenderAfterExplicitRequiredFileRemoval(t *testing.T) {
 	runtime := bindingRuntime(t, []field.Definition{
-		{Key: "icon", Label: "Icon", Type: field.TypeFile, Required: true, Options: field.FileOptions{Disk: "public", VirtualPath: "icons", SettingsCode: "icon"}},
+		{Key: "icon", Label: "Icon", Type: field.TypeMedia, Required: true, Options: field.MediaOptions{Disk: "public", VirtualPath: "icons", SettingsCode: "icon"}},
 		{Key: "title", Label: "Title", Type: field.TypeString, Required: true},
 	})
 	params := map[string]any{"title": "Still required"}
@@ -49,8 +49,8 @@ func TestParamBindingsPreserveWholeTypedValues(t *testing.T) {
 	definitions := []field.Definition{
 		{Key: "text", Label: "Text", Type: field.TypeString},
 		{Key: "number", Label: "Number", Type: field.TypeInteger},
-		{Key: "file", Label: "File", Type: field.TypeFile, Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "file"}},
-		{Key: "media", Label: "Media", Type: field.TypeMedia},
+		{Key: "file", Label: "File", Type: field.TypeMedia, Options: field.MediaOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "file"}},
+		{Key: "media", Label: "Media", Type: field.TypeMedia, Options: field.MediaOptions{Disk: "public", VirtualPath: "images", SettingsCode: "image"}},
 		{Key: "list", Label: "List", Type: field.TypeString, Options: field.StringOptions{Multiple: true}},
 		{Key: "json", Label: "JSON", Type: field.TypeJSON},
 		{Key: "rows", Label: "Rows", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: []field.Definition{{Key: "name", Label: "Name", Type: field.TypeString}}}},

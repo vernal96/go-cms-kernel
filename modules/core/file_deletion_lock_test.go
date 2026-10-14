@@ -138,7 +138,7 @@ func newSiteDeletionTest(t *testing.T, access *deletionSiteAccess) (*MediaFileDe
 		t.Fatal(err)
 	}
 	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "delete", Modules: []kernel.Module{deletionFieldsModule{}}, Params: []field.Definition{
-		{Key: "icon", Label: "Icon", Type: field.TypeFile, Required: true, Options: field.FileOptions{Disk: "public", VirtualPath: "icons", SettingsCode: "icon"}},
+		{Key: "icon", Label: "Icon", Type: field.TypeMedia, Required: true, Options: field.MediaOptions{Disk: "public", VirtualPath: "icons", SettingsCode: "icon"}},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -155,7 +155,7 @@ func newSiteDeletionTest(t *testing.T, access *deletionSiteAccess) (*MediaFileDe
 	if err := catalog.Reload(ctx); err != nil {
 		t.Fatal(err)
 	}
-	ref := media.FileOccurrence{OwnerKind: "site", OwnerID: 1, SiteID: 1, Container: "settings", Path: []string{"icon"}, MediaID: 1, Target: field.ReferenceFile}
+	ref := media.FileOccurrence{OwnerKind: "site", OwnerID: 1, SiteID: 1, Container: "settings", Path: []string{"icon"}, MediaID: 1, Target: field.ReferenceMedia}
 	repository := &deletionOwnerRepository{refs: []media.FileOccurrence{ref}, current: &ref}
 	service := &MediaFileDeletions{repository: repository, services: &Services{Sites: catalog, Resources: &resource.Service{}, cachePolicy: policy}, authorizer: access}
 	return service, catalog, repository
@@ -246,7 +246,7 @@ func TestSiteFileDeletionAbortsPreparationOnRaceAndGuardFailure(t *testing.T) {
 				ref.Container = "other"
 				repository.current = &ref
 			case "changed target":
-				ref.Target = field.ReferenceMedia
+				ref.Target = "unsupported"
 				repository.current = &ref
 			case "new site owner":
 				repository.refs = nil

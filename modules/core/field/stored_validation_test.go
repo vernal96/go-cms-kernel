@@ -9,7 +9,7 @@ import (
 func TestStoredFileRemovalDoesNotRelaxInteractiveOrOtherRequiredFields(t *testing.T) {
 	schema, err := field.CompilePersistent([]field.Definition{{Key: "rows", Type: field.TypeRepeater, Label: "Rows", Options: field.RepeaterOptions{Fields: []field.Definition{
 		{Key: "title", Type: field.TypeString, Label: "Title", Required: true},
-		{Key: "icon", Type: field.TypeFile, Label: "Icon", Required: true, Options: field.FileOptions{Disk: "public", VirtualPath: "icons", SettingsCode: "icon"}},
+		{Key: "icon", Type: field.TypeMedia, Label: "Icon", Required: true, Options: field.MediaOptions{Disk: "public", VirtualPath: "icons", SettingsCode: "icon"}},
 	}}}}, standardResolver())
 	if err != nil {
 		t.Fatal(err)

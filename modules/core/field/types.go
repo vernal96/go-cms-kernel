@@ -26,13 +26,12 @@ func StandardTypes() Types {
 		DescribedType{Type: stringType{code: TypeTextarea}, Presentation: Metadata{Label: "Многострочный текст", Editor: "textarea"}},
 		DescribedType{Type: stringType{code: TypeEmail}, Presentation: Metadata{Label: "Email", Editor: "email"}},
 		DescribedType{Type: phoneType{}, Presentation: Metadata{Label: "Телефон", Editor: "phone"}},
-		DescribedType{Type: FileType(nil), Presentation: Metadata{Label: "Файл из библиотеки", Editor: "file", Options: []ConfigField{{Key: "disk", Label: "Диск", Type: TypeString, Required: true}, {Key: "virtual_path", Label: "Путь загрузки", Type: TypeString, Required: true}, {Key: "settings_code", Label: "Настройки медиа", Type: TypeString, Required: true}, {Key: "mime_types", Label: "MIME-типы", Type: TypeJSON, Editor: "core.string-list"}}}},
-		DescribedType{Type: mediaType{}, Presentation: Metadata{Label: "Медиа (изображение)", Editor: "media"}},
+		MediaType(nil),
 		DescribedType{Type: jsonType{}, Presentation: Metadata{Label: "JSON", Editor: "json"}},
 	}
 	for i, item := range types {
 		switch item.Code() {
-		case TypeString, TypeTextarea, TypeEmail, TypeInteger, TypeFloat, TypePhone, TypeFile, TypeMedia, TypeSelect:
+		case TypeString, TypeTextarea, TypeEmail, TypeInteger, TypeFloat, TypePhone, TypeSelect:
 			described := item.(DescribedType)
 			described.Presentation.Options = append(described.Presentation.Options,
 				ConfigField{Key: "multiple", Label: "Несколько значений", Type: TypeCheckbox})
@@ -99,24 +98,24 @@ func cloneJSONValue(value any) any {
 	}
 }
 
-type fileType struct{ settings map[string][]Definition }
+type mediaType struct{ settings map[string][]Definition }
 
-// FileType binds field media settings to the file field compiler.
-func FileType(settings map[string][]Definition) Type {
-	if settings == nil {
-		return fileType{}
+// MediaType binds field media settings to the file field compiler.
+func MediaType(settings map[string][]Definition) Type {
+	var copy map[string][]Definition
+	if settings != nil {
+		copy = make(map[string][]Definition, len(settings))
+		for code, definitions := range settings {
+			copy[code] = CloneDefinitions(definitions)
+		}
 	}
-	copy := make(map[string][]Definition, len(settings))
-	for code, definitions := range settings {
-		copy[code] = CloneDefinitions(definitions)
-	}
-	return fileType{settings: copy}
+	return DescribedType{Type: mediaType{settings: copy}, Presentation: Metadata{Label: "Медиа", Editor: "media", Options: []ConfigField{{Key: "disk", Label: "Диск", Type: TypeString, Required: true}, {Key: "virtual_path", Label: "Путь загрузки", Type: TypeString, Required: true}, {Key: "settings_code", Label: "Настройки медиа", Type: TypeString, Required: true}, {Key: "mime_types", Label: "MIME-типы", Type: TypeJSON, Editor: "core.string-list"}, {Key: "multiple", Label: "Несколько значений", Type: TypeCheckbox}}}}
 }
 
-func (fileType) Code() TypeCode { return TypeFile }
+func (mediaType) Code() TypeCode { return TypeMedia }
 
-func (t fileType) Compile(ctx CompileContext, options any) (ValueType, error) {
-	config, err := FileOptionsValue(options)
+func (t mediaType) Compile(ctx CompileContext, options any) (ValueType, error) {
+	config, err := DecodeOptions[MediaOptions](options)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +146,7 @@ func (t fileType) Compile(ctx CompileContext, options any) (ValueType, error) {
 		}
 		seenMIME[mimeType] = struct{}{}
 	}
-	nested, err := ctx.EnterComposite(TypeFile)
+	nested, err := ctx.EnterComposite(TypeMedia)
 	if err != nil {
 		return nil, err
 	}
@@ -162,53 +161,42 @@ func (t fileType) Compile(ctx CompileContext, options any) (ValueType, error) {
 	if err != nil {
 		return nil, err
 	}
-	return withList(fileValue{options: config, fields: descriptors}, config.Multiple, false)
+	return withList(mediaValue{options: config, fields: descriptors}, config.Multiple, false)
 }
 
-type fileValue struct {
-	options FileOptions
+type mediaValue struct {
+	options MediaOptions
 	fields  []Descriptor
 }
 
-func (v fileValue) DescribeOptions() (any, error) {
+func (v mediaValue) DescribeOptions() (any, error) {
 	return struct {
-		FileOptions
+		MediaOptions
 		SettingsFields []Descriptor `json:"settings_fields,omitempty"`
 	}{v.options, v.fields}, nil
 }
 
-func (fileValue) StorageKind() StorageKind { return StorageReference }
-func (fileValue) Multiple() bool           { return false }
-func (fileValue) ReferenceTarget() string  { return ReferenceFile }
-func (fileValue) FileField() bool          { return true }
+func (mediaValue) StorageKind() StorageKind { return StorageReference }
+func (mediaValue) Multiple() bool           { return false }
+func (mediaValue) ReferenceTarget() string  { return ReferenceMedia }
 
-func (fileValue) Normalize(value any) (any, error) {
+func (mediaValue) Normalize(value any) (any, error) {
 	result, ok := normalizeInteger(value)
 	if !ok || result <= 0 {
-		return nil, fmt.Errorf("expected positive file id, got %T", value)
+		return nil, fmt.Errorf("expected positive media id, got %T", value)
 	}
 	return result, nil
 }
 
-func (fileValue) Empty(any) bool     { return false }
-func (fileValue) Validate(any) error { return nil }
-func (fileValue) Example() any       { return int64(1) }
+func (mediaValue) Empty(any) bool     { return false }
+func (mediaValue) Validate(any) error { return nil }
+func (mediaValue) Example() any       { return int64(1) }
 
-func FileOptionsValue(value any) (FileOptions, error) {
-	switch options := value.(type) {
-	case nil:
-		return FileOptions{}, nil
-	case FileOptions:
-		return options, nil
-	case *FileOptions:
-		if options != nil {
-			return *options, nil
-		}
-	}
-	return FileOptions{}, fmt.Errorf("got %T", value)
+func MediaOptionsValue(value any) (MediaOptions, error) {
+	return DecodeOptions[MediaOptions](value)
 }
 
-func FileMatches(options FileOptions, storage filesystem.Code, mimeType string) bool {
+func MediaMatches(options MediaOptions, storage filesystem.Code, mimeType string) bool {
 	if options.Disk != storage {
 		return false
 	}

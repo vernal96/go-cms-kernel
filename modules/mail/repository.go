@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/vernal96/go-cms-kernel/eventbus"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/security"
 )
@@ -28,4 +29,10 @@ type Repository interface {
 	HasActiveMessages(context.Context, site.ID) (bool, error)
 	Cleanup(context.Context, site.ID, time.Duration, int) (int64, error)
 	ActiveSpoolKeys(context.Context, site.ID, []string) (map[string]struct{}, error)
+}
+
+// FileOccurrenceCleaner lets the shared Media deletion transaction clear a
+// Mail template's saved static attachment before removing its Media object.
+type FileOccurrenceCleaner interface {
+	ClearFileOccurrence(context.Context, *security.UserID, media.FileOccurrence) (int64, error)
 }

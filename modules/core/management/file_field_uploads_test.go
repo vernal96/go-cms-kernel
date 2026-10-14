@@ -58,7 +58,12 @@ func (uploadDefinitionsModule) Widgets() []widget.Widget {
 }
 
 func uploadDefinitions() []field.Definition {
-	return []field.Definition{{Key: "asset", Label: "Asset", Type: field.TypeFile, Options: field.FileOptions{Disk: "trusted", VirtualPath: "trusted/exact/path", SettingsCode: "image", MIMETypes: []string{"image/png"}}}}
+	return []field.Definition{{Key: "asset", Label: "Asset", Type: field.TypeMedia, Options: field.MediaOptions{Disk: "trusted", VirtualPath: "trusted/exact/path", SettingsCode: "image", MIMETypes: []string{"image/png"}}}}
+}
+
+func uploadImageOptions() *field.MediaOptions {
+	options := uploadDefinitions()[0].Options.(field.MediaOptions)
+	return &options
 }
 
 func fieldUploadServices(t *testing.T) (*Files, *Sites, *Resources, *fieldUploadFiles) {
@@ -69,7 +74,8 @@ func fieldUploadServices(t *testing.T) (*Files, *Sites, *Resources, *fieldUpload
 		t.Fatal(err)
 	}
 	blueprint, err := factory.Compile(ctx, kernel.Profile{
-		Code: "settings", Params: uploadDefinitions(), Modules: []kernel.Module{uploadDefinitionsModule{}},
+		Settings: kernel.ProfileSettings{FileSystem: kernel.ProfileFileSystem{ResourceImage: uploadImageOptions()}},
+		Code:     "settings", Params: uploadDefinitions(), Modules: []kernel.Module{uploadDefinitionsModule{}},
 		Templates: []template.Definition{{Code: "page", Label: "Page", Fields: []field.Definition{{Key: "rows", Label: "Rows", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: uploadDefinitions()}}}}},
 	})
 	if err != nil {
@@ -94,6 +100,8 @@ func TestFieldUploadResolvesSiteResourceAndWidgetOwners(t *testing.T) {
 		{Owner: "site", SiteID: 7, ProfileCode: "settings", FieldPath: []string{"asset"}},
 		{Owner: "resource", SiteID: 7, TemplateCode: "page", FieldPath: []string{"rows", "0", "asset"}},
 		{Owner: "resource", SiteID: 7, ResourceID: 9, FieldPath: []string{"rows", "2", "asset"}},
+		{Owner: "resource_image", SiteID: 7, FieldPath: []string{"image_media_id"}},
+		{Owner: "resource_image", SiteID: 7, ResourceID: 9, FieldPath: []string{"image_media_id"}},
 		{Owner: "widget", SiteID: 7, WidgetCode: "core_asset", FieldPath: []string{"asset"}},
 		{Owner: "widget", SiteID: 7, ResourceID: 9, WidgetCode: "core_asset", FieldPath: []string{"asset"}},
 	} {
@@ -170,6 +178,10 @@ func TestFieldUploadHTTPRejectsOverridesSpoofedMIMEAndMissingAuthentication(t *t
 	}{
 		{`{"owner":"site","profile_code":"settings","field_path":["asset"]}`, "\x89PNG\r\n\x1a\n", "", security.User(1), 201},
 		{`{"owner":"site","profile_code":"settings","field_path":["asset"]}`, "plain text", "", security.User(1), 422},
+		{`{"owner":"resource_image","site_id":7,"field_path":["image_media_id"]}`, "\x89PNG\r\n\x1a\n", "", security.User(1), 201},
+		{`{"owner":"resource_image","site_id":7,"field_path":["image_media_id"]}`, "plain text", "", security.User(1), 422},
+		{`{"owner":"resource_image","site_id":7,"template_code":"page","field_path":["image_media_id"]}`, "\x89PNG\r\n\x1a\n", "", security.User(1), 422},
+		{`{"owner":"resource_image","site_id":7,"field_path":["asset"]}`, "\x89PNG\r\n\x1a\n", "", security.User(1), 422},
 		{`{"owner":"site","profile_code":"settings","field_path":["unknown"]}`, "\x89PNG\r\n\x1a\n", "", security.User(1), 422},
 		{`{"owner":"site","profile_code":"settings","field_path":["asset"],"disk":"untrusted"}`, "\x89PNG\r\n\x1a\n", "", security.User(1), 400},
 		{`{"owner":"site","profile_code":"settings","field_path":["asset"]}`, "\x89PNG\r\n\x1a\n", "folder_id", security.User(1), 400},

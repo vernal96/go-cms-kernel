@@ -17,7 +17,7 @@ func (s *Schema) withoutFileRequirements() *Schema {
 	}
 	result := &Schema{definitions: CloneDefinitions(s.definitions), fields: make(map[string]compiledField, len(s.fields))}
 	for key, item := range s.fields {
-		if item.definition.Type == TypeFile {
+		if item.definition.Type == TypeMedia {
 			item.required = false
 		}
 		item.valueType = storedValueType(item.valueType)

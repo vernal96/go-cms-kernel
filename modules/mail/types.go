@@ -7,6 +7,7 @@ import (
 
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/security"
 )
@@ -61,7 +62,7 @@ type AddressTemplate struct {
 
 type AttachmentTemplate struct {
 	Source           AttachmentSource `json:"source"`
-	FileID           *file.ID         `json:"file_id,omitempty"`
+	MediaID          *media.ID        `json:"media_id,omitempty"`
 	Variable         string           `json:"variable,omitempty"`
 	FilenameTemplate string           `json:"filename_template,omitempty"`
 }

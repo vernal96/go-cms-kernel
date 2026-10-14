@@ -47,7 +47,7 @@ func TestPostgresWidgetOccurrencesFollowDeleteTransferAndOwnerDelete(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	reference := field.Reference{Target: field.ReferenceFile, ID: int64(m.ID), Path: []string{"asset"}}
+	reference := field.Reference{Target: field.ReferenceMedia, ID: int64(m.ID), Path: []string{"asset"}}
 	createWidget := func(version int64) widget.Binding {
 		binding, err := db.Resources().(resource.WidgetRepository).CreateWidget(ctx, nil, owner.ID, version, widget.Binding{
 			Code: "fields_tile", Area: "body", Params: map[string]any{"asset": int64(m.ID)}, References: []field.Reference{reference},

@@ -110,11 +110,11 @@ func TestRendererExcludesFileFieldsButKeepsScalarFields(t *testing.T) {
 	renderer, err := NewRenderer(kernel.Profile{
 		Params: []field.Definition{
 			{Key: "company", Type: field.TypeString, Public: true},
-			{Key: "logo", Type: field.TypeFile, Public: true},
+			{Key: "logo", Type: field.TypeMedia, Public: true},
 		},
 		Templates: []template.Definition{{Fields: []field.Definition{
 			{Key: "summary", Type: field.TypeString},
-			{Key: "hero", Type: field.TypeFile},
+			{Key: "hero", Type: field.TypeMedia},
 		}}},
 	}, 1000, 1000)
 	if err != nil {

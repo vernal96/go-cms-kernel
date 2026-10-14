@@ -19,6 +19,14 @@ func (r *Repository) ReadFileOccurrence(ctx context.Context, ref media.FileOccur
 		return media.FileOccurrenceValues{}, err
 	}
 	var result media.FileOccurrenceValues
+	if ref.Container == "image" {
+		var id int64
+		if err := tx.QueryRow(ctx, `SELECT image_media_id FROM core.resources WHERE id=$1 AND site_id=$2 UNION ALL SELECT image_media_id FROM core.library_items WHERE id=$1 AND site_id=$2`, ref.OwnerID, ref.SiteID).Scan(&id); err != nil {
+			return result, err
+		}
+		result.Values = map[string]any{"image_media_id": id}
+		return result, nil
+	}
 	if strings.HasPrefix(ref.Container, "fields:") {
 		err := tx.QueryRow(ctx, `SELECT template FROM core.resources WHERE id=$1 AND site_id=$2 UNION ALL SELECT template FROM core.library_items WHERE id=$1 AND site_id=$2`, ref.OwnerID, ref.SiteID).Scan(&result.Code)
 		if err != nil {

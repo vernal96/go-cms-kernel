@@ -215,9 +215,6 @@ func (s *Schema) StoredValues(values map[string]any) ([]StoredValue, error) {
 			if reference, ok := storage.(ReferenceValueType); ok {
 				stored.ReferenceTarget = reference.ReferenceTarget()
 			}
-			if fileField, ok := storage.(interface{ FileField() bool }); ok {
-				stored.FileField = fileField.FileField()
-			}
 			result = append(result, stored)
 			continue
 		}
@@ -279,7 +276,7 @@ func (s *Schema) Storage(key string) (StorageMetadata, bool) {
 type FileReference struct {
 	Key     string
 	ID      int64
-	Options FileOptions
+	Options MediaOptions
 }
 
 func (s *Schema) FileReferences(values map[string]any) ([]FileReference, error) {
@@ -292,7 +289,7 @@ func (s *Schema) FileReferences(values map[string]any) ([]FileReference, error) 
 	}
 	result := make([]FileReference, 0)
 	for _, ref := range refs {
-		if ref.Target == ReferenceFile {
+		if ref.Target == ReferenceMedia {
 			result = append(result, FileReference{Key: ref.Key, ID: ref.ID, Options: ref.Options})
 		}
 	}

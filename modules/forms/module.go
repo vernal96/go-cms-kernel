@@ -28,7 +28,7 @@ import (
 
 type Config struct {
 	Filesystems            []filesystem.Binding
-	ElementImage           field.FileOptions
+	ElementImage           field.MediaOptions
 	ActionMaxAttempts      int
 	Public                 PublicLimits
 	SpoolEnabled           bool
@@ -261,7 +261,7 @@ func normalizeConfig(config Config) (Config, error) {
 	if err := config.Public.Validate(); err != nil {
 		return Config{}, err
 	}
-	if _, err := field.Compile([]field.Definition{{Key: "file_id", Type: field.TypeFile, Label: "Изображение", Required: true, Options: config.ElementImage}}, field.StandardTypes()); err != nil {
+	if _, err := field.Compile([]field.Definition{{Key: "media_id", Type: field.TypeMedia, Label: "Изображение", Required: true, Options: config.ElementImage}}, field.StandardTypes()); err != nil {
 		return Config{}, fmt.Errorf("Forms element image file options are invalid: %w", err)
 	}
 	config.DefaultCaptchaProvider = strings.TrimSpace(config.DefaultCaptchaProvider)
@@ -317,7 +317,7 @@ func (m module) Validate(ctx context.Context, environment kernel.ModuleValidatio
 	if _, exists := environment.Disk(config.ElementImage.Disk); !exists {
 		return fmt.Errorf("Forms element image disk %q is unavailable", config.ElementImage.Disk)
 	}
-	if _, err := field.Compile([]field.Definition{{Key: "file_id", Type: field.TypeFile, Label: "Изображение", Required: true, Options: config.ElementImage}}, environment.Registry()); err != nil {
+	if _, err := field.Compile([]field.Definition{{Key: "media_id", Type: field.TypeMedia, Label: "Изображение", Required: true, Options: config.ElementImage}}, environment.Registry()); err != nil {
 		return fmt.Errorf("Forms element image file options are invalid: %w", err)
 	}
 	for _, binding := range config.Filesystems {

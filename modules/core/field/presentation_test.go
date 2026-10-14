@@ -21,7 +21,7 @@ func TestFieldDefinitionsSerializeAllOptions(t *testing.T) {
 		{Key: "textarea", Type: field.TypeTextarea, Label: "Textarea"},
 		{Key: "email", Type: field.TypeEmail, Label: "Email"},
 		{Key: "phone", Type: field.TypePhone, Label: "Phone", Options: field.PhoneOptions{}},
-		{Key: "asset", Type: field.TypeFile, Label: "Asset", Options: field.FileOptions{Disk: "public", VirtualPath: "site/assets", SettingsCode: "image", MIMETypes: []string{"image/*"}}},
+		{Key: "asset", Type: field.TypeMedia, Label: "Asset", Options: field.MediaOptions{Disk: "public", VirtualPath: "site/assets", SettingsCode: "image", MIMETypes: []string{"image/*"}}},
 		{Key: "html", Type: field.TypeString, Label: "HTML", Editor: "html", VisibleWhen: &field.VisibleWhen{Field: "enabled", Value: true}},
 	}
 

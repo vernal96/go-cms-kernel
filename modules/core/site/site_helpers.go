@@ -103,7 +103,7 @@ func (c *Catalog) validateFileReferences(
 			return fmt.Errorf("file field %q media: %w", reference.Key, err)
 		}
 		item := resolved.File
-		if !field.FileMatches(reference.Options, item.Storage, item.MIMEType) {
+		if !field.MediaMatches(reference.Options, item.Storage, item.MIMEType) {
 			return fmt.Errorf(
 				"file field %q rejects file with MIME type %q in disk %q; allowed MIME types: %v; required disk: %q: %w",
 				reference.Key,

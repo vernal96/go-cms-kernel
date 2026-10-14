@@ -26,7 +26,7 @@ func TestPreparedFileRemovalPublishesOnlyAfterPersistenceAndKeepsRequiredFieldRe
 	if err != nil {
 		t.Fatal(err)
 	}
-	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "delete", Modules: []kernel.Module{settingsModule{transitionModule{code: "fields", recorder: &transitionRecorder{}}}}, Params: []field.Definition{{Key: "rows", Type: field.TypeRepeater, Label: "Rows", Options: field.RepeaterOptions{Fields: []field.Definition{{Key: "icon", Type: field.TypeFile, Label: "Icon", Required: true, Options: field.FileOptions{Disk: "public", VirtualPath: "icons", SettingsCode: "icon"}}}}}}})
+	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "delete", Modules: []kernel.Module{settingsModule{transitionModule{code: "fields", recorder: &transitionRecorder{}}}}, Params: []field.Definition{{Key: "rows", Type: field.TypeRepeater, Label: "Rows", Options: field.RepeaterOptions{Fields: []field.Definition{{Key: "icon", Type: field.TypeMedia, Label: "Icon", Required: true, Options: field.MediaOptions{Disk: "public", VirtualPath: "icons", SettingsCode: "icon"}}}}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestPreparedFileRemovalPublishesOnlyAfterPersistenceAndKeepsRequiredFieldRe
 		t.Fatal(err)
 	}
 	before, _ := catalog.RuntimeByID(1)
-	ref := media.FileOccurrence{OwnerKind: "site", OwnerID: 1, SiteID: 1, Container: "settings", Path: []string{"rows", "0", "icon"}, MediaID: 1, Target: field.ReferenceFile}
+	ref := media.FileOccurrence{OwnerKind: "site", OwnerID: 1, SiteID: 1, Container: "settings", Path: []string{"rows", "0", "icon"}, MediaID: 1, Target: field.ReferenceMedia}
 	prepared, err := catalog.PrepareFileOccurrence(ctx, security.System(), ref)
 	if err != nil {
 		t.Fatal(err)

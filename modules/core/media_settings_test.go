@@ -8,7 +8,7 @@ import (
 )
 
 func TestMediaSettingsDeclarationsAreSnapshots(t *testing.T) {
-	options := &field.MediaOptions{SettingsCode: "image"}
+	options := &field.MediaOptions{Disk: "public", VirtualPath: "images", SettingsCode: "image"}
 	defs := []field.Definition{{Key: "photo", Label: "Photo", Type: field.TypeMedia, Options: options}}
 	cloned := field.CloneDefinitions(defs)
 	options.SettingsCode = "changed"

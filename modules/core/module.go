@@ -330,8 +330,6 @@ func (m module) Registry() (kernel.ModuleRegistry, error) {
 	registry := m.baseRegistry()
 	for i, t := range registry.FieldTypes {
 		switch t.Code() {
-		case field.TypeFile:
-			registry.FieldTypes[i] = field.FileType(settings)
 		case field.TypeMedia:
 			registry.FieldTypes[i] = field.MediaType(settings)
 		}
@@ -384,8 +382,10 @@ func (m module) Validate(ctx context.Context, environment kernel.ModuleValidatio
 	if _, err := normalizeModuleConfig(m.config); err != nil {
 		return err
 	}
-	_, err = media.CompileSettings(m.config.MediaSettings, environment.Registry())
-	return err
+	if _, err := media.CompileSettings(m.config.MediaSettings, environment.Registry()); err != nil {
+		return err
+	}
+	return nil
 }
 
 func validateModuleDatabase(database Database) error {

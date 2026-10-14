@@ -7,17 +7,15 @@ import (
 	"strings"
 )
 
-const ReferenceFile = "file"
-
 // Reference describes an entity contained in a normalized value. Path contains
 // JSON object keys/array indices relative to that value; an empty path addresses
 // a scalar. Key is the logical field path when collected by a Schema.
 type Reference struct {
-	Key     string      `json:"key,omitempty"`
-	Path    []string    `json:"path,omitempty"`
-	Target  string      `json:"target"`
-	ID      int64       `json:"id"`
-	Options FileOptions `json:"options,omitempty"`
+	Key     string       `json:"key,omitempty"`
+	Path    []string     `json:"path,omitempty"`
+	Target  string       `json:"target"`
+	ID      int64        `json:"id"`
+	Options MediaOptions `json:"options,omitempty"`
 }
 
 // ReferenceCollector lets scalar, composite and contributed value types expose
@@ -26,19 +24,12 @@ type ReferenceCollector interface {
 	References(value any) ([]Reference, error)
 }
 
-func (v fileValue) References(value any) ([]Reference, error) {
-	normalized, err := v.Normalize(value)
-	if err != nil {
-		return nil, err
-	}
-	return []Reference{{Target: ReferenceFile, ID: normalized.(int64), Options: cloneOptions(v.options).(FileOptions)}}, nil
-}
 func (v mediaValue) References(value any) ([]Reference, error) {
 	normalized, err := v.Normalize(value)
 	if err != nil {
 		return nil, err
 	}
-	return []Reference{{Target: ReferenceMedia, ID: normalized.(int64)}}, nil
+	return []Reference{{Target: ReferenceMedia, ID: normalized.(int64), Options: cloneOptions(v.options).(MediaOptions)}}, nil
 }
 func (s *Schema) References(values map[string]any) ([]Reference, error) {
 	if s == nil {
@@ -87,14 +78,14 @@ func ReferenceKey(path []string) string {
 func (v StoredValue) MediaReferences() ([]Reference, error) {
 	if v.ReferenceTarget != "" {
 		id, ok := v.Value.(int64)
-		if (v.ReferenceTarget != ReferenceMedia && v.ReferenceTarget != ReferenceFile) || v.Kind != StorageReference || !ok || id <= 0 {
+		if v.ReferenceTarget != ReferenceMedia || v.Kind != StorageReference || !ok || id <= 0 {
 			return nil, fmt.Errorf("invalid reference field %q", v.Key)
 		}
 		return []Reference{{Target: v.ReferenceTarget, ID: id}}, nil
 	}
 	refs := []Reference{}
 	for _, ref := range v.References {
-		if ref.Target != ReferenceMedia && ref.Target != ReferenceFile {
+		if ref.Target != ReferenceMedia {
 			continue
 		}
 		if ref.ID <= 0 || len(ref.Path) == 0 || v.Kind != StorageJSON {

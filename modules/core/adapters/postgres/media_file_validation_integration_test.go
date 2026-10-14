@@ -33,15 +33,25 @@ func TestPostgresMediaUpdateValidatesNormalizedOccurrencesWithoutImageMisclassif
 	if err != nil {
 		t.Fatal(err)
 	}
+	medias := []media.Media{m}
+	for len(medias) < 4 {
+		selection, err := db.Media().Create(ctx, nil, media.Media{FileID: f.ID, Params: map[string]any{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		medias = append(medias, selection)
+	}
 	t.Cleanup(func() {
 		cleanup := context.Background()
 		conn.Pool().Exec(cleanup, `DELETE FROM core.file_field_references WHERE (owner_kind='site' AND owner_id=$1) OR (owner_kind='resource' AND owner_id IN(SELECT id FROM core.resource_entities WHERE site_id=$1))`, sid)
 		conn.Pool().Exec(cleanup, `DELETE FROM core.sites WHERE id=$1`, sid)
-		conn.Pool().Exec(cleanup, `DELETE FROM core.media WHERE id=$1`, m.ID)
+		for _, selection := range medias {
+			conn.Pool().Exec(cleanup, `DELETE FROM core.media WHERE id=$1`, selection.ID)
+		}
 		conn.Pool().Exec(cleanup, `DELETE FROM core.files WHERE id=$1`, f.ID)
 	})
-	options := field.FileOptions{Disk: "public", VirtualPath: "documents", SettingsCode: "document", MIMETypes: []string{"application/pdf"}}
-	rows := []field.Definition{{Key: "rows", Label: "Rows", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: []field.Definition{{Key: "icon", Label: "Icon", Type: field.TypeFile, Options: options}}}}}
+	options := field.MediaOptions{Disk: "public", VirtualPath: "documents", SettingsCode: "document", MIMETypes: []string{"application/pdf"}}
+	rows := []field.Definition{{Key: "rows", Label: "Rows", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: []field.Definition{{Key: "icon", Label: "Icon", Type: field.TypeMedia, Options: options}}}}}
 	rowSchema, err := field.CompilePersistent(rows, field.StandardTypes())
 	if err != nil {
 		t.Fatal(err)
@@ -59,11 +69,11 @@ func TestPostgresMediaUpdateValidatesNormalizedOccurrencesWithoutImageMisclassif
 		t.Fatal(err)
 	}
 	options.Multiple = true
-	docSchema, err := field.CompilePersistent([]field.Definition{{Key: "documents", Label: "Documents", Type: field.TypeFile, Options: options}}, field.StandardTypes())
+	docSchema, err := field.CompilePersistent([]field.Definition{{Key: "documents", Label: "Documents", Type: field.TypeMedia, Options: options}}, field.StandardTypes())
 	if err != nil {
 		t.Fatal(err)
 	}
-	docValues, err := docSchema.Validate(map[string]any{"documents": []any{int64(m.ID), int64(m.ID)}})
+	docValues, err := docSchema.Validate(map[string]any{"documents": []any{int64(medias[1].ID), int64(medias[2].ID)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,22 +87,27 @@ func TestPostgresMediaUpdateValidatesNormalizedOccurrencesWithoutImageMisclassif
 	if err != nil {
 		t.Fatal(err)
 	}
+	widgetValues, err := rowSchema.Validate(map[string]any{"rows": []any{map[string]any{"icon": int64(medias[3].ID)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	widgetRefs, err := rowSchema.References(widgetValues)
+	if err != nil {
+		t.Fatal(err)
+	}
 	binding, err := db.Resources().(resource.WidgetRepository).CreateWidget(ctx, nil, owner.ID, owner.Version, widget.Binding{
-		Code: "fields_tile", Area: "body", Params: rowValues, References: rowRefs,
+		Code: "fields_tile", Area: "body", Params: widgetValues, References: widgetRefs,
 		Presentation: widget.Presentation{Columns: 12, Enabled: true},
 	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	title := "PDF metadata"
-	next := media.Clone(m)
-	next.Title = &title
 	validate := func(target file.File) media.ValidateUsages {
 		return func(ctx context.Context, usages []media.Usage) error {
-			if len(usages) != 4 {
-				t.Fatalf("want site, two selections and widget, got %#v", usages)
+			if len(usages) != 1 {
+				t.Fatalf("want a distinct occurrence per selection, got %#v", usages)
 			}
-			seenWidget := false
 			for _, usage := range usages {
 				if usage.Kind != media.FileFieldUsage || usage.Occurrence == nil {
 					t.Fatalf("PDF FileField misclassified: %#v", usage)
@@ -103,7 +118,7 @@ func TestPostgresMediaUpdateValidatesNormalizedOccurrencesWithoutImageMisclassif
 				if ref.OwnerKind == "site" {
 					reader, schema = db.Sites().(media.FileOccurrenceReader), rowSchema
 				} else if ref.Container == fmt.Sprintf("widget:%d", binding.ID) {
-					schema, seenWidget = rowSchema, true
+					schema = rowSchema
 				}
 				values, err := reader.ReadFileOccurrence(ctx, ref)
 				if err != nil {
@@ -117,25 +132,26 @@ func TestPostgresMediaUpdateValidatesNormalizedOccurrencesWithoutImageMisclassif
 					return err
 				}
 			}
-			if !seenWidget {
-				t.Fatal("widget occurrence not enumerated")
-			}
 			return nil
 		}
 	}
-	updated, err := db.Media().Update(ctx, nil, next, validate(f))
-	if err != nil || updated.Title == nil || *updated.Title != title {
-		t.Fatalf("PDF metadata update: %+v, %v", updated, err)
-	}
-	for _, target := range []file.File{{ID: f.ID, Storage: "private", MIMEType: "application/pdf"}, {ID: f.ID, Storage: "public", MIMEType: "image/png"}} {
-		next.Title = nil
-		var validation field.ValidationErrors
-		if _, err := db.Media().Update(ctx, nil, next, validate(target)); !errors.As(err, &validation) {
-			t.Fatalf("incompatible file passed guard: %v", err)
+	for _, selection := range medias {
+		next := media.Clone(selection)
+		next.Title = &title
+		updated, err := db.Media().Update(ctx, nil, next, validate(f))
+		if err != nil || updated.Title == nil || *updated.Title != title {
+			t.Fatalf("PDF metadata update: %+v, %v", updated, err)
 		}
-		current, err := db.Media().ByID(ctx, m.ID)
-		if err != nil || current.Title == nil || *current.Title != title || !current.UpdatedAt.Equal(updated.UpdatedAt) {
-			t.Fatalf("rejected update mutated Media: %+v, %v", current, err)
+		for _, target := range []file.File{{ID: f.ID, Storage: "private", MIMEType: "application/pdf"}, {ID: f.ID, Storage: "public", MIMEType: "image/png"}} {
+			next.Title = nil
+			var validation field.ValidationErrors
+			if _, err := db.Media().Update(ctx, nil, next, validate(target)); !errors.As(err, &validation) {
+				t.Fatalf("incompatible file passed guard: %v", err)
+			}
+			current, err := db.Media().ByID(ctx, selection.ID)
+			if err != nil || current.Title == nil || *current.Title != title || !current.UpdatedAt.Equal(updated.UpdatedAt) {
+				t.Fatalf("rejected update mutated Media: %+v, %v", current, err)
+			}
 		}
 	}
 }

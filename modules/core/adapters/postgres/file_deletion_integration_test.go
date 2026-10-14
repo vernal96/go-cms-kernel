@@ -60,7 +60,7 @@ func TestPostgresMediaFileDeletionGuardsAndDurableRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, kind := range []string{"site", "resource", "forms.result"} {
-		if _, err := conn.Pool().Exec(ctx, `INSERT INTO core.media_field_occurrences(owner_kind,owner_id,site_id,container,value_path,media_id,reference_target)VALUES($1,$2,$2,'config',ARRAY['icon'],$3,'media')`, kind, sid, m.ID); err != nil {
+		if _, err := conn.Pool().Exec(ctx, `INSERT INTO core.media_field_occurrences(owner_kind,owner_id,site_id,container,value_path,media_id,reference_target)VALUES($1,$2,$2,'config',ARRAY['icon'],$3,'media'),($1,$2,$2,'config',ARRAY['second'],$3,'media')`, kind, sid, m.ID); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := repo.DeleteMediaFile(ctx, nil, input, prepare); !errors.Is(err, media.ErrFileInUse) {
@@ -82,7 +82,7 @@ func TestPostgresMediaFileDeletionGuardsAndDurableRetry(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := conn.Pool().Exec(ctx, `INSERT INTO core.media_field_occurrences(owner_kind,owner_id,site_id,container,value_path,media_id,reference_target)VALUES('site',$1,$1,'settings',ARRAY['first'],$2,'file'),('site',$1,$1,'settings',ARRAY['second'],$2,'file')`, sid, m.ID); err != nil {
+	if _, err := conn.Pool().Exec(ctx, `INSERT INTO core.media_field_occurrences(owner_kind,owner_id,site_id,container,value_path,media_id,reference_target)VALUES('site',$1,$1,'settings',ARRAY['first'],$2,'media'),('site',$1,$1,'settings',ARRAY['second'],$2,'media')`, sid, m.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.DeleteMediaFile(ctx, nil, input, prepare); !errors.Is(err, media.ErrFileInUse) {
@@ -150,7 +150,7 @@ func TestPostgresMediaFileDeletionPrunesNestedReferenceAndResourceHistory(t *tes
 		mediaIDs = append(mediaIDs, m.ID)
 	}
 	path := "/"
-	owner, err := db.Resources().Create(ctx, nil, resource.Resource{SiteID: site.ID(sid), Type: resourcetype.Library, Title: "Library", Path: &path, TypeSettings: map[string]any{"item_url_pattern": "/{slug}"}, FieldValues: []field.StoredValue{{Key: "portals", Kind: field.StorageJSON, Value: []any{map[string]any{"name": "kept", "icons": []any{int64(mediaIDs[0]), int64(mediaIDs[1]), int64(mediaIDs[2])}}}, References: []field.Reference{{Target: field.ReferenceFile, ID: int64(mediaIDs[0]), Path: []string{"0", "icons", "0"}}, {Target: field.ReferenceFile, ID: int64(mediaIDs[1]), Path: []string{"0", "icons", "1"}}, {Target: field.ReferenceFile, ID: int64(mediaIDs[2]), Path: []string{"0", "icons", "2"}}}}}}, nil)
+	owner, err := db.Resources().Create(ctx, nil, resource.Resource{SiteID: site.ID(sid), Type: resourcetype.Library, Title: "Library", Path: &path, TypeSettings: map[string]any{"item_url_pattern": "/{slug}"}, FieldValues: []field.StoredValue{{Key: "portals", Kind: field.StorageJSON, Value: []any{map[string]any{"name": "kept", "icons": []any{int64(mediaIDs[0]), int64(mediaIDs[1]), int64(mediaIDs[2])}}}, References: []field.Reference{{Target: field.ReferenceMedia, ID: int64(mediaIDs[0]), Path: []string{"0", "icons", "0"}}, {Target: field.ReferenceMedia, ID: int64(mediaIDs[1]), Path: []string{"0", "icons", "1"}}, {Target: field.ReferenceMedia, ID: int64(mediaIDs[2]), Path: []string{"0", "icons", "2"}}}}}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

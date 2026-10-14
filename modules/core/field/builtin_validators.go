@@ -76,7 +76,7 @@ func (t builtinValidatorType) ValidatorMetadata() ValidatorMetadata {
 		m.Options = []ConfigField{{Key: "value", Label: "Текст", Type: TypeString, Required: true}}
 	}
 	stringsOnly := []TypeCode{TypeString, TypeTextarea, TypeEmail, TypePhone, TypeRadio, TypeSelect}
-	lists := []TypeCode{TypeString, TypeTextarea, TypeEmail, TypePhone, TypeInteger, TypeFloat, TypeFile, TypeMedia, TypeSelect, TypeRepeater}
+	lists := []TypeCode{TypeString, TypeTextarea, TypeEmail, TypePhone, TypeInteger, TypeFloat, TypeMedia, TypeSelect, TypeRepeater}
 	switch t.code {
 	case "min", "max", "between", "multiple_of":
 		m.FieldTypes = []TypeCode{TypeInteger, TypeFloat}

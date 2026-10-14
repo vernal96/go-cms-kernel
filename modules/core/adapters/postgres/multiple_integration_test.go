@@ -41,10 +41,10 @@ func TestPostgresMultipleFields(t *testing.T) {
 				}
 				return item.ID
 			}
-			first, second := makeMedia(), makeMedia()
+			first, second, third := makeMedia(), makeMedia(), makeMedia()
 			schema, err := field.CompilePersistent([]field.Definition{
-				{Key: "images", Label: "Images", Type: field.TypeMedia, Options: field.MediaOptions{Multiple: true}},
-				{Key: "files", Label: "Files", Type: field.TypeFile, Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "images", Multiple: true}},
+				{Key: "images", Label: "Images", Type: field.TypeMedia, Options: field.MediaOptions{Disk: "public", VirtualPath: "images", SettingsCode: "images", Multiple: true}},
+				{Key: "files", Label: "Files", Type: field.TypeMedia, Options: field.MediaOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "images", Multiple: true}},
 				{Key: "numbers", Label: "Numbers", Type: field.TypeInteger, Options: field.IntegerOptions{Multiple: true}},
 			}, field.StandardTypes())
 			if err != nil {
@@ -70,12 +70,17 @@ func TestPostgresMultipleFields(t *testing.T) {
 				}
 				return values, stored, files
 			}
-			initial := []any{int64(first), int64(second), int64(first)}
+			initial := []any{int64(first), int64(second), int64(third)}
 			values, stored, files := normalize(initial)
 			path := "/"
 			root, err := db.Resources().Create(ctx, nil, resource.Resource{SiteID: sid, Type: resourcetype.Library, Title: "Root", Path: &path, TypeSettings: map[string]any{"item_url_pattern": "/{slug}"}}, nil)
 			if err != nil {
 				t.Fatal(err)
+			}
+			duplicateValues, duplicateStored, duplicateFiles := normalize([]any{int64(first), int64(first)})
+			duplicatePath := "/duplicate"
+			if _, err := db.Resources().Create(ctx, nil, resource.Resource{SiteID: sid, ParentID: &root.ID, Type: resourcetype.Page, Title: "Duplicate", Slug: "duplicate", Path: &duplicatePath, Fields: duplicateValues, FieldValues: duplicateStored, FileReferences: duplicateFiles}, nil); !errors.Is(err, media.ErrAlreadyAttached) {
+				t.Fatalf("same Media in two resource positions accepted: %v", err)
 			}
 			var id resource.ID
 			var update func([]any, bool)
@@ -159,23 +164,26 @@ func TestPostgresMultipleFields(t *testing.T) {
 				t.Fatalf("foreign media owner accepted: %v", err)
 			}
 
-			update([]any{int64(second), int64(first)}, false)
-			assertImages([]any{int64(second), int64(first)})
+			update([]any{int64(third), int64(second), int64(first)}, false)
+			assertImages([]any{int64(third), int64(second), int64(first)})
 			update(initial, true)
 			assertImages(initial)
 			update([]any{int64(first)}, false)
 			assertImages([]any{int64(first)})
 			if _, err := db.Media().ByID(ctx, first); err != nil {
-				t.Fatalf("remaining duplicate was deleted: %v", err)
+				t.Fatalf("remaining selection was deleted: %v", err)
 			}
 			if _, err := db.Media().ByID(ctx, second); !errors.Is(err, media.ErrNotFound) {
 				t.Fatalf("unused media remains: %v", err)
+			}
+			if _, err := db.Media().ByID(ctx, third); !errors.Is(err, media.ErrNotFound) {
+				t.Fatalf("unused third Media remains: %v", err)
 			}
 			var count int
 			if err := conn.Pool().QueryRow(ctx, `SELECT count(*) FROM core.resource_media_references WHERE resource_id=$1`, id).Scan(&count); err != nil || count != 3 {
 				t.Fatalf("references %d: %v", count, err)
 			}
-			if err := conn.Pool().QueryRow(ctx, `SELECT count(*) FROM core.file_field_references WHERE owner_kind='resource' AND owner_id=$1`, id).Scan(&count); err != nil || count != 2 {
+			if err := conn.Pool().QueryRow(ctx, `SELECT count(*) FROM core.file_field_references WHERE owner_kind='resource' AND owner_id=$1`, id).Scan(&count); err != nil || count != 3 {
 				t.Fatalf("file references %d: %v", count, err)
 			}
 		})

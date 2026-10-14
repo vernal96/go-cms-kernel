@@ -29,7 +29,7 @@ Content-Type: application/json
 
 Contribution монтируется на `/api/sites/{siteID}/forms`, а handler объявляет относительный путь `/forms`. Поэтому полный адрес списка — `GET /api/sites/{siteID}/forms/forms`. Ниже приведены внешние адреса.
 
-Операции управления: `/api/sites/{siteID}/forms/forms/{formID}/editor`, `/api/sites/{siteID}/forms/forms/{formID}/fields`, `/api/sites/{siteID}/forms/forms/{formID}/elements`, `/api/sites/{siteID}/forms/forms/{formID}/containers`, `/api/sites/{siteID}/forms/forms/{formID}/layout`, `/api/sites/{siteID}/forms/forms/{formID}/statuses`, `/api/sites/{siteID}/forms/forms/{formID}/actions`, `/api/sites/{siteID}/forms/results` и `/api/sites/{siteID}/forms/results/{resultID}`. CRUD требует аутентификацию и site access. Загрузка файла для файлового поля редактора: `POST /api/sites/{siteID}/forms/forms/{formID}/file-fields/uploads`.
+Операции управления: `/api/sites/{siteID}/forms/forms/{formID}/editor`, `/api/sites/{siteID}/forms/forms/{formID}/fields`, `/api/sites/{siteID}/forms/forms/{formID}/elements`, `/api/sites/{siteID}/forms/forms/{formID}/containers`, `/api/sites/{siteID}/forms/forms/{formID}/layout`, `/api/sites/{siteID}/forms/forms/{formID}/statuses`, `/api/sites/{siteID}/forms/forms/{formID}/actions`, `/api/sites/{siteID}/forms/results` и `/api/sites/{siteID}/forms/results/{resultID}`. CRUD требует аутентификацию и site access. Загрузка для Media-поля конструктора формы: `POST /api/sites/{siteID}/forms/forms/{formID}/file-fields/uploads`.
 
 ### Path и query параметры
 
@@ -42,16 +42,16 @@ Contribution монтируется на `/api/sites/{siteID}/forms`, а handler
 
 ### Тела запросов
 
-Загрузка для конструктора формы принимает multipart-поля `target` (JSON-строка) и `file`. `target.owner` должен быть `field` для поля формы или `element` для поля элемента; для элемента передайте `element_type`. `field_path` — массив ключей и индексов repeater, например `["image"]` или `["content", "0", "image"]`. Пример:
+Загрузка для конструктора формы принимает multipart-поля `target` (JSON-строка) и `file`. `target.owner` должен быть `field` для поля формы или `element` для поля элемента; для элемента передайте `element_type`. `field_path` — массив ключей и индексов repeater, например `["image"]` или `["content", "0", "image"]`. Поля формы, принимающие изображения и файлы, используют `field.TypeMedia` и `field.MediaOptions`; профиль задаёт диск, виртуальный путь, `SettingsCode` и необязательные MIME-ограничения. Для встроенного типа элемента `image` настройки задаются через `forms.Config.ElementImage`; его `config.media_id` хранит ID выбранного Media, а путь загрузки `field_path` равен `["media_id"]`. Пример:
 
 ```sh
 curl -X POST 'http://localhost:8080/api/sites/12/forms/forms/5/file-fields/uploads' \
   -H 'Authorization: Bearer <token>' \
-  -F 'target={"owner":"element","element_type":"image","field_path":["file_id"]}' \
+  -F 'target={"owner":"field","field_path":["document"]}' \
   -F 'file=@./photo.png'
 ```
 
-Диск, путь загрузки и MIME-ограничения берутся из определения поля или метаданных элемента; передавать их в `target` нельзя. Сервер определяет MIME по содержимому до записи и сохраняет файл в настроенный каталог. Это загрузка постоянного файла для редактора. Обычная отправка публичного поля `forms.upload` остаётся отдельным multipart-контрактом и использует временное хранилище результатов.
+Диск, путь загрузки и MIME-ограничения берутся из определения поля или метаданных элемента; передавать их в `target` нельзя. Сервер определяет MIME по содержимому до записи и сохраняет файл в настроенный каталог. Это загрузка постоянного файла для редактора; значение Media-поля ссылается на отдельный объект Media. Обычная отправка публичного поля `forms.upload` остаётся отдельным multipart-контрактом и использует временное хранилище результатов.
 
 - Создание/изменение формы: `code`, `name`, `description`, `enabled`.
 - Создание/изменение поля: `code`, `type`, `label`, `required`, `validators`, `options`, `editor`, `visible_when`, `result_label`, `show_on_site`, `show_in_results`, `result_position`. При создании также указываются `parent_id` (ID layout-контейнера или `null` для корня) и `position` (позиция среди соседей).

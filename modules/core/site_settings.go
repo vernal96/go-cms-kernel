@@ -103,7 +103,7 @@ func projectPublicSettingValue(ctx context.Context, definition field.Definition,
 			projectedRows = append(projectedRows, projectedRow)
 		}
 		return projectedRows, nil
-	case field.TypeFile, field.TypeMedia:
+	case field.TypeMedia:
 		if multipleReferenceValue(definition) {
 			values, ok := value.([]any)
 			if !ok {
@@ -144,9 +144,6 @@ func repeaterFieldOptions(value any) (field.RepeaterOptions, error) {
 
 func multipleReferenceValue(definition field.Definition) bool {
 	switch definition.Type {
-	case field.TypeFile:
-		options, _ := field.FileOptionsValue(definition.Options)
-		return options.Multiple
 	case field.TypeMedia:
 		options, err := field.DecodeOptions[field.MediaOptions](definition.Options)
 		return err == nil && options.Multiple
@@ -162,7 +159,7 @@ func projectPublicFileReference(ctx context.Context, definition field.Definition
 	}
 	fileID := file.ID(id)
 	var err error
-	if definition.Type == field.TypeMedia || definition.Type == field.TypeFile {
+	if definition.Type == field.TypeMedia {
 		if mediaService == nil {
 			return nil, errors.New("site media service unavailable")
 		}

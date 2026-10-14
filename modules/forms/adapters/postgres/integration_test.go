@@ -232,7 +232,7 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 	}
 	t.Run("file field snapshot persists with result occurrence", func(t *testing.T) {
 		storedFile, err := coreDatabase.Files().CreateFile(ctx, file.File{
-			Storage: "public", Name: "form-result.pdf", Path: fmt.Sprintf("forms/results/%d.pdf", suffix),
+			Storage: "public", Name: fmt.Sprintf("form-result-%d.pdf", suffix), Path: fmt.Sprintf("forms/results/%d.pdf", suffix),
 			MIMEType: "application/pdf", Size: 1, ChecksumSHA256: fmt.Sprintf("%064d", 1),
 		})
 		if err != nil {
@@ -245,11 +245,11 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 		result, err := repository.CreateResult(ctx, forms.SubmissionRecord{
 			Result: forms.Result{SiteID: siteIDs[1], FormID: second.Form.ID, FormCode: second.Form.Code, FormName: second.Form.Name, StatusID: second.Statuses[0].ID, UserAgent: "file-snapshot"},
 			Values: []forms.ResultValue{{
-				FieldCode: "document", FieldLabel: "Document", FieldType: field.TypeFile,
-				StorageKind: field.StorageReference, Value: int64(storedMedia.ID), ReferenceTarget: field.ReferenceFile,
+				FieldCode: "document", FieldLabel: "Document", FieldType: field.TypeMedia,
+				StorageKind: field.StorageReference, Value: int64(storedMedia.ID), ReferenceTarget: field.ReferenceMedia,
 				FileReferences: []field.Reference{{
-					Target: field.ReferenceFile, ID: int64(storedMedia.ID),
-					Options: field.FileOptions{Disk: "public", VirtualPath: "forms/documents", SettingsCode: "form_document", MIMETypes: []string{"application/pdf"}},
+					Target: field.ReferenceMedia, ID: int64(storedMedia.ID),
+					Options: field.MediaOptions{Disk: "public", VirtualPath: "forms/documents", SettingsCode: "form_document", MIMETypes: []string{"application/pdf"}},
 				}},
 			}},
 		})
@@ -258,6 +258,7 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 		}
 		t.Cleanup(func() {
 			cleanup := context.Background()
+			_, _ = connector.Pool().Exec(cleanup, `DELETE FROM core.media_field_occurrences WHERE owner_kind='forms.result' AND owner_id=$1`, result.Result.ID)
 			_, _ = connector.Pool().Exec(cleanup, `DELETE FROM forms.results WHERE id=$1`, result.Result.ID)
 			_, _ = connector.Pool().Exec(cleanup, `DELETE FROM core.media WHERE id=$1`, storedMedia.ID)
 			_, _ = connector.Pool().Exec(cleanup, `DELETE FROM core.files WHERE id=$1`, storedFile.ID)
@@ -288,7 +289,7 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 			t.Fatalf("stored file snapshots = %#v", values.References)
 		}
 		snapshot := values.References[0]
-		if snapshot.ID != int64(storedMedia.ID) || snapshot.Target != field.ReferenceFile || snapshot.Options.Disk != "public" || snapshot.Options.VirtualPath != "forms/documents" || !reflect.DeepEqual(snapshot.Path, occurrence.Path) {
+		if snapshot.ID != int64(storedMedia.ID) || snapshot.Target != field.ReferenceMedia || snapshot.Options.Disk != "public" || snapshot.Options.VirtualPath != "forms/documents" || !reflect.DeepEqual(snapshot.Path, occurrence.Path) {
 			t.Fatalf("stored file snapshot = %#v, occurrence = %#v", snapshot, occurrence)
 		}
 	})

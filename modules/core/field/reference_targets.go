@@ -20,9 +20,7 @@ func validateReferenceTargets(value ValueType, allowed []string) error {
 		return v.schema.ValidateReferenceTargets(allowed...)
 	}
 	target := ""
-	if _, ok := value.(fileValue); ok {
-		target = ReferenceFile
-	} else if ref, ok := value.(ReferenceValueType); ok {
+	if ref, ok := value.(ReferenceValueType); ok {
 		target = ref.ReferenceTarget()
 	} else if _, ok := value.(ReferenceCollector); ok {
 		return fmt.Errorf("opaque reference collector is unsupported in this schema")

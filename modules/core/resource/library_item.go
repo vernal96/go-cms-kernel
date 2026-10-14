@@ -469,6 +469,9 @@ func (s *LibraryService) normalize(ctx context.Context, actor security.Actor, it
 		if err := s.common.validateImageMedia(ctx, *item.ImageMediaID); err != nil {
 			return LibraryItem{}, err
 		}
+		if err := s.common.validateImageField(ctx, actor, runtime, *item.ImageMediaID); err != nil {
+			return LibraryItem{}, err
+		}
 	}
 	if item.ContentType == nil {
 		value := "html"
@@ -494,9 +497,6 @@ func (s *LibraryService) normalize(ctx context.Context, actor security.Actor, it
 	}
 	item.FieldValues, err = templateRuntime.FieldSchema().StoredValues(fields)
 	if err != nil {
-		return LibraryItem{}, err
-	}
-	if err := s.common.validateMediaFields(ctx, actor, item.FieldValues); err != nil {
 		return LibraryItem{}, err
 	}
 	references, err := templateRuntime.FieldSchema().FileReferences(fields)

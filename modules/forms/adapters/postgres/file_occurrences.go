@@ -23,7 +23,7 @@ func (r *Repository) Kind() string { return "forms.element" }
 func (r *Repository) UpdatePermission() permission.Code { return forms.FormUpdatePermission }
 
 func (r *Repository) ClearFileOccurrence(ctx context.Context, actorID *security.UserID, occurrence media.FileOccurrence) (int64, error) {
-	if occurrence.OwnerKind != r.Kind() || occurrence.Container != "config" || occurrence.OwnerID <= 0 || occurrence.SiteID <= 0 || occurrence.Target != field.ReferenceFile || len(occurrence.Path) == 0 {
+	if occurrence.OwnerKind != r.Kind() || occurrence.Container != "config" || occurrence.OwnerID <= 0 || occurrence.SiteID <= 0 || occurrence.Target != field.ReferenceMedia || len(occurrence.Path) == 0 {
 		return 0, media.ErrFileDeleteUnsupported
 	}
 	tx, err := mediaoccurrence.Transaction(ctx, r.connector.Pool())

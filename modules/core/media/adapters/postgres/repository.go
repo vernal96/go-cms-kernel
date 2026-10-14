@@ -289,6 +289,8 @@ FROM core.resource_media_references mr
 JOIN core.resource_entities e ON e.id=mr.resource_id
 JOIN core.resource_field_values fv USING(resource_id,field_key,position)
 WHERE mr.media_id=$1
+UNION ALL SELECT 'resource',id,site_id,'image',ARRAY['image_media_id'],'media' FROM core.resources WHERE image_media_id=$1
+UNION ALL SELECT 'resource',id,site_id,'image',ARRAY['image_media_id'],'media' FROM core.library_items WHERE image_media_id=$1
 ORDER BY owner_kind,owner_id,container,value_path;`, id)
 	if err != nil {
 		return nil, fmt.Errorf("query media %d field occurrences: %w", id, err)

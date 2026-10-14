@@ -35,8 +35,6 @@ func DecodeOptionsJSON(code TypeCode, raw json.RawMessage) (any, error) {
 		return DecodeOptions[SelectOptions](raw)
 	case TypePhone:
 		return DecodeOptions[PhoneOptions](raw)
-	case TypeFile:
-		return DecodeOptions[FileOptions](raw)
 	default:
 		if empty {
 			return nil, nil

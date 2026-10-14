@@ -6,16 +6,16 @@ import (
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 )
 
-func TestFileTypeNormalizesReferencesAndClonesOptions(t *testing.T) {
+func TestMediaTypeNormalizesReferencesAndClonesOptions(t *testing.T) {
 	required := true
-	options := field.FileOptions{
+	options := field.MediaOptions{
 		Disk:         "public",
 		VirtualPath:  "site/assets",
 		SettingsCode: "image",
 		MIMETypes:    []string{"image/*", "application/pdf"},
 	}
 	schema, err := field.Compile([]field.Definition{{
-		Key: "asset", Type: field.TypeFile, Label: "Asset",
+		Key: "asset", Type: field.TypeMedia, Label: "Asset",
 		Required: required, Options: options,
 	}}, standardResolver())
 	if err != nil {
@@ -32,9 +32,9 @@ func TestFileTypeNormalizesReferencesAndClonesOptions(t *testing.T) {
 	if err != nil || len(references) != 1 || references[0].ID != 42 || references[0].Key != "asset" {
 		t.Fatalf("file references = %#v, err = %v", references, err)
 	}
-	if !field.FileMatches(references[0].Options, "public", "image/png") ||
-		field.FileMatches(references[0].Options, "private", "image/png") ||
-		field.FileMatches(references[0].Options, "public", "text/plain") {
+	if !field.MediaMatches(references[0].Options, "public", "image/png") ||
+		field.MediaMatches(references[0].Options, "private", "image/png") ||
+		field.MediaMatches(references[0].Options, "public", "text/plain") {
 		t.Fatal("file option matching is invalid")
 	}
 	options.MIMETypes[0] = "text/*"
@@ -43,25 +43,25 @@ func TestFileTypeNormalizesReferencesAndClonesOptions(t *testing.T) {
 	}
 }
 
-func TestFileTypeRejectsInvalidOptionsAndIDs(t *testing.T) {
-	for _, options := range []field.FileOptions{
+func TestMediaTypeRejectsInvalidOptionsAndIDs(t *testing.T) {
+	for _, options := range []field.MediaOptions{
 		{Disk: "public", VirtualPath: "site/assets", SettingsCode: "image", MIMETypes: []string{"*/*"}},
 		{Disk: "", VirtualPath: "site/assets", SettingsCode: "image"},
 		{Disk: "public", VirtualPath: "../escape", SettingsCode: "image"},
 		{Disk: "public", VirtualPath: "site/assets", SettingsCode: ""},
 	} {
 		if _, err := field.Compile([]field.Definition{{
-			Key: "asset", Type: field.TypeFile, Label: "Asset", Options: options,
+			Key: "asset", Type: field.TypeMedia, Label: "Asset", Options: options,
 		}}, standardResolver()); err == nil {
 			t.Fatalf("invalid options were accepted: %#v", options)
 		}
 	}
 	if _, err := field.Compile([]field.Definition{{
-		Key: "asset", Type: field.TypeFile, Label: "Asset",
+		Key: "asset", Type: field.TypeMedia, Label: "Asset",
 	}}, standardResolver()); err == nil {
 		t.Fatal("file field without required options was accepted")
 	}
-	schema, err := field.Compile([]field.Definition{{Key: "asset", Type: field.TypeFile, Label: "Asset", Options: field.FileOptions{Disk: "public", VirtualPath: "site/assets", SettingsCode: "image"}}}, standardResolver())
+	schema, err := field.Compile([]field.Definition{{Key: "asset", Type: field.TypeMedia, Label: "Asset", Options: field.MediaOptions{Disk: "public", VirtualPath: "site/assets", SettingsCode: "image"}}}, standardResolver())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,15 +70,15 @@ func TestFileTypeRejectsInvalidOptionsAndIDs(t *testing.T) {
 	}
 }
 
-func TestFileTypeRequiresDeclaredSettingsCodeWhenBound(t *testing.T) {
+func TestMediaTypeRequiresDeclaredSettingsCodeWhenBound(t *testing.T) {
 	types := standardResolver()
-	types[field.TypeFile] = field.FileType(map[string][]field.Definition{
+	types[field.TypeMedia] = field.MediaType(map[string][]field.Definition{
 		"image": {{Key: "alt", Type: field.TypeString, Label: "Alt"}},
 	})
 	for _, code := range []string{"image", "unknown"} {
 		_, err := field.Compile([]field.Definition{{
-			Key: "asset", Type: field.TypeFile, Label: "Asset",
-			Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: code},
+			Key: "asset", Type: field.TypeMedia, Label: "Asset",
+			Options: field.MediaOptions{Disk: "public", VirtualPath: "assets", SettingsCode: code},
 		}}, types)
 		if (code == "image") != (err == nil) {
 			t.Fatalf("settings code %q compile error = %v", code, err)

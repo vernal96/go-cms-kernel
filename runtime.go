@@ -16,11 +16,20 @@ type ProfileCode string
 type Profile struct {
 	Code        ProfileCode
 	Name        string
+	Settings    ProfileSettings
 	Modules     []Module
 	Params      []field.Definition
 	EditorTabs  []field.EditorTab
 	Templates   []template.Definition
 	WidgetViews []widget.View
+}
+
+type ProfileSettings struct {
+	FileSystem ProfileFileSystem
+}
+
+type ProfileFileSystem struct {
+	ResourceImage *field.MediaOptions
 }
 
 type Module interface {

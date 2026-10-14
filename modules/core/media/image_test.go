@@ -62,8 +62,8 @@ func TestImageRestoreChecksFileOccurrenceBeforeSwitchOrCleanup(t *testing.T) {
 	f.items[1] = file.File{ID: rootID, Storage: "private", MIMEType: "image/jpeg"}
 	f.items[2] = file.File{ID: 2, ParentID: &rootID, Storage: "public", MIMEType: "image/png"}
 	r.item.FileID = 2
-	ref := FileOccurrence{OwnerKind: "site", OwnerID: 1, SiteID: 1, Container: "settings", Path: []string{"icon"}, Target: field.ReferenceFile, MediaID: 1}
-	references := []field.Reference{{ID: 1, Target: field.ReferenceFile, Path: ref.Path, Options: field.FileOptions{Disk: "public", MIMETypes: []string{"image/png"}}}}
+	ref := FileOccurrence{OwnerKind: "site", OwnerID: 1, SiteID: 1, Container: "settings", Path: []string{"icon"}, Target: field.ReferenceMedia, MediaID: 1}
+	references := []field.Reference{{ID: 1, Target: field.ReferenceMedia, Path: ref.Path, Options: field.MediaOptions{Disk: "public", MIMETypes: []string{"image/png"}}}}
 	r.usages = []Usage{{Kind: FileFieldUsage, OwnerID: 1, Occurrence: &ref}}
 	s.media.policies[FileFieldUsage] = func(_ context.Context, target file.File, usage Usage) error {
 		return ValidateFileOccurrence(*usage.Occurrence, references, target)

@@ -16,8 +16,11 @@ import (
 	"github.com/vernal96/go-cms-kernel/job"
 	"github.com/vernal96/go-cms-kernel/migrations"
 	corepostgres "github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres"
+	"github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres/mediaoccurrence"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/field/validation"
+	"github.com/vernal96/go-cms-kernel/modules/core/file"
+	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/mail"
 )
@@ -77,6 +80,100 @@ func TestPostgresMailCRUDOutboxAttemptsRetentionAndSiteIsolation(t *testing.T) {
 	})
 
 	repository := database.Mail()
+	t.Run("static attachment Media occurrence protects other links and clears atomically", func(t *testing.T) {
+		storedFile, err := coreDatabase.Files().CreateFile(ctx, file.File{
+			Storage: "private", Name: fmt.Sprintf("mail-attachment-%d.pdf", suffix), Path: fmt.Sprintf("mail-attachment/%d.pdf", suffix),
+			MIMEType: "application/pdf", Size: 1, ChecksumSHA256: fmt.Sprintf("%064d", 1),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		selected, err := coreDatabase.Media().Create(ctx, nil, media.Media{FileID: storedFile.ID, Params: map[string]any{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		item, err := repository.CreateTemplate(ctx, mail.Template{
+			SiteID: siteIDs[0], Code: fmt.Sprintf("static_%d", suffix), Name: "Static attachment", Enabled: true,
+			From: mail.AddressTemplate{Email: "noreply@example.test"}, ContentType: mail.ContentText,
+			Attachments: []mail.AttachmentTemplate{{Source: mail.AttachmentStatic, MediaID: &selected.ID}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			_ = repository.DeleteTemplate(context.Background(), siteIDs[0], item.ID)
+			_, _ = connector.Pool().Exec(context.Background(), `DELETE FROM core.media WHERE id=$1`, selected.ID)
+			_, _ = connector.Pool().Exec(context.Background(), `DELETE FROM core.files WHERE id=$1`, storedFile.ID)
+		})
+		refs, err := coreDatabase.FileDeletions().FileOccurrences(ctx, selected.ID)
+		if err != nil || len(refs) != 1 || refs[0].OwnerKind != "mail_template" || refs[0].OwnerID != int64(item.ID) || refs[0].Container != "attachments" || len(refs[0].Path) != 2 || refs[0].Path[1] != "media_id" {
+			t.Fatalf("Mail occurrence = %#v, %v", refs, err)
+		}
+		if _, err := repository.UpdateTemplate(ctx, item); err != nil {
+			t.Fatalf("unchanged owner update rejected its existing Media occurrence: %v", err)
+		}
+		otherOwner := mail.Template{
+			SiteID: siteIDs[0], Code: fmt.Sprintf("duplicate_owner_%d", suffix), Name: "Duplicate owner", Enabled: true,
+			From: mail.AddressTemplate{Email: "noreply@example.test"}, ContentType: mail.ContentText,
+			Attachments: []mail.AttachmentTemplate{{Source: mail.AttachmentStatic, MediaID: &selected.ID}},
+		}
+		if _, err := repository.CreateTemplate(ctx, otherOwner); !errors.Is(err, media.ErrAlreadyAttached) {
+			t.Fatalf("second template reused an already attached Media: %v", err)
+		}
+		duplicateRows := otherOwner
+		duplicateRows.Code = fmt.Sprintf("duplicate_rows_%d", suffix)
+		duplicateRows.Attachments = append(duplicateRows.Attachments, duplicateRows.Attachments[0])
+		if _, err := repository.CreateTemplate(ctx, duplicateRows); !errors.Is(err, media.ErrAlreadyAttached) {
+			t.Fatalf("duplicate attachment rows reused one Media: %v", err)
+		}
+		refs, err = coreDatabase.FileDeletions().FileOccurrences(ctx, selected.ID)
+		if err != nil || len(refs) != 1 || refs[0].OwnerID != int64(item.ID) {
+			t.Fatalf("failed duplicate writes changed the saved owner occurrence: %#v, %v", refs, err)
+		}
+		if _, err := connector.Pool().Exec(ctx, `INSERT INTO core.media_field_occurrences(owner_kind,owner_id,site_id,container,value_path,media_id,reference_target) VALUES('resource',$1,$2,'other',ARRAY['asset'],$3,'media')`, int64(item.ID)+9000000, siteIDs[0], selected.ID); err != nil {
+			t.Fatal(err)
+		}
+		_, err = coreDatabase.FileDeletions().DeleteMediaFile(ctx, nil, media.DeleteFileInput{SiteID: int64(siteIDs[0]), MediaID: selected.ID, ExpectedFileID: storedFile.ID, ExpectedUpdatedAt: selected.UpdatedAt}, func(context.Context, *media.FileOccurrence) (media.PreparedFileOwner, error) {
+			return media.PreparedFileOwner{}, errors.New("owner must not be prepared with another reference")
+		})
+		if !errors.Is(err, media.ErrFileInUse) {
+			t.Fatalf("other owner did not block physical deletion: %v", err)
+		}
+		if _, err := connector.Pool().Exec(ctx, `DELETE FROM core.media_field_occurrences WHERE owner_kind='resource' AND media_id=$1`, selected.ID); err != nil {
+			t.Fatal(err)
+		}
+		tx, err := connector.Pool().Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		owner := repository.(mail.FileOccurrenceCleaner)
+		if _, err := owner.ClearFileOccurrence(mediaoccurrence.WithTransaction(ctx, connector.Pool(), tx), nil, refs[0]); err != nil {
+			_ = tx.Rollback(context.Background())
+			t.Fatal(err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+		saved, err := repository.TemplateByID(ctx, siteIDs[0], item.ID)
+		if err != nil || len(saved.Attachments) != 0 {
+			t.Fatalf("saved static attachment after clear = %#v, %v", saved.Attachments, err)
+		}
+		refs, err = coreDatabase.FileDeletions().FileOccurrences(ctx, selected.ID)
+		if err != nil || len(refs) != 0 {
+			t.Fatalf("occurrences after clear = %#v, %v", refs, err)
+		}
+		item.Attachments = []mail.AttachmentTemplate{{Source: mail.AttachmentStatic, MediaID: &selected.ID}}
+		if _, err := repository.UpdateTemplate(ctx, item); err != nil {
+			t.Fatal(err)
+		}
+		if err := repository.DeleteTemplate(ctx, siteIDs[0], item.ID); err != nil {
+			t.Fatal(err)
+		}
+		refs, err = coreDatabase.FileDeletions().FileOccurrences(ctx, selected.ID)
+		if err != nil || len(refs) != 0 {
+			t.Fatalf("occurrences after template delete = %#v, %v", refs, err)
+		}
+	})
 	t.Run("integer validator precision survives create update and reload", func(t *testing.T) {
 		const initial int64 = 9007199254740993
 		item, err := repository.CreateTemplate(ctx, mail.Template{

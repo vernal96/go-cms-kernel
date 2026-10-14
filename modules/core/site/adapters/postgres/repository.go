@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	connectorpostgres "github.com/vernal96/go-cms-kernel/connectors/postgres"
+	"github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres/medialock"
 	"github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres/mediaoccurrence"
 	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
@@ -393,6 +394,32 @@ func replaceFileReferences(
 	ownerID int64,
 	references map[string]media.ID,
 ) error {
+	ids := make([]media.ID, 0, len(references))
+	seen := make(map[media.ID]bool, len(references))
+	for _, id := range references {
+		if seen[id] {
+			return media.ErrAlreadyAttached
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	if err := medialock.Lock(ctx, tx, ids...); err != nil {
+		return err
+	}
+	var attached bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(
+ SELECT 1 FROM core.file_field_references WHERE media_id=ANY($1::bigint[]) AND NOT(owner_kind=$2 AND owner_id=$3)
+ UNION ALL SELECT 1 FROM core.media_field_occurrences WHERE media_id=ANY($1::bigint[]) AND NOT(owner_kind=$2 AND owner_id=$3 AND container='settings')
+ UNION ALL SELECT 1 FROM core.resource_media_references WHERE media_id=ANY($1::bigint[])
+ UNION ALL SELECT 1 FROM core.resources WHERE image_media_id=ANY($1::bigint[])
+ UNION ALL SELECT 1 FROM core.library_items WHERE image_media_id=ANY($1::bigint[])
+ UNION ALL SELECT 1 FROM core.users WHERE avatar_media_id=ANY($1::bigint[])
+)`, ids, ownerKind, ownerID).Scan(&attached); err != nil {
+		return err
+	}
+	if attached {
+		return media.ErrAlreadyAttached
+	}
 	if _, err := tx.Exec(ctx, `DELETE FROM core.file_field_references WHERE owner_kind = $1 AND owner_id = $2;`, ownerKind, ownerID); err != nil {
 		return fmt.Errorf("delete file field references: %w", err)
 	}

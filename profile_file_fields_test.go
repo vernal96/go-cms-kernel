@@ -18,12 +18,12 @@ func (d fileFieldTestDisks) Disk(code filesystem.Code) (filesystem.Disk, bool) {
 func TestValidateProfileFileDisksIncludesNestedFields(t *testing.T) {
 	profile := Profile{
 		Code: "test",
-		Params: []field.Definition{{Key: "logo", Type: field.TypeFile, Options: field.FileOptions{
+		Params: []field.Definition{{Key: "logo", Type: field.TypeMedia, Options: field.MediaOptions{
 			Disk: "public", VirtualPath: "site/logo", SettingsCode: "image",
 		}}},
 		Templates: []template.Definition{{Code: "page", Fields: []field.Definition{{
 			Key: "rows", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: []field.Definition{{
-				Key: "attachment", Type: field.TypeFile, Options: field.FileOptions{
+				Key: "attachment", Type: field.TypeMedia, Options: field.MediaOptions{
 					Disk: "private", VirtualPath: "uploads", SettingsCode: "document",
 				}},
 			}}},
@@ -39,7 +39,7 @@ func TestValidateProfileFileDisksIncludesNestedFields(t *testing.T) {
 }
 
 func TestValidateProfileFileDisksRejectsMissingOptions(t *testing.T) {
-	profile := Profile{Code: "test", Params: []field.Definition{{Key: "logo", Type: field.TypeFile}}}
+	profile := Profile{Code: "test", Params: []field.Definition{{Key: "logo", Type: field.TypeMedia}}}
 	err := validateProfileFileDisks(profile, fileFieldTestDisks{})
 	if err == nil || !strings.Contains(err.Error(), `unknown disk ""`) {
 		t.Fatalf("missing options error = %v", err)

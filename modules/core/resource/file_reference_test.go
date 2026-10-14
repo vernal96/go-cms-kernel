@@ -44,7 +44,7 @@ func TestFileReferenceValidationRequiresReadOnlyForNewValue(t *testing.T) {
 
 	selected.err = nil
 	selected.item = media.ResolvedMedia{File: corefile.File{ID: 17, Storage: filesystem.Code("public"), MIMEType: "image/png"}}
-	references[0].Options = field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image", MIMETypes: []string{"image/*"}}
+	references[0].Options = field.MediaOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image", MIMETypes: []string{"image/*"}}
 	if err := service.validateFileReferences(context.Background(), security.User(1), references, nil); err != nil {
 		t.Fatalf("allowed reference failed: %v", err)
 	}

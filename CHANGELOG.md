@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.11.0
+
+- Replace the `File` field type with the single `Media` field contract. `MediaOptions` now requires a disk, virtual upload path, and media-settings code; multiple selection and MIME restrictions remain configurable. Each saved selection owns a distinct Media object, and the server validates disk, MIME, and ownership on every write.
+- Configure the native resource and LibraryItem image through `Profile.Settings.FileSystem.ResourceImage`. Trusted uploads use its path, while the picker may select existing files anywhere on the configured disk. Forms image elements use `config.media_id`; Mail template attachments use Media IDs while sent-message snapshots retain physical File IDs.
+- Keep draft removal tied to form save and make confirmed physical deletion reference-checked and atomic with the saved reference. Preserve isolated image edits, metadata settings, and drag ordering for Media tiles.
+
 ## 0.10.0
 
 - Move Redis client configuration and the commands used by resource views into the existing Redis connector. Resource view accumulators retain a separate contract and client lifecycle; projects configure them with `redis.ClientConfig` instead of importing `go-redis/v9` types.

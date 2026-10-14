@@ -16,17 +16,17 @@ func TestResultValueReferencesProtectScalarAndMultipleMediaValues(t *testing.T) 
 	}{
 		{
 			name:  "scalar file field",
-			value: forms.ResultValue{ID: 12, FieldType: field.TypeFile, StorageKind: field.StorageReference, Value: int64(41)},
+			value: forms.ResultValue{ID: 12, FieldType: field.TypeMedia, StorageKind: field.StorageReference, Value: int64(41)},
 			want:  []field.Reference{{Target: field.ReferenceMedia, ID: 41, Path: []string{"12", "0"}}},
 		},
 		{
 			name:  "ordered multiple file value",
-			value: forms.ResultValue{ID: 13, FieldType: field.TypeFile, StorageKind: field.StorageReference, Multiple: true, Position: 2, Value: int64(42), ReferenceTarget: field.ReferenceFile},
+			value: forms.ResultValue{ID: 13, FieldType: field.TypeMedia, StorageKind: field.StorageReference, Multiple: true, Position: 2, Value: int64(42), ReferenceTarget: field.ReferenceMedia},
 			want:  []field.Reference{{Target: field.ReferenceMedia, ID: 42, Path: []string{"13", "2"}}},
 		},
 		{
 			name:  "nested reference",
-			value: forms.ResultValue{ID: 14, FieldType: "repeater", StorageKind: field.StorageJSON, References: []field.Reference{{Target: field.ReferenceFile, ID: 43, Path: []string{"items", "1", "photo"}}}},
+			value: forms.ResultValue{ID: 14, FieldType: "repeater", StorageKind: field.StorageJSON, References: []field.Reference{{Target: field.ReferenceMedia, ID: 43, Path: []string{"items", "1", "photo"}}}},
 			want:  []field.Reference{{Target: field.ReferenceMedia, ID: 43, Path: []string{"14", "0", "items", "1", "photo"}}},
 		},
 	}

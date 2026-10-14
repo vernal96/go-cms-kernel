@@ -539,7 +539,7 @@ func (s *Service) elementSchema(code ElementTypeCode) (*field.Schema, error) {
 
 func (s *Service) validateImage(ctx context.Context, actor security.Actor, raw json.RawMessage) error {
 	var config struct {
-		MediaID coremedia.ID `json:"file_id"`
+		MediaID coremedia.ID `json:"media_id"`
 	}
 	if json.Unmarshal(raw, &config) != nil || config.MediaID <= 0 {
 		return fmt.Errorf("%w: image file is invalid", ErrInvalid)
@@ -552,7 +552,7 @@ func (s *Service) validateImage(ctx context.Context, actor security.Actor, raw j
 	if err != nil {
 		return err
 	}
-	if !field.FileMatches(options, resolved.File.Storage, resolved.File.MIMEType) {
+	if !field.MediaMatches(options, resolved.File.Storage, resolved.File.MIMEType) {
 		return fmt.Errorf("%w: image media does not match configured disk or MIME constraints", ErrInvalid)
 	}
 	if _, err := s.files.URL(ctx, actor, resolved.File.ID); err != nil {
@@ -561,29 +561,29 @@ func (s *Service) validateImage(ctx context.Context, actor security.Actor, raw j
 	return nil
 }
 
-func (s *Service) imageFileOptions() (field.FileOptions, error) {
+func (s *Service) imageFileOptions() (field.MediaOptions, error) {
 	elementType, exists := s.elements.Type(ElementImage)
 	if !exists {
-		return field.FileOptions{}, fmt.Errorf("%w: Forms image element is unavailable", ErrInvalid)
+		return field.MediaOptions{}, fmt.Errorf("%w: Forms image element is unavailable", ErrInvalid)
 	}
 	metadata := elementType.Metadata()
 	if len(metadata.Fields) == 0 {
-		return field.FileOptions{}, fmt.Errorf("%w: Forms image file options are unavailable", ErrInvalid)
+		return field.MediaOptions{}, fmt.Errorf("%w: Forms image file options are unavailable", ErrInvalid)
 	}
 	encoded, err := field.EncodeOptionsJSON(metadata.Fields[0].Options)
 	if err != nil {
-		return field.FileOptions{}, fmt.Errorf("Forms image file options: %w", err)
+		return field.MediaOptions{}, fmt.Errorf("Forms image file options: %w", err)
 	}
-	options, err := field.DecodeOptions[field.FileOptions](encoded)
+	options, err := field.DecodeOptions[field.MediaOptions](encoded)
 	if err != nil {
-		return field.FileOptions{}, fmt.Errorf("Forms image file options: %w", err)
+		return field.MediaOptions{}, fmt.Errorf("Forms image file options: %w", err)
 	}
 	return options, nil
 }
 
 func (s *Service) PublicImageURL(ctx context.Context, raw json.RawMessage) (string, error) {
 	var config struct {
-		MediaID coremedia.ID `json:"file_id"`
+		MediaID coremedia.ID `json:"media_id"`
 	}
 	if json.Unmarshal(raw, &config) != nil || config.MediaID <= 0 {
 		return "", ErrInvalid

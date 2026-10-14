@@ -17,6 +17,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/filesystem"
 	"github.com/vernal96/go-cms-kernel/job"
 	"github.com/vernal96/go-cms-kernel/modules/core"
+	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
@@ -29,22 +30,23 @@ import (
 const ModuleCode kernel.ModuleCode = "mail"
 
 type Config struct {
-	Filesystems          []filesystem.Binding
-	Renderer             RendererConfig
-	MessageIDDomain      string
-	HistoryRetention     time.Duration
-	CleanupInterval      time.Duration
-	CleanupBatchSize     int
-	SendMaxAttempts      int
-	MaxRecipients        int
-	MaxMessageSize       int64
-	MaxAttachmentSize    int64
-	UploadStorage        filesystem.Code
-	UploadPath           string
-	SpoolEnabled         bool
-	SpoolTTL             time.Duration
-	SpoolCleanupInterval time.Duration
-	SpoolCleanupBatch    int
+	Filesystems           []filesystem.Binding
+	Renderer              RendererConfig
+	MessageIDDomain       string
+	HistoryRetention      time.Duration
+	CleanupInterval       time.Duration
+	CleanupBatchSize      int
+	SendMaxAttempts       int
+	MaxRecipients         int
+	MaxMessageSize        int64
+	MaxAttachmentSize     int64
+	UploadStorage         filesystem.Code
+	UploadPath            string
+	StaticAttachmentMedia field.MediaOptions
+	SpoolEnabled          bool
+	SpoolTTL              time.Duration
+	SpoolCleanupInterval  time.Duration
+	SpoolCleanupBatch     int
 }
 
 type Database interface {
@@ -96,7 +98,13 @@ func (m module) Build(buildCtx context.Context, ctx kernel.ModuleContext) (kerne
 	if err != nil {
 		return nil, err
 	}
+	if err := validateStaticAttachmentMedia(config.StaticAttachmentMedia, ctx.Registry()); err != nil {
+		return nil, err
+	}
 	if err := validateUploadStorage(buildCtx, coreRuntime.Files(), config.UploadStorage); err != nil {
+		return nil, err
+	}
+	if err := validateUploadStorage(buildCtx, coreRuntime.Files(), config.StaticAttachmentMedia.Disk); err != nil {
 		return nil, err
 	}
 	application, err := kernel.ModuleApplicationFrom[Application](ctx)
@@ -129,6 +137,7 @@ func (m module) Build(buildCtx context.Context, ctx kernel.ModuleContext) (kerne
 	if err != nil {
 		return nil, err
 	}
+	renderer.staticAttachmentMedia = config.StaticAttachmentMedia
 	service, err := NewService(
 		site.ID(siteIDValue), database.Mail(), renderer, coreRuntime.Authorization(),
 		coreRuntime.Users(), spool, Limits{MaxRecipients: config.MaxRecipients, MaxMessageSize: config.MaxMessageSize, MaxAttachmentSize: config.MaxAttachmentSize}, config.MessageIDDomain,
@@ -140,6 +149,7 @@ func (m module) Build(buildCtx context.Context, ctx kernel.ModuleContext) (kerne
 	service.uploadStorage = config.UploadStorage
 	service.uploadPath = config.UploadPath
 	service.uploadFiles = coreRuntime.Files()
+	service.staticAttachmentMedia = config.StaticAttachmentMedia
 	worker, err := newWorker(site.ID(siteIDValue), database.Mail(), coreRuntime.Files(), spool, application.Transport, service.lifecycle, config.SendMaxAttempts, ctx.Logger())
 	if err != nil {
 		return nil, err
@@ -250,6 +260,17 @@ func validateUploadStorage(ctx context.Context, catalog uploadDiskCatalog, code 
 	return fmt.Errorf("mail upload storage %q is unavailable", code)
 }
 
+func validateStaticAttachmentMedia(options field.MediaOptions, types field.TypeResolver) error {
+	if options.Multiple {
+		return errors.New("mail static attachment media must be single-value")
+	}
+	_, err := field.Compile([]field.Definition{{Key: "attachment", Type: field.TypeMedia, Label: "Attachment", Options: options}}, types)
+	if err != nil {
+		return fmt.Errorf("mail static attachment media configuration is invalid: %w", err)
+	}
+	return nil
+}
+
 func (r *Runtime) runRetention(ctx context.Context) error {
 	cleanup := func() error {
 		_, err := r.service.repository.Cleanup(ctx, r.service.siteID, r.retention, r.cleanupBatchSize)
@@ -338,6 +359,7 @@ func New(config Config) kernel.Module {
 	config.Filesystems = append([]filesystem.Binding(nil), config.Filesystems...)
 	config.Renderer.SenderPolicy.AllowedAddresses = append([]string(nil), config.Renderer.SenderPolicy.AllowedAddresses...)
 	config.Renderer.SenderPolicy.AllowedDomains = append([]string(nil), config.Renderer.SenderPolicy.AllowedDomains...)
+	config.StaticAttachmentMedia.MIMETypes = append([]string(nil), config.StaticAttachmentMedia.MIMETypes...)
 	return module{config: config}
 }
 
@@ -376,6 +398,12 @@ func (m module) Validate(ctx context.Context, environment kernel.ModuleValidatio
 	}
 	if _, ok := environment.Disk(config.UploadStorage); !ok {
 		return fmt.Errorf("mail upload storage %q is unavailable", config.UploadStorage)
+	}
+	if err := validateStaticAttachmentMedia(config.StaticAttachmentMedia, environment.Registry()); err != nil {
+		return err
+	}
+	if _, ok := environment.Disk(config.StaticAttachmentMedia.Disk); !ok {
+		return fmt.Errorf("mail static attachment disk %q is unavailable", config.StaticAttachmentMedia.Disk)
 	}
 
 	return validateTransport(application.Transport)

@@ -14,7 +14,7 @@ import (
 )
 
 func TestElementImageUsesConfiguredFileOptionsAndMediaURL(t *testing.T) {
-	options := field.FileOptions{Disk: "public", VirtualPath: "configured/site", SettingsCode: "site_image", MIMETypes: []string{"image/png"}}
+	options := field.MediaOptions{Disk: "public", VirtualPath: "configured/site", SettingsCode: "site_image", MIMETypes: []string{"image/png"}}
 	catalog, err := newElementCatalog(options)
 	if err != nil {
 		t.Fatal(err)
@@ -24,20 +24,33 @@ func TestElementImageUsesConfiguredFileOptionsAndMediaURL(t *testing.T) {
 		t.Fatal("image element type is missing")
 	}
 	config := imageType.Metadata().Fields[0].Options
+	if imageType.Metadata().Fields[0].Key != "media_id" {
+		t.Fatal("image element does not expose Media ID")
+	}
 	encoded, err := field.EncodeOptionsJSON(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	decoded, err := field.DecodeOptions[field.FileOptions](encoded)
+	decoded, err := field.DecodeOptions[field.MediaOptions](encoded)
 	if err != nil || decoded.Disk != options.Disk || decoded.VirtualPath != options.VirtualPath || decoded.SettingsCode != options.SettingsCode || len(decoded.MIMETypes) != 1 || decoded.MIMETypes[0] != "image/png" {
 		t.Fatalf("image file options = %#v, err=%v", decoded, err)
 	}
 	fileService := &filesStub{}
 	mediaService := &mediaStub{resolved: coremedia.ResolvedMedia{Media: coremedia.Media{ID: 19, FileID: 73}, File: corefile.File{ID: 73, Storage: filesystem.Code("public"), MIMEType: "image/png"}}}
 	service := &Service{elements: catalog, fieldTypes: formsFieldResolver(), files: fileService, media: mediaService}
-	raw := json.RawMessage(`{"file_id":19,"alt":"Logo"}`)
+	oldConfig := json.RawMessage(`{"file_id":19,"alt":"Logo"}`)
+	if _, err := service.elementReferences(Element{Type: ElementImage, Config: oldConfig}); err == nil {
+		t.Fatal("removed file_id contract was accepted")
+	}
+	if err := service.validateImage(context.Background(), security.System(), oldConfig); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("removed file_id contract image validation=%v", err)
+	}
+	if _, err := service.PublicImageURL(context.Background(), oldConfig); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("removed file_id contract public URL=%v", err)
+	}
+	raw := json.RawMessage(`{"media_id":19,"alt":"Logo"}`)
 	references, err := service.elementReferences(Element{Type: ElementImage, Config: raw})
-	if err != nil || len(references) != 1 || references[0].Target != field.ReferenceFile || references[0].ID != 19 || len(references[0].Path) != 1 || references[0].Path[0] != "file_id" {
+	if err != nil || len(references) != 1 || references[0].Target != field.ReferenceMedia || references[0].ID != 19 || len(references[0].Path) != 1 || references[0].Path[0] != "media_id" {
 		t.Fatalf("normalized image references = %#v, err=%v", references, err)
 	}
 	if err := service.validateImage(context.Background(), security.System(), raw); err != nil {
@@ -81,8 +94,8 @@ func TestFormsImageOptionsAreRequiredAtModuleValidation(t *testing.T) {
 }
 
 func TestSubmissionFileFieldsResolveMediaAndEnforceDiskAndMIME(t *testing.T) {
-	options := field.FileOptions{Disk: "public", VirtualPath: "forms/uploads", SettingsCode: "form_upload", MIMETypes: []string{"image/*"}}
-	schema, err := field.CompilePersistent([]field.Definition{{Key: "attachment", Type: field.TypeFile, Label: "Attachment", Required: true, Options: options}}, formsFieldResolver())
+	options := field.MediaOptions{Disk: "public", VirtualPath: "forms/uploads", SettingsCode: "form_upload", MIMETypes: []string{"image/*"}}
+	schema, err := field.CompilePersistent([]field.Definition{{Key: "attachment", Type: field.TypeMedia, Label: "Attachment", Required: true, Options: options}}, formsFieldResolver())
 	if err != nil {
 		t.Fatal(err)
 	}

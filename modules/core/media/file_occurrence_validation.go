@@ -31,14 +31,14 @@ type FileOccurrenceValidator interface {
 }
 
 func ValidateFileOccurrence(ref FileOccurrence, references []field.Reference, target file.File) error {
-	if ref.Target != field.ReferenceFile {
+	if ref.Target != field.ReferenceMedia {
 		return fmt.Errorf("%w: expected File reference", ErrInvalidReference)
 	}
 	for _, current := range references {
 		if current.ID != int64(ref.MediaID) || current.Target != ref.Target || !slices.Equal(current.Path, ref.Path) {
 			continue
 		}
-		if !field.FileMatches(current.Options, target.Storage, target.MIMEType) {
+		if !field.MediaMatches(current.Options, target.Storage, target.MIMEType) {
 			return field.ValidationErrors{{Key: field.ReferenceKey(ref.Path), Code: "file_constraints", Params: map[string]any{"disk": current.Options.Disk, "mime_type": target.MIMEType, "allowed_mime_types": append([]string(nil), current.Options.MIMETypes...)}}}
 		}
 		return nil

@@ -28,8 +28,8 @@ func TestFormsMediaSwitchUsesCurrentElementSchemaAndHistoricalResultSnapshot(t *
 		t.Fatal(err)
 	}
 	runtime := &Runtime{service: &Service{siteID: 1, elements: catalog, fieldTypes: formsFieldResolver()}}
-	ref := media.FileOccurrence{OwnerKind: "forms.element", OwnerID: 2, SiteID: 1, Container: "config", Path: []string{"file_id"}, Target: field.ReferenceFile, MediaID: 7}
-	runtime.service.repository = occurrenceReaderRepository{values: media.FileOccurrenceValues{Code: string(ElementImage), Values: map[string]any{"file_id": int64(7)}}}
+	ref := media.FileOccurrence{OwnerKind: "forms.element", OwnerID: 2, SiteID: 1, Container: "config", Path: []string{"media_id"}, Target: field.ReferenceMedia, MediaID: 7}
+	runtime.service.repository = occurrenceReaderRepository{values: media.FileOccurrenceValues{Code: string(ElementImage), Values: map[string]any{"media_id": int64(7)}}}
 	if err := runtime.ValidateMediaFileOccurrence(ctx, ref, file.File{Storage: "public", MIMEType: "image/png"}); err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestFormsMediaSwitchUsesCurrentElementSchemaAndHistoricalResultSnapshot(t *
 		}
 	}
 	ref.OwnerKind, ref.Container, ref.Target, ref.Path = "forms.result", "result_values", field.ReferenceMedia, []string{"11", "0"}
-	snapshot := field.Reference{ID: 7, Target: field.ReferenceFile, Path: ref.Path, Options: field.FileOptions{Disk: "public", MIMETypes: []string{"application/pdf"}}}
+	snapshot := field.Reference{ID: 7, Target: field.ReferenceMedia, Path: ref.Path, Options: field.MediaOptions{Disk: "public", MIMETypes: []string{"application/pdf"}}}
 	runtime.service.repository = occurrenceReaderRepository{values: media.FileOccurrenceValues{References: []field.Reference{snapshot}}}
 	if err := runtime.ValidateMediaFileOccurrence(ctx, ref, file.File{Storage: "public", MIMEType: "application/pdf"}); err != nil {
 		t.Fatalf("historical PDF misclassified as image: %v", err)
@@ -54,13 +54,13 @@ func TestFormsMediaSwitchUsesCurrentElementSchemaAndHistoricalResultSnapshot(t *
 }
 
 func TestSubmissionSnapshotsScalarMultipleAndNestedFileConstraints(t *testing.T) {
-	options := field.FileOptions{Disk: "public", VirtualPath: "uploads", SettingsCode: "document", MIMETypes: []string{"application/pdf"}}
+	options := field.MediaOptions{Disk: "public", VirtualPath: "uploads", SettingsCode: "document", MIMETypes: []string{"application/pdf"}}
 	multiple := options
 	multiple.Multiple = true
 	definitions := []field.Definition{
-		{Key: "document", Label: "Document", Type: field.TypeFile, Options: options},
-		{Key: "documents", Label: "Documents", Type: field.TypeFile, Options: multiple},
-		{Key: "rows", Label: "Rows", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: []field.Definition{{Key: "file", Label: "File", Type: field.TypeFile, Options: options}}}},
+		{Key: "document", Label: "Document", Type: field.TypeMedia, Options: options},
+		{Key: "documents", Label: "Documents", Type: field.TypeMedia, Options: multiple},
+		{Key: "rows", Label: "Rows", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: []field.Definition{{Key: "file", Label: "File", Type: field.TypeMedia, Options: options}}}},
 	}
 	schema, err := field.CompilePersistent(definitions, formsFieldResolver())
 	if err != nil {

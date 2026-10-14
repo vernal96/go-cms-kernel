@@ -86,7 +86,7 @@ func NewRenderer(
 	}
 	for _, template := range profile.Templates {
 		for _, definition := range template.Fields {
-			if definition.Type == field.TypeFile {
+			if definition.Type == field.TypeMedia {
 				continue
 			}
 			allowed["resource.field."+definition.Key] = struct{}{}
@@ -109,7 +109,7 @@ func NewRenderer(
 func scalarDefinitions(definitions []field.Definition) []field.Definition {
 	result := make([]field.Definition, 0, len(definitions))
 	for _, definition := range definitions {
-		if definition.Type != field.TypeFile {
+		if definition.Type != field.TypeMedia {
 			result = append(result, definition)
 		}
 	}

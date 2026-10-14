@@ -160,13 +160,13 @@ func insertResultValue(ctx context.Context, tx pgx.Tx, item forms.ResultValue) (
 
 func resultValueReferences(item forms.ResultValue) []field.Reference {
 	var references []field.Reference
-	if item.StorageKind == field.StorageReference && (item.ReferenceTarget == field.ReferenceFile || item.ReferenceTarget == field.ReferenceMedia || item.FieldType == field.TypeFile || item.FieldType == field.TypeMedia) {
+	if item.StorageKind == field.StorageReference && (item.ReferenceTarget == field.ReferenceMedia || item.FieldType == field.TypeMedia) {
 		if id, ok := item.Value.(int64); ok && id > 0 {
 			references = append(references, field.Reference{Target: field.ReferenceMedia, ID: id})
 		}
 	}
 	for _, reference := range item.References {
-		if reference.Target != field.ReferenceFile && reference.Target != field.ReferenceMedia {
+		if reference.Target != field.ReferenceMedia {
 			continue
 		}
 		reference.Target = field.ReferenceMedia

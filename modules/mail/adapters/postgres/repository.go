@@ -71,27 +71,55 @@ func (r *Repository) TemplateByCode(ctx context.Context, siteID site.ID, code st
 	return item, mapNotFound(err)
 }
 
-func (r *Repository) CreateTemplate(ctx context.Context, item mail.Template) (mail.Template, error) {
+func (r *Repository) CreateTemplate(ctx context.Context, item mail.Template) (_ mail.Template, resultErr error) {
 	values, err := templateJSON(item)
 	if err != nil {
 		return mail.Template{}, err
 	}
-	created, err := scanTemplate(r.connector.Pool().QueryRow(ctx, `
+	tx, err := r.connector.Pool().Begin(ctx)
+	if err != nil {
+		return mail.Template{}, err
+	}
+	defer rollback(tx, &resultErr)
+	created, err := scanTemplate(tx.QueryRow(ctx, `
 INSERT INTO mail.templates(site_id,code,name,enabled,from_address,to_addresses,cc_addresses,bcc_addresses,reply_to,subject,content_type,text_body,html_body,attachments,variables,created_by,updated_by)
 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)
 RETURNING `+templateColumns+`;`, item.SiteID, item.Code, item.Name, item.Enabled, values.from, values.to, values.cc, values.bcc, values.replyTo, item.Subject, item.ContentType, item.TextBody, item.HTMLBody, values.attachments, values.variables, item.CreatedBy))
-	return created, mapWriteError(err)
+	if err != nil {
+		return mail.Template{}, mapWriteError(err)
+	}
+	if err := replaceStaticAttachmentOccurrences(ctx, tx, created); err != nil {
+		return mail.Template{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return mail.Template{}, err
+	}
+	return created, nil
 }
 
-func (r *Repository) UpdateTemplate(ctx context.Context, item mail.Template) (mail.Template, error) {
+func (r *Repository) UpdateTemplate(ctx context.Context, item mail.Template) (_ mail.Template, resultErr error) {
 	values, err := templateJSON(item)
 	if err != nil {
 		return mail.Template{}, err
 	}
-	updated, err := scanTemplate(r.connector.Pool().QueryRow(ctx, `
+	tx, err := r.connector.Pool().Begin(ctx)
+	if err != nil {
+		return mail.Template{}, err
+	}
+	defer rollback(tx, &resultErr)
+	updated, err := scanTemplate(tx.QueryRow(ctx, `
 UPDATE mail.templates SET code=$3,name=$4,enabled=$5,from_address=$6,to_addresses=$7,cc_addresses=$8,bcc_addresses=$9,reply_to=$10,subject=$11,content_type=$12,text_body=$13,html_body=$14,attachments=$15,variables=$16,updated_at=clock_timestamp(),updated_by=$17
 WHERE site_id=$1 AND id=$2 RETURNING `+templateColumns+`;`, item.SiteID, item.ID, item.Code, item.Name, item.Enabled, values.from, values.to, values.cc, values.bcc, values.replyTo, item.Subject, item.ContentType, item.TextBody, item.HTMLBody, values.attachments, values.variables, item.UpdatedBy))
-	return updated, mapWriteError(err)
+	if err != nil {
+		return mail.Template{}, mapWriteError(err)
+	}
+	if err := replaceStaticAttachmentOccurrences(ctx, tx, updated); err != nil {
+		return mail.Template{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return mail.Template{}, err
+	}
+	return updated, nil
 }
 
 func (r *Repository) SetTemplateEnabled(ctx context.Context, siteID site.ID, id mail.TemplateID, enabled bool, updatedBy *security.UserID) (mail.Template, error) {
@@ -99,15 +127,23 @@ func (r *Repository) SetTemplateEnabled(ctx context.Context, siteID site.ID, id 
 	return updated, mapWriteError(err)
 }
 
-func (r *Repository) DeleteTemplate(ctx context.Context, siteID site.ID, id mail.TemplateID) error {
-	command, err := r.connector.Pool().Exec(ctx, `DELETE FROM mail.templates WHERE site_id=$1 AND id=$2;`, siteID, id)
+func (r *Repository) DeleteTemplate(ctx context.Context, siteID site.ID, id mail.TemplateID) (resultErr error) {
+	tx, err := r.connector.Pool().Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer rollback(tx, &resultErr)
+	command, err := tx.Exec(ctx, `DELETE FROM mail.templates WHERE site_id=$1 AND id=$2;`, siteID, id)
 	if err != nil {
 		return fmt.Errorf("delete mail template: %w", err)
 	}
 	if command.RowsAffected() == 0 {
 		return mail.ErrNotFound
 	}
-	return nil
+	if _, err := tx.Exec(ctx, `DELETE FROM core.media_field_occurrences WHERE owner_kind='mail_template' AND owner_id=$1 AND container='attachments'`, id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 type templateValues struct{ from, to, cc, bcc, replyTo, attachments, variables []byte }

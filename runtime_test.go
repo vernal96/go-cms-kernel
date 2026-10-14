@@ -1414,7 +1414,7 @@ func TestProfileRuntimeRejectsInvalidResourceTypeRegistrations(
 				code: "custom", pathMode: resourcetype.PathRoute,
 				metadata: &resourcetype.Metadata{
 					Label:            "Custom",
-					SettingsFields:   []field.Definition{{Key: "asset", Type: field.TypeFile, Label: "Asset", Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "asset"}}},
+					SettingsFields:   []field.Definition{{Key: "asset", Type: field.TypeMedia, Label: "Asset", Options: field.MediaOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "asset"}}},
 					SettingsDefaults: map[string]any{},
 				},
 			}},
@@ -1643,7 +1643,7 @@ func TestCoreModuleRegistersAllStandardFieldTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.FieldTypes) != 13 {
+	if len(registry.FieldTypes) != 12 {
 		t.Fatalf("standard field types = %d", len(registry.FieldTypes))
 	}
 
@@ -1661,6 +1661,7 @@ func TestCoreModuleRegistersAllStandardFieldTypes(t *testing.T) {
 		field.TypeTextarea,
 		field.TypeEmail,
 		field.TypePhone,
+		field.TypeMedia,
 		field.TypeJSON,
 		field.TypeRepeater,
 	} {

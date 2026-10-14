@@ -151,6 +151,7 @@ type ResourceTypeCapabilities struct {
 }
 
 type ResourceMetadata struct {
+	ImageField *field.Descriptor            `json:"image_field"`
 	Types      []ResourceType               `json:"types"`
 	Templates  []ResourceTemplate           `json:"templates"`
 	Widgets    []WidgetDefinition           `json:"widgets"`
@@ -249,8 +250,17 @@ func (m *Resources) ResourceMetadata(
 		}
 		extensions = append(extensions, editor.Metadata())
 	}
+	var imageField *field.Descriptor
+	if definition, exists := resource.ImageField(runtime); exists {
+		descriptor, err := field.Describe(definition, runtime.Profile().Registry())
+		if err != nil {
+			return ResourceMetadata{}, err
+		}
+		imageField = &descriptor
+	}
 	return ResourceMetadata{
-		Types: types, Templates: templates, Widgets: widgets, Extensions: extensions,
+		ImageField: imageField,
+		Types:      types, Templates: templates, Widgets: widgets, Extensions: extensions,
 	}, nil
 }
 

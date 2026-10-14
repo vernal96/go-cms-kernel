@@ -71,7 +71,7 @@ func (t mailActionType) ValidateConfig(ctx context.Context, validation ActionVal
 		if !exists || item.Type == FieldTypeCaptcha || item.Type == FieldTypeUpload {
 			return fmt.Errorf("%w: Form field %q is not a scalar Mail value", ErrInvalid, fieldCode)
 		}
-		if definition.Type == field.TypeFile {
+		if definition.Type == field.TypeMedia {
 			return fmt.Errorf("%w: Mail file variables cannot map transient Form values", ErrInvalid)
 		}
 		if err := validateMailValueCompatibility(t.fieldTypes, definition, item); err != nil {

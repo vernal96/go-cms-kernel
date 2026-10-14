@@ -11,7 +11,7 @@ Site-management contribution монтируется на `/api/sites/{siteID}/ma
 | `POST /api/sites/{siteID}/mail/preview` | Рендеринг без отправки |
 | `POST /api/sites/{siteID}/mail/send` | Постановка отправки в очередь |
 | `GET /api/sites/{siteID}/mail/send/templates` | Шаблоны для ручной отправки |
-| `POST /api/sites/{siteID}/mail/send/templates/{templateID}/variables/files` | Multipart `target` (JSON-строка с `field_path`) и `file`; сервер разрешает схему переменной по шаблону и путь поля. |
+| `POST /api/sites/{siteID}/mail/send/templates/{templateID}/variables/files` | Multipart `target` (JSON-строка с `field_path`) и `file`; сервер разрешает схему Media-переменной по шаблону и путь поля. |
 | `GET /api/sites/{siteID}/mail/messages`, `GET/DELETE /api/sites/{siteID}/mail/messages/{messageID}` | Журнал, детали и удаление сообщений |
 
 Пример запроса:
@@ -44,9 +44,10 @@ curl -X POST 'http://localhost:8080/api/sites/12/mail/send/templates/4/variables
   -F 'file=@./contract.pdf'
 ```
 
-`field_path` — массив ключей поля и, при необходимости, индексов вложенных повторителей. Disk, VirtualPath и MIME-ограничения берутся из определения переменной указанного шаблона; клиент не передаёт эти параметры. Сервер определяет MIME по содержимому до записи и сохраняет файл в настроенный каталог. Успех возвращает `201 Created` с объектом файла. Маршрут предназначен для файловых переменных при ручной отправке; обычные вложения шаблона и другие mail-пути загрузки имеют отдельные контракты.
+`field_path` — массив ключей поля и, при необходимости, индексов вложенных повторителей. Файловые переменные объявляются как `field.TypeMedia` с `field.MediaOptions`. Disk, VirtualPath и MIME-ограничения берутся из определения переменной указанного шаблона; клиент не передаёт эти параметры. Сервер определяет MIME по содержимому до записи и сохраняет файл в настроенный каталог. Успех возвращает `201 Created` с объектом файла. Маршрут предназначен для Media-переменных при ручной отправке; обычные вложения шаблона и другие mail-пути загрузки имеют отдельные контракты.
 
-- Создание и изменение шаблона принимают `code`, `name`, `enabled`, `from`, `to`, `cc`, `bcc`, `reply_to`, `subject`, `content_type`, `text_body`, `html_body`, `attachments`, `variables`. `from` и адресаты содержат `name` и `email`; `content_type` — `text` или `html`. Переменная задаётся ключом `key`, типом поля `type`, подписью `label`, флагом `required`, упорядоченным массивом `validators` (`{"type":"max_length","options":{"value":100}}`) и необязательными `options`.
+- Создание и изменение шаблона принимают `code`, `name`, `enabled`, `from`, `to`, `cc`, `bcc`, `reply_to`, `subject`, `content_type`, `text_body`, `html_body`, `attachments`, `variables`. `from` и адресаты содержат `name` и `email`; `content_type` — `text` или `html`. Переменная задаётся ключом `key`, типом поля `type`, подписью `label`, флагом `required`, упорядоченным массивом `validators` (`{"type":"max_length","options":{"value":100}}`) и необязательными `options`. Для `type: "media"` в `options` указываются `disk`, `virtual_path`, `settings_code` и при необходимости `mime_types`/`multiple` по контракту [Media-поля Core](../core/fields.md#файловое-поле).
+- Элемент `attachments` для фиксированного вложения использует `source: "static"` и `media_id`; `media_id` ссылается на отдельный объект Media. Ответы Mail содержат `attachment_media_options` с настройкой диска, каталога загрузки, метаданных и MIME для этого поля. Переменное вложение использует `source: "variable"`, `variable` и, при необходимости, `filename_template`.
 - `PATCH /api/sites/{siteID}/mail/templates/{templateID}/enabled`: только флаг `enabled` (boolean).
 - `POST /api/sites/{siteID}/mail/preview` и `POST /api/sites/{siteID}/mail/send`: `template_id` (положительный ID шаблона) и `values` (объект значений, ключи — коды переменных). Пример выше показывает отправку; тот же формат у preview.
 

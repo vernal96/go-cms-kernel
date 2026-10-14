@@ -57,7 +57,7 @@ func (s *MediaFileDeletions) Delete(ctx context.Context, actor security.Actor, i
 	var siteRef *media.FileOccurrence
 	var preparedSite media.PreparedFileOwner
 	siteFinished := false
-	if len(refs) == 1 && refs[0].OwnerKind == "site" && refs[0].Target == field.ReferenceFile && refs[0].SiteID == input.SiteID {
+	if len(refs) == 1 && refs[0].OwnerKind == "site" && refs[0].Target == field.ReferenceMedia && refs[0].SiteID == input.SiteID {
 		ref := refs[0]
 		ref.Path = append([]string(nil), ref.Path...)
 		siteRef = &ref

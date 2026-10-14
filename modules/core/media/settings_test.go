@@ -105,11 +105,11 @@ func TestSettingsValidationPermissionsAndIsolation(t *testing.T) {
 }
 
 func TestSettingsRejectsReferencesAtEveryDepth(t *testing.T) {
-	for _, referenceType := range []field.TypeCode{field.TypeFile, field.TypeMedia} {
+	for _, referenceType := range []field.TypeCode{field.TypeMedia} {
 		for _, multiple := range []bool{false, true} {
 			definition := field.Definition{Key: "asset", Label: "Asset", Type: referenceType}
-			if referenceType == field.TypeFile {
-				definition.Options = field.FileOptions{Disk: "public", VirtualPath: "media", SettingsCode: "image", Multiple: multiple}
+			if referenceType == field.TypeMedia {
+				definition.Options = field.MediaOptions{Disk: "public", VirtualPath: "media", SettingsCode: "image", Multiple: multiple}
 			} else {
 				definition.Options = field.MediaOptions{Multiple: multiple}
 			}
@@ -134,7 +134,7 @@ func TestSettingsCompilationAndMediaMetadata(t *testing.T) {
 				types[i] = field.MediaType(map[string][]field.Definition{"image": defs})
 			}
 		}
-		def := field.Definition{Key: "image", Type: field.TypeMedia, Label: "Image", Options: field.MediaOptions{SettingsCode: "image", Multiple: multiple}}
+		def := field.Definition{Key: "image", Type: field.TypeMedia, Label: "Image", Options: field.MediaOptions{Disk: "public", VirtualPath: "images", SettingsCode: "image", Multiple: multiple}}
 		desc, err := field.Describe(def, types)
 		if err != nil {
 			t.Fatal(err)
@@ -154,7 +154,7 @@ func TestSettingsCompilationAndMediaMetadata(t *testing.T) {
 		if _, err := field.Describe(nested, types); err != nil {
 			t.Fatal(err)
 		}
-		def.Options = field.MediaOptions{SettingsCode: "missing"}
+		def.Options = field.MediaOptions{Disk: "public", VirtualPath: "images", SettingsCode: "missing"}
 		if _, err := field.Compile([]field.Definition{def}, types); err == nil {
 			t.Fatal("accepted missing settings")
 		}

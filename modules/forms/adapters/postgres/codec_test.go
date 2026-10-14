@@ -11,7 +11,7 @@ import (
 func TestFieldOptionsCodecPreservesContributedAndFileOptions(t *testing.T) {
 	tests := []forms.FormField{
 		{Code: "custom", Type: "custom.type", Options: map[string]any{"mode": "strict", "limit": float64(3)}},
-		{Code: "asset", Type: field.TypeFile, Options: field.FileOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image", MIMETypes: []string{"image/*"}}},
+		{Code: "asset", Type: field.TypeMedia, Options: field.MediaOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image", MIMETypes: []string{"image/*"}}},
 	}
 	for _, testCase := range tests {
 		raw, err := encodeFieldOptions(testCase)

@@ -52,7 +52,7 @@ func (s *Service) UploadFieldFile(ctx context.Context, actor security.Actor, for
 	if err != nil {
 		return corefile.File{}, err
 	}
-	options, err := field.FileUploadOptions(definitions, target.FieldPath)
+	options, err := field.MediaUploadOptions(definitions, target.FieldPath)
 	if err != nil {
 		return corefile.File{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}

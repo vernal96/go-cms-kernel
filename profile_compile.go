@@ -129,6 +129,14 @@ func (f *ProfileRuntimeFactory) Compile(
 		}
 	}
 
+	if image := profile.Settings.FileSystem.ResourceImage; image != nil {
+		if image.Multiple {
+			return nil, errors.New("resource image must be a single Media value")
+		}
+		if _, err := field.Compile([]field.Definition{{Key: "image_media_id", Label: "Изображение", Type: field.TypeMedia, Options: *image}}, registry); err != nil {
+			return nil, fmt.Errorf("profile %q resource image: %w", profile.Code, err)
+		}
+	}
 	paramSchema, err := field.Compile(profile.Params, registry)
 	if err != nil {
 		return nil, fmt.Errorf(

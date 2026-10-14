@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres/medialock"
+	"github.com/vernal96/go-cms-kernel/modules/core/adapters/postgres/mediaoccurrence"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
@@ -224,42 +225,7 @@ func ensureMediaAvailable(
 	id media.ID,
 	exclude resource.ID,
 ) error {
-	var attached bool
-	if err := transaction.QueryRow(ctx, `
-SELECT EXISTS
-(
-    SELECT 1 FROM core.resource_media_references WHERE media_id = $1 AND ($2 = 0 OR resource_id <> $2)
-    UNION ALL
-
-    SELECT 1
-    FROM core.resources
-    WHERE image_media_id = $1
-      AND ($2 = 0 OR id <> $2)
-
-    UNION ALL
-
-    SELECT 1
-	FROM core.library_items
-	WHERE image_media_id = $1
-	  AND ($2 = 0 OR id <> $2)
-
-    UNION ALL
-
-    SELECT 1
-    FROM core.users
-    WHERE avatar_media_id = $1
-);
-`, id, exclude).Scan(&attached); err != nil {
-		return fmt.Errorf(
-			"check media %d attachment: %w",
-			id,
-			err,
-		)
-	}
-	if attached {
-		return media.ErrAlreadyAttached
-	}
-	return nil
+	return mediaoccurrence.EnsureAvailable(ctx, transaction, id, media.FileOccurrence{OwnerKind: "resource", OwnerID: int64(exclude), Container: "image"})
 }
 
 func treeMediaIDs(
@@ -476,6 +442,32 @@ func replaceFileReferences(
 	ownerID resource.ID,
 	references map[string]media.ID,
 ) error {
+	ids := make([]media.ID, 0, len(references))
+	seen := make(map[media.ID]bool, len(references))
+	for _, id := range references {
+		if seen[id] {
+			return media.ErrAlreadyAttached
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	if err := medialock.Lock(ctx, tx, ids...); err != nil {
+		return err
+	}
+	var attached bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(
+ SELECT 1 FROM core.file_field_references WHERE media_id=ANY($1::bigint[]) AND NOT(owner_kind='resource' AND owner_id=$2)
+ UNION ALL SELECT 1 FROM core.resource_media_references WHERE media_id=ANY($1::bigint[]) AND resource_id<>$2
+ UNION ALL SELECT 1 FROM core.media_field_occurrences WHERE media_id=ANY($1::bigint[])
+ UNION ALL SELECT 1 FROM core.resources WHERE image_media_id=ANY($1::bigint[])
+ UNION ALL SELECT 1 FROM core.library_items WHERE image_media_id=ANY($1::bigint[])
+ UNION ALL SELECT 1 FROM core.users WHERE avatar_media_id=ANY($1::bigint[])
+)`, ids, ownerID).Scan(&attached); err != nil {
+		return err
+	}
+	if attached {
+		return media.ErrAlreadyAttached
+	}
 	if _, err := tx.Exec(ctx, `DELETE FROM core.file_field_references WHERE owner_kind = 'resource' AND owner_id = $1;`, ownerID); err != nil {
 		return fmt.Errorf("delete resource file references: %w", err)
 	}
@@ -573,7 +565,7 @@ INSERT INTO core.resource_field_values (
 			return err
 		}
 		for _, ref := range refs {
-			if err := ensureMediaAvailable(ctx, tx, media.ID(ref.ID), resourceID); err != nil {
+			if err := mediaoccurrence.EnsureAvailable(ctx, tx, media.ID(ref.ID), media.FileOccurrence{OwnerKind: "resource", OwnerID: int64(resourceID), Container: "fields"}); err != nil {
 				return err
 			}
 			path := append([]string{}, ref.Path...)
@@ -581,6 +573,9 @@ INSERT INTO core.resource_field_values (
 				return translateError(err)
 			}
 		}
+	}
+	if err := rebuildResourceFileReferences(ctx, tx, int64(resourceID)); err != nil {
+		return err
 	}
 	return deleteUnusedMedia(ctx, tx, oldMedia)
 }
