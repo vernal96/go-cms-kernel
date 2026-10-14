@@ -46,6 +46,53 @@ type Config struct {
 	Random           io.Reader
 }
 
+// ClientConfig contains connection settings shared by Redis-backed adapters.
+// It deliberately has no cache alias or cache key policy.
+type ClientConfig struct {
+	Addrs                 []string
+	ClientName            string
+	Username              string
+	Password              string
+	DB                    int
+	MasterName            string
+	SentinelUsername      string
+	SentinelPassword      string
+	Protocol              int
+	MaxRetries            int
+	ContextTimeoutEnabled bool
+	DialTimeout           time.Duration
+	ReadTimeout           time.Duration
+	WriteTimeout          time.Duration
+	PoolTimeout           time.Duration
+	PoolSize              int
+	MinIdleConns          int
+	MaxIdleConns          int
+	ConnMaxIdleTime       time.Duration
+	ConnMaxLifetime       time.Duration
+	TLSEnabled            bool
+	TLSServerName         string
+	TLSInsecure           bool
+}
+
+// Client exposes the small Redis command surface shared with non-cache
+// adapters. Implementations keep Redis-specific client libraries private.
+type Client interface {
+	HIncrBy(context.Context, string, string, int64) error
+	EvalStringSlice(context.Context, string, []string, ...any) ([]string, error)
+	EvalInt(context.Context, string, []string, ...any) (int64, error)
+	Close() error
+}
+
+// NewClient creates a Redis command client without making a network request.
+// The caller owns the returned client and must close it.
+func NewClient(config ClientConfig) (Client, error) {
+	options, err := clientOptions(config)
+	if err != nil {
+		return nil, err
+	}
+	return universalCommands{client: goredis.NewUniversalClient(options)}, nil
+}
+
 type Factory struct {
 	Config Config
 }
@@ -72,6 +119,27 @@ type client interface {
 
 type universalClient struct {
 	client goredis.UniversalClient
+}
+
+type universalCommands struct {
+	client goredis.UniversalClient
+}
+
+func (c universalCommands) HIncrBy(ctx context.Context, key, field string, increment int64) error {
+	return c.client.HIncrBy(ctx, key, field, increment).Err()
+}
+
+func (c universalCommands) EvalStringSlice(ctx context.Context, script string, keys []string, args ...any) ([]string, error) {
+	return c.client.Eval(ctx, script, keys, args...).StringSlice()
+}
+
+func (c universalCommands) EvalInt(ctx context.Context, script string, keys []string, args ...any) (int64, error) {
+	result, err := c.client.Eval(ctx, script, keys, args...).Int()
+	return int64(result), err
+}
+
+func (c universalCommands) Close() error {
+	return c.client.Close()
 }
 
 func (c universalClient) Ping(ctx context.Context) error {
@@ -191,6 +259,21 @@ func universalOptions(config Config) (*goredis.UniversalOptions, error) {
 	if config.Code == "" {
 		return nil, errors.New("redis cache code is empty")
 	}
+	return clientOptions(ClientConfig{
+		Addrs: config.Addrs, ClientName: config.ClientName, Username: config.Username,
+		Password: config.Password, DB: config.DB, MasterName: config.MasterName,
+		SentinelUsername: config.SentinelUsername, SentinelPassword: config.SentinelPassword,
+		Protocol: config.Protocol, MaxRetries: config.MaxRetries, DialTimeout: config.DialTimeout,
+		ReadTimeout: config.ReadTimeout, WriteTimeout: config.WriteTimeout,
+		PoolTimeout: config.PoolTimeout, PoolSize: config.PoolSize,
+		MinIdleConns: config.MinIdleConns, MaxIdleConns: config.MaxIdleConns,
+		ConnMaxIdleTime: config.ConnMaxIdleTime, ConnMaxLifetime: config.ConnMaxLifetime,
+		TLSEnabled: config.TLSEnabled, TLSServerName: config.TLSServerName,
+		TLSInsecure: config.TLSInsecure,
+	})
+}
+
+func clientOptions(config ClientConfig) (*goredis.UniversalOptions, error) {
 	addrs := make([]string, 0, len(config.Addrs))
 	for _, address := range config.Addrs {
 		if address = strings.TrimSpace(address); address != "" {
@@ -198,37 +281,38 @@ func universalOptions(config Config) (*goredis.UniversalOptions, error) {
 		}
 	}
 	if len(addrs) == 0 {
-		return nil, errors.New("redis cache addresses are empty")
+		return nil, errors.New("redis addresses are empty")
 	}
 	if config.DB < 0 {
-		return nil, errors.New("redis cache DB is invalid")
+		return nil, errors.New("redis DB is invalid")
 	}
 	if config.Protocol != 0 &&
 		config.Protocol != 2 &&
 		config.Protocol != 3 {
-		return nil, errors.New("redis cache protocol is invalid")
+		return nil, errors.New("redis protocol is invalid")
 	}
 
 	options := &goredis.UniversalOptions{
-		Addrs:            addrs,
-		ClientName:       config.ClientName,
-		Username:         config.Username,
-		Password:         config.Password,
-		DB:               config.DB,
-		MasterName:       config.MasterName,
-		SentinelUsername: config.SentinelUsername,
-		SentinelPassword: config.SentinelPassword,
-		Protocol:         config.Protocol,
-		MaxRetries:       config.MaxRetries,
-		DialTimeout:      config.DialTimeout,
-		ReadTimeout:      config.ReadTimeout,
-		WriteTimeout:     config.WriteTimeout,
-		PoolTimeout:      config.PoolTimeout,
-		PoolSize:         config.PoolSize,
-		MinIdleConns:     config.MinIdleConns,
-		MaxIdleConns:     config.MaxIdleConns,
-		ConnMaxIdleTime:  config.ConnMaxIdleTime,
-		ConnMaxLifetime:  config.ConnMaxLifetime,
+		Addrs:                 addrs,
+		ClientName:            config.ClientName,
+		Username:              config.Username,
+		Password:              config.Password,
+		DB:                    config.DB,
+		MasterName:            config.MasterName,
+		SentinelUsername:      config.SentinelUsername,
+		SentinelPassword:      config.SentinelPassword,
+		Protocol:              config.Protocol,
+		MaxRetries:            config.MaxRetries,
+		ContextTimeoutEnabled: config.ContextTimeoutEnabled,
+		DialTimeout:           config.DialTimeout,
+		ReadTimeout:           config.ReadTimeout,
+		WriteTimeout:          config.WriteTimeout,
+		PoolTimeout:           config.PoolTimeout,
+		PoolSize:              config.PoolSize,
+		MinIdleConns:          config.MinIdleConns,
+		MaxIdleConns:          config.MaxIdleConns,
+		ConnMaxIdleTime:       config.ConnMaxIdleTime,
+		ConnMaxLifetime:       config.ConnMaxLifetime,
 	}
 	if config.TLSEnabled {
 		options.TLSConfig = &tls.Config{

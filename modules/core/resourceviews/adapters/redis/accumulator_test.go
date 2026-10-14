@@ -8,12 +8,13 @@ import (
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
+	redisclient "github.com/vernal96/go-cms-kernel/connectors/redis"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourceviews"
 )
 
 func TestRedisFactoryIsLazyAndFailureBounded(t *testing.T) {
-	factory := Factory{Options: goredis.UniversalOptions{Addrs: []string{"127.0.0.1:1"}}, Prefix: "test-lazy"}
+	factory := Factory{Config: redisclient.ClientConfig{Addrs: []string{"127.0.0.1:1"}}, Prefix: "test-lazy"}
 	client, err := factory.Open(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +34,7 @@ func TestRedisClaimsReclaimAfterWorkerShutdownAndPreserveNewIncrements(t *testin
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	factory := Factory{Options: goredis.UniversalOptions{Addrs: []string{address}}, Prefix: time.Now().Format("150405.000000000")}
+	factory := Factory{Config: redisclient.ClientConfig{Addrs: []string{address}}, Prefix: time.Now().Format("150405.000000000")}
 	first, err := factory.Open(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +87,7 @@ func TestRedisClaimsReclaimAfterWorkerShutdownAndPreserveNewIncrements(t *testin
 	if err := second.Increment(ctx, 7, 9); err != nil {
 		t.Fatal(err)
 	}
-	administrator := goredis.NewUniversalClient(&factory.Options)
+	administrator := goredis.NewUniversalClient(&goredis.UniversalOptions{Addrs: factory.Config.Addrs})
 	defer administrator.Close()
 	keys := second.(*Accumulator).keys(7)
 	defer administrator.Del(context.Background(), keys...)

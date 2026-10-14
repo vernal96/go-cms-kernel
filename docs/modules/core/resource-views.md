@@ -19,12 +19,17 @@ bot/crawler/spider User-Agent и `prefetch`, `prerender`, `preview` в `Purpose`
 зависят только от него и `resourceviews.Repository`, поэтому другой backend
 можно подключить собственным `resourceviews.Factory`.
 
+Для Redis factory использует общий `connectors/redis` и его `ClientConfig`.
+Приложению не нужно импортировать `github.com/redis/go-redis/v9`: библиотека
+клиента остаётся внутри connector. Redis-кэш и накопитель просмотров используют
+один механизм подключения, но сохраняют отдельные контракты и настройки.
+
 ```go
 import (
     "time"
 
-    goredis "github.com/redis/go-redis/v9"
     "github.com/vernal96/go-cms-kernel/app"
+    redisconn "github.com/vernal96/go-cms-kernel/connectors/redis"
     "github.com/vernal96/go-cms-kernel/modules/core"
     "github.com/vernal96/go-cms-kernel/modules/core/resourceviews"
     viewsredis "github.com/vernal96/go-cms-kernel/modules/core/resourceviews/adapters/redis"
@@ -36,7 +41,7 @@ var definition = app.Definition{
     ResourceViews: []resourceviews.Definition{{
         Code: "views",
         Factory: viewsredis.Factory{
-            Options: goredis.UniversalOptions{Addrs: []string{"redis-views:6379"}},
+            Config: redisconn.ClientConfig{Addrs: []string{"redis-views:6379"}},
             Prefix: "my-cms:resource-views",
         },
     }},

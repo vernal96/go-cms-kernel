@@ -12,57 +12,57 @@ import (
 	"sync"
 	"time"
 
-	goredis "github.com/redis/go-redis/v9"
+	redisclient "github.com/vernal96/go-cms-kernel/connectors/redis"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourceviews"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 )
 
 type Factory struct {
-	Options goredis.UniversalOptions
-	Prefix  string
+	Config redisclient.ClientConfig
+	Prefix string
 }
 
 func (f Factory) Open(ctx context.Context) (resourceviews.Accumulator, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if len(f.Options.Addrs) == 0 || strings.TrimSpace(f.Prefix) == "" || strings.ContainsAny(f.Prefix, "{}") || f.Options.DB < 0 {
+	if strings.TrimSpace(f.Prefix) == "" || strings.ContainsAny(f.Prefix, "{}") {
 		return nil, errors.New("invalid resource views Redis configuration")
 	}
-	options := f.Options
-	options.Addrs = append([]string(nil), f.Options.Addrs...)
+	config := f.Config
+	config.Addrs = append([]string(nil), f.Config.Addrs...)
 	// Bounded failure latency: views are secondary to the public response.
-	options.ContextTimeoutEnabled = true
-	options.MaxRetries = -1
-	if options.DialTimeout == 0 {
-		options.DialTimeout = 200 * time.Millisecond
+	config.ContextTimeoutEnabled = true
+	config.MaxRetries = -1
+	if config.DialTimeout == 0 {
+		config.DialTimeout = 200 * time.Millisecond
 	}
-	if options.ReadTimeout == 0 {
-		options.ReadTimeout = 200 * time.Millisecond
+	if config.ReadTimeout == 0 {
+		config.ReadTimeout = 200 * time.Millisecond
 	}
-	if options.WriteTimeout == 0 {
-		options.WriteTimeout = 200 * time.Millisecond
+	if config.WriteTimeout == 0 {
+		config.WriteTimeout = 200 * time.Millisecond
 	}
-	return &Accumulator{options: options, prefix: f.Prefix}, nil
+	client, err := redisclient.NewClient(config)
+	if err != nil {
+		return nil, fmt.Errorf("invalid resource views Redis configuration: %w", err)
+	}
+	return &Accumulator{prefix: f.Prefix, client: client}, nil
 }
 
 type Accumulator struct {
-	options goredis.UniversalOptions
-	prefix  string
-	mu      sync.Mutex
-	client  goredis.UniversalClient
-	closed  bool
+	prefix string
+	mu     sync.Mutex
+	client redisclient.Client
+	closed bool
 }
 
-func (a *Accumulator) connection() (goredis.UniversalClient, error) {
+func (a *Accumulator) connection() (redisclient.Client, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.closed {
 		return nil, errors.New("resource views accumulator closed")
-	}
-	if a.client == nil {
-		a.client = goredis.NewUniversalClient(&a.options)
 	}
 	return a.client, nil
 }
@@ -80,7 +80,7 @@ func (a *Accumulator) Increment(ctx context.Context, siteID site.ID, resourceID 
 	if err != nil {
 		return err
 	}
-	return client.HIncrBy(ctx, a.keys(siteID)[0], strconv.FormatInt(int64(resourceID), 10), 1).Err()
+	return client.HIncrBy(ctx, a.keys(siteID)[0], strconv.FormatInt(int64(resourceID), 10), 1)
 }
 
 const claimScript = `
@@ -111,7 +111,7 @@ func (a *Accumulator) Claim(ctx context.Context, siteID site.ID) (*resourceviews
 		return nil, err
 	}
 	owner := rand.Text()
-	result, err := client.Eval(ctx, claimScript, a.keys(siteID), owner, 30000, rand.Text()).StringSlice()
+	result, err := client.EvalStringSlice(ctx, claimScript, a.keys(siteID), owner, 30000, rand.Text())
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func (a *Accumulator) Acknowledge(ctx context.Context, batch resourceviews.Batch
 	if err != nil {
 		return err
 	}
-	result, err := client.Eval(ctx, acknowledgeScript, a.keys(batch.SiteID), batch.Owner, batch.ID).Int()
+	result, err := client.EvalInt(ctx, acknowledgeScript, a.keys(batch.SiteID), batch.Owner, batch.ID)
 	if err != nil {
 		return err
 	}

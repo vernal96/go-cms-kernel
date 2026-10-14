@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.10.0
+
+- Move Redis client configuration and the commands used by resource views into the existing Redis connector. Resource view accumulators retain a separate contract and client lifecycle; projects configure them with `redis.ClientConfig` instead of importing `go-redis/v9` types.
+- Replace the public `resourceviews/adapters/redis.Factory.Options` field with `Config`. Consumers configuring this factory must update their declarations; view storage and HTTP behavior are unchanged.
+
 ## 0.9.0
 
 - Add an application-owned resource view accumulator contract, separate from `cache.Store`, with a Redis implementation and a configurable Core flush interval (45 seconds by default).
