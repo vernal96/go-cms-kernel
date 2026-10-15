@@ -2682,6 +2682,11 @@ func TestResourceWidgetTemplateFieldSelectionRejectsTemplateChange(t *testing.T)
 	if err != nil || stale.Widgets[0].Params["fields"].([]string)[0] != "removed" {
 		t.Fatalf("stale stored widget should remain readable for repair: %#v, %v", stale.Widgets, err)
 	}
+	tree, err := service.Tree(ctx, security.System(), 1)
+	if err != nil || len(tree) != 1 || tree[0].Resource.ID != created.ID ||
+		tree[0].Resource.Widgets[0].Params["fields"].([]string)[0] != "removed" {
+		t.Fatalf("stale stored widget should remain available in resource options: %#v, %v", tree, err)
+	}
 	_, err = service.Update(ctx, security.System(), updateInputFrom(stale))
 	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "removed") {
 		t.Fatalf("resource save with stale widget = %v", err)

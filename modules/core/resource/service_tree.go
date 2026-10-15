@@ -62,10 +62,11 @@ func (s *Service) Tree(
 	}
 
 	normalized := make([]Resource, 0, len(items))
+	storedContext := context.WithValue(ctx, storedValidationKey{}, true)
 	for _, item := range items {
 		storedPath := cloneString(item.Path)
 		result, err := s.normalize(
-			ctx,
+			storedContext,
 			security.System(),
 			item,
 			siteRuntime,

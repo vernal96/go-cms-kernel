@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.13.1
+
+- Keep resources with stale `core_resource_fields` selections visible in resource trees and admin options so editors can repair the widget configuration.
+
 ## 0.13.0
 
 - Add the built-in `core_resource_fields` widget. Editors select one or more fields from the current resource template; public responses return their raw values in `data.fields`, including `null` for selected unset fields.
