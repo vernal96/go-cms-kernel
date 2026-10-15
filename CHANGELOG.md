@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.12.0
+
+- Accept an explicit `--password` or `--generate-password` when creating users, and require `--password` when changing a user's password. Passwords are no longer read from stdin.
+
 ## 0.11.0
 
 - Replace the `File` field type with the single `Media` field contract. `MediaOptions` now requires a disk, virtual upload path, and media-settings code; multiple selection and MIME restrictions remain configurable. Each saved selection owns a distinct Media object, and the server validates disk, MIME, and ownership on every write.

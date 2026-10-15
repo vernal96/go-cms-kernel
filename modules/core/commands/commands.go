@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"bufio"
 	"context"
 	cryptorand "crypto/rand"
 	"encoding/base64"
@@ -76,6 +75,10 @@ func (c *usersCommand) Run(
 	case "get", "block", "unblock", "password":
 		flags := newFlagSet("users "+args[0], streams)
 		rawID := flags.Int64("id", 0, "user id")
+		var password *string
+		if args[0] == "password" {
+			password = flags.String("password", "", "new password")
+		}
 		if err := parseFlags(flags, args[1:]); err != nil {
 			return err
 		}
@@ -94,15 +97,14 @@ func (c *usersCommand) Run(
 			item, err := c.application.Users().Unblock(ctx, security.System(), id)
 			return writeResult(streams.Out, item, err)
 		default:
-			password, err := readPassword(streams.In)
-			if err != nil {
-				return err
+			if *password == "" {
+				return errors.New("password is required")
 			}
 			item, err := c.application.Users().ChangePassword(
 				ctx,
 				security.System(),
 				id,
-				password,
+				*password,
 			)
 			return writeResult(streams.Out, item, err)
 		}
@@ -140,6 +142,7 @@ func (c *usersCommand) create(
 	middleName := flags.String("middle-name", "", "middle name")
 	phone := flags.String("phone", "", "phone")
 	avatar := flags.String("avatar-media-id", "", "avatar media id")
+	passwordFlag := flags.String("password", "", "password")
 	generate := flags.Bool(
 		"generate-password",
 		false,
@@ -171,6 +174,17 @@ func (c *usersCommand) create(
 		return errors.New("at least one group is required")
 	}
 
+	passwordSet := wasSet(flags, "password")
+	if passwordSet && *generate {
+		return errors.New("use either --password or --generate-password, not both")
+	}
+	if !passwordSet && !*generate {
+		return errors.New("either --password or --generate-password is required")
+	}
+	if passwordSet && *passwordFlag == "" {
+		return errors.New("password is empty")
+	}
+
 	avatarID, err := optionalMediaID(*avatar)
 	if err != nil {
 		return err
@@ -190,7 +204,7 @@ func (c *usersCommand) create(
 		password, err = generatePassword(cryptorand.Reader)
 		generatedPassword = password
 	} else {
-		password, err = readPassword(streams.In)
+		password = *passwordFlag
 	}
 	if err != nil {
 		return err
@@ -731,23 +745,6 @@ func generatePassword(entropy io.Reader) (string, error) {
 		return "", fmt.Errorf("generate password: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(random), nil
-}
-
-func readPassword(input io.Reader) (string, error) {
-	if input == nil {
-		return "", errors.New("password stdin is nil")
-	}
-	reader := bufio.NewReader(input)
-	password, err := reader.ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		return "", fmt.Errorf("read password from stdin: %w", err)
-	}
-	password = strings.TrimSuffix(password, "\n")
-	password = strings.TrimSuffix(password, "\r")
-	if password == "" {
-		return "", errors.New("password from stdin is empty")
-	}
-	return password, nil
 }
 
 func writeResult(output io.Writer, value any, err error) error {

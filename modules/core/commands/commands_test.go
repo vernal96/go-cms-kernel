@@ -23,6 +23,9 @@ type usersApplication struct {
 	createInput user.CreateInput
 	created     user.User
 	createErr   error
+	changedID   security.UserID
+	password    string
+	changed     user.User
 }
 
 func (a *usersApplication) listGroups(
@@ -55,6 +58,17 @@ func (s usersService) Create(
 	return s.application.createUser(ctx, actor, input)
 }
 
+func (s usersService) ChangePassword(
+	_ context.Context,
+	_ security.Actor,
+	id security.UserID,
+	password string,
+) (user.User, error) {
+	s.application.changedID = id
+	s.application.password = password
+	return s.application.changed, nil
+}
+
 type groupsService struct {
 	group.Service
 	application *usersApplication
@@ -75,46 +89,96 @@ func (a *usersApplication) Groups() group.Service {
 	return groupsService{application: a}
 }
 
-func TestPasswordIsReadOnlyFromStdin(t *testing.T) {
+func TestCreateUserRequiresExactlyOnePasswordSource(t *testing.T) {
 	t.Parallel()
 
-	password, err := readPassword(
-		strings.NewReader("  password with spaces  \r\n"),
-	)
-	if err != nil {
-		t.Fatal(err)
+	baseArgs := []string{
+		"create",
+		"-login=user",
+		"-email=user@example.test",
+		"-name=User",
+		"-group=manager",
 	}
-	if password != "  password with spaces  " {
-		t.Fatalf("password = %q", password)
-	}
-
-	var flagErrors bytes.Buffer
-	err = (&usersCommand{}).Run(
-		t.Context(),
-		[]string{
-			"create",
-			"-login=admin",
-			"-email=admin@example.test",
-			"-name=Admin",
-			"-password=must-not-be-supported",
-		},
-		console.IO{
-			In:  strings.NewReader("stdin-password\n"),
-			Out: &bytes.Buffer{},
-			Err: &flagErrors,
-		},
-	)
-	if err == nil ||
-		!strings.Contains(flagErrors.String(), "flag provided but not defined") {
-		t.Fatalf("password flag error = %v, stderr = %q", err, flagErrors.String())
+	for _, test := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "missing", args: baseArgs, want: "either --password or --generate-password is required"},
+		{name: "both", args: append(append([]string(nil), baseArgs...), "-password=secret", "-generate-password"), want: "use either --password or --generate-password, not both"},
+		{name: "empty manual", args: append(append([]string(nil), baseArgs...), "-password="), want: "password is empty"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			err := (&usersCommand{application: &usersApplication{}}).Run(
+				t.Context(),
+				test.args,
+				console.IO{In: failingReader{err: errors.New("stdin must not be read")}, Out: &bytes.Buffer{}, Err: &bytes.Buffer{}},
+			)
+			if err == nil || err.Error() != test.want {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+		})
 	}
 }
 
-func TestPasswordRejectsEmptyStdin(t *testing.T) {
+func TestUsersPasswordRequiresAndPassesDirectPasswordFlag(t *testing.T) {
+	application := &usersApplication{changed: user.User{ID: 9}}
+	command := &usersCommand{application: application}
+	for _, test := range []struct {
+		name     string
+		args     []string
+		wantErr  string
+		password string
+	}{
+		{name: "missing", args: []string{"password", "-id=9"}, wantErr: "password is required"},
+		{name: "empty", args: []string{"password", "-id=9", "-password="}, wantErr: "password is required"},
+		{name: "provided", args: []string{"password", "-id=9", "-password=  direct password  "}, password: "  direct password  "},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			output := bytes.Buffer{}
+			err := command.Run(t.Context(), test.args, console.IO{
+				In: failingReader{err: errors.New("stdin must not be read")}, Out: &output, Err: &bytes.Buffer{},
+			})
+			if test.wantErr != "" {
+				if err == nil || err.Error() != test.wantErr {
+					t.Fatalf("error = %v, want %q", err, test.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if application.changedID != 9 || application.password != test.password {
+				t.Fatalf("changed id = %d, password = %q", application.changedID, application.password)
+			}
+		})
+	}
+}
+
+func TestOtherUserCommandsRejectPasswordFlag(t *testing.T) {
 	t.Parallel()
 
-	if _, err := readPassword(strings.NewReader("\n")); err == nil {
-		t.Fatal("empty password stdin was accepted")
+	for _, subcommand := range []string{"get", "block", "unblock"} {
+		t.Run(subcommand, func(t *testing.T) {
+			t.Parallel()
+			var flagErrors bytes.Buffer
+			err := (&usersCommand{}).Run(
+				t.Context(),
+				[]string{subcommand, "-id=1", "-password=secret"},
+				console.IO{
+					In:  failingReader{err: errors.New("stdin must not be read")},
+					Out: &bytes.Buffer{},
+					Err: &flagErrors,
+				},
+			)
+			if err == nil || !strings.Contains(
+				flagErrors.String(),
+				"flag provided but not defined: -password",
+			) {
+				t.Fatalf("error = %v, stderr = %q", err, flagErrors.String())
+			}
+		})
 	}
 }
 
@@ -189,7 +253,7 @@ func TestCreateUserRequiresIdentityAndGroupFlags(t *testing.T) {
 	}
 }
 
-func TestCreateUserSelectsGroupsAndReadsPasswordFromStdin(t *testing.T) {
+func TestCreateUserSelectsGroupsAndUsesPasswordFlag(t *testing.T) {
 	t.Parallel()
 
 	application := &usersApplication{
@@ -212,11 +276,12 @@ func TestCreateUserSelectsGroupsAndReadsPasswordFromStdin(t *testing.T) {
 			"-login=NEW-USER",
 			"-email=NEW-USER@EXAMPLE.TEST",
 			"-name=New User",
+			"-password=  a-valid-password  ",
 			"-group=MANAGER",
 			"-group=editor",
 		},
 		console.IO{
-			In:  strings.NewReader("  a-valid-password  \n"),
+			In:  failingReader{err: errors.New("stdin must not be read")},
 			Out: &output,
 			Err: &bytes.Buffer{},
 		},
@@ -326,6 +391,7 @@ func TestCreateUserRejectsUnknownAndDuplicateGroups(t *testing.T) {
 				"-login=user",
 				"-email=user@example.test",
 				"-name=User",
+				"-password=valid-password",
 			}
 			for _, code := range test.groups {
 				args = append(args, "-group="+code)
@@ -334,7 +400,7 @@ func TestCreateUserRejectsUnknownAndDuplicateGroups(t *testing.T) {
 				t.Context(),
 				args,
 				console.IO{
-					In:  strings.NewReader("a-valid-password\n"),
+					In:  failingReader{err: errors.New("stdin must not be read")},
 					Out: &bytes.Buffer{},
 					Err: &bytes.Buffer{},
 				},

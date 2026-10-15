@@ -22,15 +22,15 @@ docker compose --env-file .env run --rm --no-deps server console users create \
   --group admin --generate-password
 ```
 
-Сохраните пароль из поля `generated_password` JSON-результата. Логин, email и имя задаются флагами. Команда использует обычный доменный сервис и не перезаписывает существующую учётную запись. Чтобы использовать свой пароль, уберите `--generate-password` и передайте его одной строкой через stdin:
+Сохраните пароль из поля `generated_password` JSON-результата. Логин, email и имя задаются флагами. Команда использует обычный доменный сервис и не перезаписывает существующую учётную запись. Чтобы задать пароль самостоятельно, замените `--generate-password` на `--password`:
 
 ```sh
-printf '%s\n' "$ADMIN_PASSWORD" | docker compose --env-file .env run --rm --no-deps -T \
-  server console users create --login admin --email admin@example.test \
-  --name Administrator --group admin
+docker compose --env-file .env run --rm --no-deps server console users create \
+  --login admin --email admin@example.test --name Administrator \
+  --group admin --password 'change-this-password'
 ```
 
-`ADMIN_PASSWORD` здесь — переменная вашей оболочки для передачи stdin, а не настройка приложения.
+Для смены пароля существующего пользователя укажите его ID и новый пароль: `server console users password --id 17 --password 'change-this-password'`.
 
 Для изолированного локального демо примените dev seeds вручную:
 
