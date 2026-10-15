@@ -394,6 +394,14 @@ func (r *invalidatingResourceRepository) ByPath(
 	return r.base.ByPath(ctx, siteID, path)
 }
 
+func (r *invalidatingResourceRepository) BreadcrumbCandidates(ctx context.Context, siteID site.ID, id resource.ID, includeHome bool) ([]resource.BreadcrumbCandidate, error) {
+	repository, ok := r.base.(resource.BreadcrumbRepository)
+	if !ok {
+		return nil, errors.New("resource breadcrumb repository is unavailable")
+	}
+	return repository.BreadcrumbCandidates(ctx, siteID, id, includeHome)
+}
+
 func (r *invalidatingResourceRepository) ListBySite(
 	ctx context.Context,
 	siteID site.ID,

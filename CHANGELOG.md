@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.14.0
+
+- Add cached `resource.breadcrumbs` to public resource JSON with ordered `{title, link}` entries. Skip unpublished and deleted ancestors, and keep scheduled publication accurate on cache hits.
+- Add `Profile.Settings.IncludeHomeInBreadcrumbs` to optionally prepend the published `/` resource without duplicating an existing ancestor. Library items and mirrors use their public mount paths.
+
 ## 0.13.1
 
 - Keep resources with stale `core_resource_fields` selections visible in resource trees and admin options so editors can repair the widget configuration.

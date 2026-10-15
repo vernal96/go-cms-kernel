@@ -51,6 +51,15 @@ Link redirects keep their configured URL. Former resource URLs such as `/api`,
 routes. Registered API endpoints such as `/api/site` and `/api/menu` remain
 available.
 
+Successful page, library, and library item JSON responses include
+`resource.breadcrumbs`, an array of `{title, link}`
+objects ordered from published ancestors to the current resource. A title uses
+`menu_title` when set and otherwise `title`; links are public page paths.
+Unpublished and deleted resources are skipped. Profile setting
+`Settings.IncludeHomeInBreadcrumbs` optionally prepends the published `/` home
+resource without duplicating it when it is already an ancestor. See the [HTTP API
+reference](docs/http-api.md#хлебные-крошки-ресурса) and [profile guide](docs/profiles.md#хлебные-крошки).
+
 Module `Registrar` routes and mounts remain relative to `/api`. The public
 handler receives the path after stripping that prefix once; generated API links
 use `httptransport.APIPrefix`. API-relative namespaces `/auth`, `/admin`,

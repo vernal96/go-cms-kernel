@@ -115,6 +115,72 @@ WHERE site_id = $1
 	return items[0], nil
 }
 
+func (r *Repository) BreadcrumbCandidates(ctx context.Context, siteID site.ID, id resource.ID, includeHome bool) ([]resource.BreadcrumbCandidate, error) {
+	rows, err := r.connector.Pool().Query(ctx, `
+WITH RECURSIVE ancestry AS (
+    SELECT id, site_id, parent_id, title, menu_title, path, is_public,
+           published_at, unpublished_at, deleted_at, 0 AS depth
+    FROM core.resources
+    WHERE id = $2 AND site_id = $1
+    UNION ALL
+    SELECT parent.id, parent.site_id, parent.parent_id, parent.title,
+           parent.menu_title, parent.path, parent.is_public,
+           parent.published_at, parent.unpublished_at, parent.deleted_at,
+           child.depth + 1
+    FROM core.resources parent
+    JOIN ancestry child ON child.parent_id = parent.id
+    WHERE parent.site_id = $1
+), candidates AS (
+    SELECT id, title, menu_title, path, is_public, published_at,
+           unpublished_at, deleted_at, depth
+    FROM ancestry
+    WHERE path IS NOT NULL
+    UNION ALL
+    SELECT home.id, home.title, home.menu_title, home.path, home.is_public,
+           home.published_at, home.unpublished_at, home.deleted_at,
+           COALESCE((SELECT MAX(depth) + 1 FROM ancestry), 1)
+    FROM core.resources home
+    WHERE $3
+      AND home.site_id = $1
+      AND home.path = '/'
+      AND EXISTS (SELECT 1 FROM ancestry WHERE id = $2)
+      AND NOT EXISTS (SELECT 1 FROM ancestry WHERE path = '/' OR id = home.id)
+)
+SELECT id, title, menu_title, path, is_public, published_at,
+       unpublished_at, deleted_at
+FROM candidates
+ORDER BY depth DESC, id;`, siteID, id, includeHome)
+	if err != nil {
+		return nil, fmt.Errorf("query resource breadcrumb ancestry: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]resource.BreadcrumbCandidate, 0)
+	for rows.Next() {
+		var candidate resource.BreadcrumbCandidate
+		if err := rows.Scan(
+			&candidate.ID,
+			&candidate.Title,
+			&candidate.MenuTitle,
+			&candidate.Link,
+			&candidate.IsPublic,
+			&candidate.PublishedAt,
+			&candidate.UnpublishedAt,
+			&candidate.DeletedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan resource breadcrumb candidate: %w", err)
+		}
+		items = append(items, candidate)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate resource breadcrumb ancestry: %w", err)
+	}
+	if len(items) == 0 {
+		return nil, resource.ErrNotFound
+	}
+	return items, nil
+}
+
 func (r *Repository) ListBySite(
 	ctx context.Context,
 	siteID site.ID,

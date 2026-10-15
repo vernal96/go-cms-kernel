@@ -25,7 +25,8 @@ type Profile struct {
 }
 
 type ProfileSettings struct {
-	FileSystem ProfileFileSystem
+	FileSystem               ProfileFileSystem
+	IncludeHomeInBreadcrumbs bool
 }
 
 type ProfileFileSystem struct {

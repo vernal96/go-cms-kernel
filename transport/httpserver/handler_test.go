@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -610,6 +611,54 @@ func (r resourceRepository) ByPath(
 		return resource.Clone(item), nil
 	}
 	return resource.Resource{}, resource.ErrNotFound
+}
+
+func (r resourceRepository) BreadcrumbCandidates(_ context.Context, siteID site.ID, id resource.ID, includeHome bool) ([]resource.BreadcrumbCandidate, error) {
+	byID := make(map[resource.ID]resource.Resource, len(r.byID)+len(r.byPath))
+	for key, item := range r.byID {
+		byID[key] = item
+	}
+	for _, item := range r.byPath {
+		byID[item.ID] = item
+	}
+	current, found := byID[id]
+	if !found || current.SiteID != siteID {
+		return nil, resource.ErrNotFound
+	}
+	items := make([]resource.Resource, 0, 4)
+	for current.ID > 0 {
+		items = append(items, current)
+		if current.ParentID == nil {
+			break
+		}
+		current, found = byID[*current.ParentID]
+		if !found || current.SiteID != siteID {
+			return nil, resource.ErrNotFound
+		}
+	}
+	for left, right := 0, len(items)-1; left < right; left, right = left+1, right-1 {
+		items[left], items[right] = items[right], items[left]
+	}
+	result := make([]resource.BreadcrumbCandidate, 0, len(items))
+	for _, item := range items {
+		if item.Path != nil {
+			result = append(result, resource.BreadcrumbCandidate{ID: item.ID, Title: item.Title, MenuTitle: item.MenuTitle, Link: *item.Path, IsPublic: item.IsPublic, PublishedAt: item.PublishedAt, UnpublishedAt: item.UnpublishedAt, DeletedAt: item.DeletedAt})
+		}
+	}
+	if includeHome {
+		for _, item := range items {
+			if item.Path != nil && *item.Path == "/" {
+				return result, nil
+			}
+		}
+		for _, item := range r.byPath {
+			if item.SiteID == siteID && item.Path != nil && *item.Path == "/" {
+				result = append([]resource.BreadcrumbCandidate{{ID: item.ID, Title: item.Title, MenuTitle: item.MenuTitle, Link: *item.Path, IsPublic: item.IsPublic, PublishedAt: item.PublishedAt, UnpublishedAt: item.UnpublishedAt, DeletedAt: item.DeletedAt}}, result...)
+				break
+			}
+		}
+	}
+	return result, nil
 }
 
 func (resourceRepository) ListBySite(
@@ -1271,6 +1320,16 @@ func newTransportTestApp(
 	resources resource.Repository,
 	extraTemplates ...template.Definition,
 ) *appkernel.App {
+	return newTransportTestAppWithSettings(t, module, resources, kernel.ProfileSettings{}, extraTemplates...)
+}
+
+func newTransportTestAppWithSettings(
+	t *testing.T,
+	module kernel.Module,
+	resources resource.Repository,
+	profileSettings kernel.ProfileSettings,
+	extraTemplates ...template.Definition,
+) *appkernel.App {
 	t.Helper()
 	runtimeApp, err := appkernel.New(
 		context.Background(),
@@ -1286,7 +1345,8 @@ func newTransportTestApp(
 				},
 			},
 			Profiles: []kernel.Profile{{
-				Code: "dev",
+				Code:     "dev",
+				Settings: profileSettings,
 				Templates: append([]template.Definition{
 					{Code: "widgets", Label: "Widgets", Layout: template.Layout{{Code: "body", Label: "Основная область", Items: []template.Item{template.ResourceWidgets{}}}}},
 					{Code: "content", Label: "Content", Layout: template.Layout{{Code: "body", Label: "Основная область", Items: []template.Item{template.Widget{Widget: corewidgets.Content}}}}},
@@ -1727,10 +1787,11 @@ func TestPageResourceRendersWidgetEnvelopeAndIsolatesErrors(
 	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if len(payload.Resource) != 7 ||
+	if len(payload.Resource) != 8 ||
 		payload.Resource["id"] != float64(7) ||
 		payload.Resource["title"] != "Page" ||
-		payload.Resource["annotation"] != "" {
+		payload.Resource["annotation"] != "" ||
+		!reflect.DeepEqual(payload.Resource["breadcrumbs"], []any{map[string]any{"title": "Page", "link": "/page"}}) {
 		t.Fatalf("resource payload = %#v", payload.Resource)
 	}
 	if _, exists := payload.Resource["content"]; exists {

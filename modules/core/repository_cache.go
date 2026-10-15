@@ -220,6 +220,24 @@ func (r *cachedResourceRepository) ByPath(ctx context.Context, siteID site.ID, p
 	})
 }
 
+func (r *cachedResourceRepository) BreadcrumbCandidates(ctx context.Context, siteID site.ID, id resource.ID, includeHome bool) ([]resource.BreadcrumbCandidate, error) {
+	repository, ok := r.base.(resource.BreadcrumbRepository)
+	if !ok {
+		return nil, errors.New("resource breadcrumb repository is unavailable")
+	}
+	return withRepositoryCacheRead(r.policy, []cache.Tag{siteResourcesTag(siteID)}, func() ([]resource.BreadcrumbCandidate, error) {
+		home := "without-home"
+		if includeHome {
+			home = "with-home"
+		}
+		key := fmt.Sprintf("resource:breadcrumbs:v1:site:%d:start:%d:%s", siteID, id, home)
+		tags := []cache.Tag{siteTag(siteID), siteResourcesTag(siteID), resourceTag(id)}
+		return cache.RememberJSON(ctx, r.store, key, cache.SetOptions{TTL: r.ttl, Tags: tags}, func(ctx context.Context) ([]resource.BreadcrumbCandidate, error) {
+			return repository.BreadcrumbCandidates(ctx, siteID, id, includeHome)
+		})
+	})
+}
+
 func (r *cachedResourceRepository) ListBySite(
 	ctx context.Context,
 	siteID site.ID,

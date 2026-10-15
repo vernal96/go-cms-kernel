@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/vernal96/go-cms-kernel"
 	"github.com/vernal96/go-cms-kernel/modules/core"
 	"github.com/vernal96/go-cms-kernel/security"
 	httptransport "github.com/vernal96/go-cms-kernel/transport/http"
@@ -37,6 +38,17 @@ func (r *apiResourceRepository) ByPath(ctx context.Context, siteID site.ID, path
 	return r.resourceRepository.ByPath(ctx, siteID, path)
 }
 
+func (r *apiResourceRepository) BreadcrumbCandidates(ctx context.Context, siteID site.ID, id resource.ID, includeHome bool) ([]resource.BreadcrumbCandidate, error) {
+	if id == 11 {
+		items := []resource.BreadcrumbCandidate{{ID: 11, Title: "News", MenuTitle: "Новости", Link: "/news", IsPublic: true}}
+		if includeHome {
+			items = append([]resource.BreadcrumbCandidate{{ID: 9, Title: "Home", Link: "/", IsPublic: true}}, items...)
+		}
+		return items, nil
+	}
+	return r.searchRouteRepository.resourceRepository.BreadcrumbCandidates(ctx, siteID, id, includeHome)
+}
+
 func (r *apiResourceRepository) ResolveLibraryItemRoute(_ context.Context, siteID site.ID, path string) (resource.LibraryItem, resource.Resource, error) {
 	if siteID != 1 || path != "/news/release" {
 		return resource.LibraryItem{}, resource.Resource{}, resource.ErrNotFound
@@ -47,13 +59,15 @@ func (r *apiResourceRepository) ResolveLibraryItemRoute(_ context.Context, siteI
 
 func TestAPIPrefixKeepsContentPathsAndLibraryResolution(t *testing.T) {
 	order := []string{}
+	sectionID := resource.ID(8)
 	repo := &apiResourceRepository{searchRouteRepository: searchRouteRepository{
 		resourceRepository: resourceRepository{byPath: map[string]resource.Resource{
 			"/":             {ID: 9, SiteID: 1, Type: resourcetype.Page, Path: stringPointer("/"), IsPublic: true},
-			"/section/page": {ID: 10, SiteID: 1, Type: resourcetype.Page, Path: stringPointer("/section/page"), IsPublic: true},
+			"/section":      {ID: sectionID, SiteID: 1, Type: resourcetype.Page, Title: "Section", MenuTitle: "Section menu", Path: stringPointer("/section"), IsPublic: true},
+			"/section/page": {ID: 10, SiteID: 1, ParentID: &sectionID, Type: resourcetype.Page, Title: "Page", Path: stringPointer("/section/page"), IsPublic: true},
 		}},
 	}}
-	app := newTransportTestApp(t, transportModule{code: "transport", resourceType: transportResourceType{code: "test"}, order: &order}, repo)
+	app := newTransportTestAppWithSettings(t, transportModule{code: "transport", resourceType: transportResourceType{code: "test"}, order: &order}, repo, kernel.ProfileSettings{IncludeHomeInBreadcrumbs: true})
 	handler, err := newTestHandler(app)
 	if err != nil {
 		t.Fatal(err)
@@ -72,18 +86,69 @@ func TestAPIPrefixKeepsContentPathsAndLibraryResolution(t *testing.T) {
 				t.Fatalf("status = %d: %s", response.Code, response.Body.String())
 			}
 			var payload struct {
-				Resource struct{ Path string } `json:"resource"`
+				Resource struct {
+					Path        string `json:"path"`
+					Breadcrumbs []struct {
+						Title string `json:"title"`
+						Link  string `json:"link"`
+					} `json:"breadcrumbs"`
+				} `json:"resource"`
 			}
 			if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
 				t.Fatal(err)
 			}
-			if payload.Resource.Path != test.path || repo.lookups[len(repo.lookups)-1] != test.path {
-				t.Fatalf("resource path = %q, lookups = %v", payload.Resource.Path, repo.lookups)
+			if payload.Resource.Path != test.path || repo.lookups[len(repo.lookups)-1] != test.path || payload.Resource.Breadcrumbs == nil {
+				t.Fatalf("resource path = %q, breadcrumbs = %#v, lookups = %v", payload.Resource.Path, payload.Resource.Breadcrumbs, repo.lookups)
+			}
+			if len(payload.Resource.Breadcrumbs) == 0 || payload.Resource.Breadcrumbs[len(payload.Resource.Breadcrumbs)-1].Link != test.path {
+				t.Fatalf("resource breadcrumbs = %#v", payload.Resource.Breadcrumbs)
+			}
+			homeCount := 0
+			for _, breadcrumb := range payload.Resource.Breadcrumbs {
+				if breadcrumb.Link == "/" {
+					homeCount++
+				}
+			}
+			if homeCount != 1 {
+				t.Fatalf("home breadcrumb count = %d: %#v", homeCount, payload.Resource.Breadcrumbs)
+			}
+			if test.path == "/section/page" && (len(payload.Resource.Breadcrumbs) != 3 || payload.Resource.Breadcrumbs[1].Title != "Section menu") {
+				t.Fatalf("nested breadcrumbs = %#v", payload.Resource.Breadcrumbs)
 			}
 			if request.URL.RequestURI() != test.url {
 				t.Fatalf("outer request URL was mutated: %s", request.URL.RequestURI())
 			}
 		})
+	}
+	appWithoutHome := newTransportTestAppWithSettings(t, transportModule{code: "transport", resourceType: transportResourceType{code: "test"}, order: &order}, repo, kernel.ProfileSettings{})
+	handlerWithoutHome, err := newTestHandler(appWithoutHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestWithoutHome := httptest.NewRequest(http.MethodGet, "/api/resources/resolve/news/release", nil)
+	requestWithoutHome.Host = "example.com"
+	responseWithoutHome := httptest.NewRecorder()
+	handlerWithoutHome.ServeHTTP(responseWithoutHome, requestWithoutHome)
+	var withoutHome struct {
+		Resource struct {
+			Breadcrumbs []struct {
+				Title string `json:"title"`
+				Link  string `json:"link"`
+			} `json:"breadcrumbs"`
+		} `json:"resource"`
+	}
+	if responseWithoutHome.Code != http.StatusOK || json.Unmarshal(responseWithoutHome.Body.Bytes(), &withoutHome) != nil {
+		t.Fatalf("without-home response = %d: %s", responseWithoutHome.Code, responseWithoutHome.Body.String())
+	}
+	if len(withoutHome.Resource.Breadcrumbs) != 2 || withoutHome.Resource.Breadcrumbs[0].Link != "/news" || withoutHome.Resource.Breadcrumbs[1].Link != "/news/release" {
+		t.Fatalf("without-home breadcrumbs = %#v", withoutHome.Resource.Breadcrumbs)
+	}
+	requestWithoutHome = httptest.NewRequest(http.MethodGet, "/api/resources/resolve/section/page", nil)
+	requestWithoutHome.Host = "example.com"
+	responseWithoutHome = httptest.NewRecorder()
+	handlerWithoutHome.ServeHTTP(responseWithoutHome, requestWithoutHome)
+	if responseWithoutHome.Code != http.StatusOK || json.Unmarshal(responseWithoutHome.Body.Bytes(), &withoutHome) != nil || len(withoutHome.Resource.Breadcrumbs) != 2 || withoutHome.Resource.Breadcrumbs[0].Link != "/section" {
+		t.Fatalf("ordinary nested chain without home: status=%d breadcrumbs=%#v body=%s", responseWithoutHome.Code, withoutHome.Resource.Breadcrumbs, responseWithoutHome.Body.String())
 	}
 	request := httptest.NewRequest(http.MethodGet, "/api/resources/resolve/missing", nil)
 	request.Host = "example.com"

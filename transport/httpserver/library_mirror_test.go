@@ -118,9 +118,13 @@ func TestLibraryMirrorHTTPSourceProfileWidgetsSEOAndPublication(t *testing.T) {
 	}
 	var body struct {
 		Resource struct {
-			ID       int64
-			Path     string
-			Template string
+			ID          int64
+			Path        string
+			Template    string
+			Breadcrumbs []struct {
+				Title string
+				Link  string
+			}
 		}
 		Widgets    map[string][]struct{ Data map[string]any }
 		Extensions map[string]any
@@ -130,6 +134,9 @@ func TestLibraryMirrorHTTPSourceProfileWidgetsSEOAndPublication(t *testing.T) {
 	}
 	if body.Resource.ID != 100 || body.Resource.Path != "/mirror/story" || body.Resource.Template != "source_only" {
 		t.Fatalf("resource: %+v %s", body.Resource, res.Body.String())
+	}
+	if len(body.Resource.Breadcrumbs) != 2 || body.Resource.Breadcrumbs[0].Link != "/mirror" || body.Resource.Breadcrumbs[1].Link != "/mirror/story" {
+		t.Fatalf("mirror breadcrumbs use source URLs: %+v", body.Resource.Breadcrumbs)
 	}
 	raw := res.Body.String()
 	if !strings.Contains(raw, "https://source.test/library/story") || !strings.Contains(raw, `"domain":"source.test"`) || !strings.Contains(raw, "original HTML") {

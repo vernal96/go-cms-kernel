@@ -637,6 +637,45 @@ type resourceRepositoryStub struct {
 	deleteErr error
 }
 
+type breadcrumbRepositoryStub struct {
+	*resourceRepositoryStub
+	candidates []resource.BreadcrumbCandidate
+	loads      int
+}
+
+func (r *breadcrumbRepositoryStub) BreadcrumbCandidates(_ context.Context, siteID site.ID, _ resource.ID, _ bool) ([]resource.BreadcrumbCandidate, error) {
+	r.loads++
+	if r.item.SiteID != siteID {
+		return nil, resource.ErrNotFound
+	}
+	return append([]resource.BreadcrumbCandidate(nil), r.candidates...), nil
+}
+
+func (r *breadcrumbRepositoryStub) Update(ctx context.Context, actorID *security.UserID, current, item resource.Resource, validate resource.ValidateImageMedia) (resource.Resource, error) {
+	result, err := r.resourceRepositoryStub.Update(ctx, actorID, current, item, validate)
+	if err != nil {
+		return resource.Resource{}, err
+	}
+	for index := range r.candidates {
+		if r.candidates[index].ID == item.ID {
+			r.candidates[index].Title = item.Title
+			r.candidates[index].MenuTitle = item.MenuTitle
+			r.candidates[index].IsPublic = item.IsPublic
+			r.candidates[index].PublishedAt = item.PublishedAt
+			r.candidates[index].UnpublishedAt = item.UnpublishedAt
+			r.candidates[index].DeletedAt = item.DeletedAt
+		}
+	}
+	return result, nil
+}
+
+func (r *breadcrumbRepositoryStub) Create(_ context.Context, _ *security.UserID, item resource.Resource, _ resource.ValidateImageMedia) (resource.Resource, error) {
+	if item.Path != nil && *item.Path == "/" {
+		r.candidates = append([]resource.BreadcrumbCandidate{{ID: item.ID, Title: item.Title, MenuTitle: item.MenuTitle, Link: *item.Path, IsPublic: item.IsPublic}}, r.candidates...)
+	}
+	return item, nil
+}
+
 type blockingResourceRepository struct {
 	*resourceRepositoryStub
 	once    sync.Once
@@ -915,4 +954,48 @@ func (s *memoryCacheStore) Prepare(ctx context.Context, tags []cache.Tag) (cache
 		}
 		return s.Set(ctx, key, value, cache.SetOptions{TTL: ttl, Tags: tags})
 	}, nil
+}
+
+func TestBreadcrumbCandidateCacheUsesSiteResourceDependencies(t *testing.T) {
+	store := newMemoryCacheStore()
+	base := &breadcrumbRepositoryStub{
+		resourceRepositoryStub: &resourceRepositoryStub{item: resource.Resource{ID: 7, SiteID: 3, Title: "Ancestor", MenuTitle: "Before"}},
+		candidates: []resource.BreadcrumbCandidate{
+			{ID: 7, Title: "Ancestor", MenuTitle: "Before", Link: "/ancestor", IsPublic: true},
+			{ID: 20, Title: "Page", Link: "/ancestor/page", IsPublic: true},
+		},
+	}
+	policy := newTestRepositoryCachePolicy(store)
+	repository := &cachedResourceRepository{siteID: 3, base: &invalidatingResourceRepository{base: base, policy: policy}, store: store, ttl: time.Minute, policy: policy}
+	ctx := context.Background()
+	first, err := repository.BreadcrumbCandidates(ctx, 3, 20, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := repository.BreadcrumbCandidates(ctx, 3, 20, true)
+	if err != nil || !reflect.DeepEqual(first, second) || base.loads != 1 {
+		t.Fatalf("warm breadcrumb read = %#v, %v; loads = %d", second, err, base.loads)
+	}
+	key := "resource:breadcrumbs:v1:site:3:start:20:with-home"
+	wantTags := []cache.Tag{siteTag(3), siteResourcesTag(3), resourceTag(20)}
+	if !reflect.DeepEqual(store.options[key].Tags, wantTags) {
+		t.Fatalf("breadcrumb cache tags = %v", store.options[key].Tags)
+	}
+	updated := resource.Clone(base.item)
+	updated.MenuTitle = "After"
+	if _, err := repository.Update(ctx, nil, base.item, updated, nil); err != nil {
+		t.Fatal(err)
+	}
+	refreshed, err := repository.BreadcrumbCandidates(ctx, 3, 20, true)
+	if err != nil || base.loads != 2 || len(refreshed) != 2 || refreshed[0].MenuTitle != "After" {
+		t.Fatalf("read after ancestor menu-title update: result=%#v err=%v loads=%d", refreshed, err, base.loads)
+	}
+	homePath := "/"
+	if _, err := repository.Create(ctx, nil, resource.Resource{ID: 30, SiteID: 3, Title: "Home", Path: &homePath, IsPublic: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+	withHome, err := repository.BreadcrumbCandidates(ctx, 3, 20, true)
+	if err != nil || base.loads != 3 || len(withHome) != 3 || withHome[0].ID != 30 {
+		t.Fatalf("home creation after warm miss: result=%#v err=%v loads=%d", withHome, err, base.loads)
+	}
 }

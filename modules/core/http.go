@@ -62,6 +62,10 @@ func (r *Runtime) HTTP() httptransport.Builder {
 		if err != nil {
 			return httptransport.Contribution{}, err
 		}
+		breadcrumbRepository, ok := r.database.Resources().(resource.BreadcrumbRepository)
+		if !ok {
+			return httptransport.Contribution{}, errors.New("resource breadcrumb repository is unavailable")
+		}
 		generation := rand.Text()
 		return httptransport.Contribution{
 			Routes: func(registrar httptransport.Registrar) error {
@@ -73,15 +77,15 @@ func (r *Runtime) HTTP() httptransport.Builder {
 			ResourceHandlers: []httptransport.ResourceHandler{
 				{
 					Type:    httptransport.ResourceHandlerCode(resourcetype.Page),
-					Handler: pageResourceHandler{logger: r.logger, media: r.services.Media, resultStore: r.resultStore, generation: generation},
+					Handler: pageResourceHandler{logger: r.logger, media: r.services.Media, resultStore: r.resultStore, generation: generation, breadcrumbs: breadcrumbRepository},
 				},
 				{
 					Type:    httptransport.ResourceHandlerCode(resourcetype.LibraryMirror),
-					Handler: pageResourceHandler{logger: r.logger, media: r.services.Media, resultStore: r.resultStore, generation: generation},
+					Handler: pageResourceHandler{logger: r.logger, media: r.services.Media, resultStore: r.resultStore, generation: generation, breadcrumbs: breadcrumbRepository},
 				},
 				{
 					Type:    httptransport.ResourceHandlerCode(resourcetype.Library),
-					Handler: pageResourceHandler{logger: r.logger, media: r.services.Media, resultStore: r.resultStore, generation: generation},
+					Handler: pageResourceHandler{logger: r.logger, media: r.services.Media, resultStore: r.resultStore, generation: generation, breadcrumbs: breadcrumbRepository},
 				},
 				{
 					Type:    httptransport.ResourceHandlerCode(resourcetype.Link),
@@ -157,6 +161,8 @@ func (h *terminalResourceHandler) ServeHTTP(
 		http.NotFound(response, request)
 		return
 	}
+	breadcrumbSiteID := site.ID(siteRuntime.Site().ID)
+	includeHomeInBreadcrumbs := siteRuntime.Profile().Profile().Settings.IncludeHomeInBreadcrumbs
 
 	item, err := h.resolver.ResolvePublishedByPath(
 		request.Context(),
@@ -171,6 +177,10 @@ func (h *terminalResourceHandler) ServeHTTP(
 		resolved, itemErr := h.libraryItems.ResolvePublished(request.Context(), actor, site.ID(siteRuntime.Site().ID), path)
 		if itemErr == nil {
 			libraryItem := resolved.Item
+			request = request.WithContext(context.WithValue(request.Context(), resourceBreadcrumbContextKey{}, resourceBreadcrumbContext{
+				SiteID: breadcrumbSiteID, StartID: resolved.Collection.Mount.ID,
+				IncludeHome: includeHomeInBreadcrumbs, AppendItem: true,
+			}))
 			itemPath, pathErr := resource.EffectiveLibraryItemURL(resolved.Collection.Source, libraryItem)
 			if pathErr != nil {
 				writeResourceRouteError(response, request, pathErr)
@@ -189,6 +199,11 @@ func (h *terminalResourceHandler) ServeHTTP(
 	if err != nil {
 		writeResourceRouteError(response, request, err)
 		return
+	}
+	if _, exists := request.Context().Value(resourceBreadcrumbContextKey{}).(resourceBreadcrumbContext); !exists {
+		request = request.WithContext(context.WithValue(request.Context(), resourceBreadcrumbContextKey{}, resourceBreadcrumbContext{
+			SiteID: breadcrumbSiteID, StartID: item.ID, IncludeHome: includeHomeInBreadcrumbs,
+		}))
 	}
 
 	countedItem := item
@@ -241,14 +256,29 @@ type pageResourceResponse struct {
 
 type pageWidgetsResponse map[widget.AreaCode][]pageWidgetResponse
 
+type resourceBreadcrumbContext struct {
+	SiteID      site.ID
+	StartID     resource.ID
+	IncludeHome bool
+	AppendItem  bool
+}
+
+type resourceBreadcrumbContextKey struct{}
+
 type pageResourcePayload struct {
-	ID          resource.ID       `json:"id"`
-	Type        resourcetype.Code `json:"type"`
-	Template    *template.Code    `json:"template"`
-	Title       string            `json:"title"`
-	Path        *string           `json:"path"`
-	Annotation  string            `json:"annotation"`
-	ContentType *string           `json:"content_type"`
+	ID          resource.ID              `json:"id"`
+	Type        resourcetype.Code        `json:"type"`
+	Template    *template.Code           `json:"template"`
+	Title       string                   `json:"title"`
+	Path        *string                  `json:"path"`
+	Annotation  string                   `json:"annotation"`
+	ContentType *string                  `json:"content_type"`
+	Breadcrumbs []pageResourceBreadcrumb `json:"breadcrumbs"`
+}
+
+type pageResourceBreadcrumb struct {
+	Title string `json:"title"`
+	Link  string `json:"link"`
 }
 
 type pageWidgetResponse struct {
@@ -273,6 +303,7 @@ type pageResourceHandler struct {
 	media       interface {
 		Resolve(context.Context, security.Actor, media.ID) (media.ResolvedMedia, error)
 	}
+	breadcrumbs resource.BreadcrumbRepository
 }
 
 func (h pageResourceHandler) ServeHTTP(
@@ -300,11 +331,49 @@ func (h pageResourceHandler) ServeHTTP(
 			Path:        item.Path,
 			Annotation:  item.Annotation,
 			ContentType: item.ContentType,
+			Breadcrumbs: []pageResourceBreadcrumb{},
 		},
 		Widgets: pageWidgetsResponse{},
 	}
 	if publicPath, mirrored := ctx.Value(publicResourcePathContextKey).(string); mirrored {
 		result.Resource.Path = &publicPath
+	}
+	if h.breadcrumbs == nil {
+		http.Error(response, "resource breadcrumb repository is unavailable", http.StatusInternalServerError)
+		return
+	}
+	breadcrumbState, exists := ctx.Value(resourceBreadcrumbContextKey{}).(resourceBreadcrumbContext)
+	if !exists {
+		breadcrumbState = resourceBreadcrumbContext{
+			SiteID: site.ID(siteRuntime.Site().ID), StartID: item.ID,
+			IncludeHome: siteRuntime.Profile().Profile().Settings.IncludeHomeInBreadcrumbs,
+		}
+	}
+	candidates, err := h.breadcrumbs.BreadcrumbCandidates(ctx, breadcrumbState.SiteID, breadcrumbState.StartID, breadcrumbState.IncludeHome)
+	if err != nil {
+		h.logError(ctx, "resource breadcrumb resolution failed", item, widget.Binding{}, err)
+		http.Error(response, "resource response failed", http.StatusInternalServerError)
+		return
+	}
+	now := time.Now().UTC()
+	for _, candidate := range resource.VisibleBreadcrumbs(candidates, now) {
+		title := strings.TrimSpace(resource.BreadcrumbTitle(candidate))
+		if title == "" {
+			title = strings.TrimSpace(candidate.Title)
+		}
+		result.Resource.Breadcrumbs = append(result.Resource.Breadcrumbs, pageResourceBreadcrumb{Title: title, Link: candidate.Link})
+	}
+	if breadcrumbState.AppendItem {
+		itemLink := ""
+		if item.Path != nil {
+			itemLink = *item.Path
+		}
+		if publicPath, mirrored := ctx.Value(publicResourcePathContextKey).(string); mirrored {
+			itemLink = publicPath
+		}
+		if itemLink != "" && resource.PublishedBreadcrumb(resource.BreadcrumbCandidate{IsPublic: item.IsPublic, PublishedAt: item.PublishedAt, UnpublishedAt: item.UnpublishedAt, DeletedAt: item.DeletedAt}, now) {
+			result.Resource.Breadcrumbs = append(result.Resource.Breadcrumbs, pageResourceBreadcrumb{Title: strings.TrimSpace(item.Title), Link: itemLink})
+		}
 	}
 	if item.Template != nil {
 		templateRuntime, exists := siteRuntime.Profile().Template(*item.Template)
