@@ -64,6 +64,10 @@ func ValueSources(schema *field.Schema) []ValueSource {
 // NormalizeConfiguration validates static configuration independently of current
 // resource values. Restrictions on bound values are checked by NewResolved.
 func (r *Runtime) NormalizeConfiguration(params map[string]any, bindings ParamBindings, source *field.Schema) (map[string]any, error) {
+	return r.normalizeConfiguration(params, bindings, source, true)
+}
+
+func (r *Runtime) normalizeConfiguration(params map[string]any, bindings ParamBindings, source *field.Schema, validateConfiguration bool) (map[string]any, error) {
 	if r == nil {
 		return nil, fmt.Errorf("%w: widget runtime is nil", ErrInvalidParams)
 	}
@@ -92,6 +96,13 @@ func (r *Runtime) NormalizeConfiguration(params map[string]any, bindings ParamBi
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidParams, err)
 	}
+	if validateConfiguration {
+		if validator, ok := r.widget.(ConfigurationValidator); ok {
+			if err := validator.ValidateConfiguration(normalized, CloneParamBindings(bindings), source); err != nil {
+				return nil, fmt.Errorf("%w: %v", ErrInvalidParams, err)
+			}
+		}
+	}
 	return normalized, nil
 }
 
@@ -101,7 +112,7 @@ func (r *Runtime) NormalizeStoredConfiguration(params map[string]any, bindings P
 	}
 	stored := *r
 	stored.schema = r.schema.StoredSchema()
-	return stored.NormalizeConfiguration(params, bindings, source)
+	return stored.normalizeConfiguration(params, bindings, source, false)
 }
 
 func (r *Runtime) ResolveStoredParams(params map[string]any, bindings ParamBindings, source *field.Schema, values ResourceValues) (map[string]any, error) {

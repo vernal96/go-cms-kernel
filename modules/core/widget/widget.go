@@ -111,6 +111,14 @@ type Widget interface {
 	New(map[string]any) (Instance, error)
 }
 
+// ConfigurationValidator optionally validates widget configuration against
+// the current resource template schema. NormalizeConfiguration invokes it
+// after parameter values have been normalized and before they are stored or
+// rendered.
+type ConfigurationValidator interface {
+	ValidateConfiguration(params map[string]any, bindings ParamBindings, source *field.Schema) error
+}
+
 // These neutral request snapshots keep rendering independent from runtime
 // services and persistence models.
 type SiteSnapshot struct {

@@ -192,6 +192,19 @@ func TestManagementHTTPWritesStableSiteTransferConflicts(t *testing.T) {
 	}
 }
 
+func TestManagementHTTPExplainsInvalidWidgetParams(t *testing.T) {
+	response := httptest.NewRecorder()
+	writeManagementError(response, validationError(errors.Join(
+		resource.ErrInvalid, widget.ErrInvalidParams,
+		errors.New("template field headline is unavailable"),
+	)))
+	if response.Code != http.StatusUnprocessableEntity ||
+		!strings.Contains(response.Body.String(), `"validation_failed"`) ||
+		!strings.Contains(response.Body.String(), "template field headline is unavailable") {
+		t.Fatalf("invalid widget params response = %d, %s", response.Code, response.Body.String())
+	}
+}
+
 func TestManagementHTTPTransferResourceValidatesPayload(t *testing.T) {
 	t.Parallel()
 	router := chi.NewRouter()

@@ -7,6 +7,7 @@ import "github.com/vernal96/go-cms-kernel/modules/core/widget"
 func All() []widget.Widget {
 	return []widget.Widget{
 		contentWidget(),
+		resourceFieldsWidget{},
 		htmlWidget(),
 	}
 }

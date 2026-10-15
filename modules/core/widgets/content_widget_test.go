@@ -9,7 +9,7 @@ import (
 
 func TestContentWidgetReturnsResourceContent(t *testing.T) {
 	declared := All()
-	if len(declared) != 2 {
+	if len(declared) != 3 {
 		t.Fatalf("widgets = %#v", declared)
 	}
 
@@ -43,10 +43,10 @@ func TestContentWidgetReturnsResourceContent(t *testing.T) {
 
 func TestHTMLWidgetReturnsBindingHTMLWithoutChangingContentWidget(t *testing.T) {
 	declared := All()
-	if len(declared) != 2 || declared[1].Definition().Reference != HTML {
+	if len(declared) != 3 || declared[2].Definition().Reference != HTML {
 		t.Fatalf("widgets = %#v", declared)
 	}
-	instance, err := declared[1].New(map[string]any{"html": "<p>Widget</p>"})
+	instance, err := declared[2].New(map[string]any{"html": "<p>Widget</p>"})
 	if err != nil {
 		t.Fatal(err)
 	}

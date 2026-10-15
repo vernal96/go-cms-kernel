@@ -339,9 +339,12 @@ func normalizeWidgetBindings(
 		if err := runtime.ValidatePresentation(presentation); err != nil {
 			return nil, fmt.Errorf("validate resource widget %q presentation: %w", binding.Code, err)
 		}
-		params, err := runtime.NormalizeConfiguration(binding.Params, binding.ParamBindings, templateRuntime.FieldSchema())
+		var params map[string]any
+		var err error
 		if len(stored) > 0 && stored[0] {
 			params, err = runtime.NormalizeStoredConfiguration(binding.Params, binding.ParamBindings, templateRuntime.FieldSchema())
+		} else {
+			params, err = runtime.NormalizeConfiguration(binding.Params, binding.ParamBindings, templateRuntime.FieldSchema())
 		}
 		if err != nil {
 			return nil, fmt.Errorf(

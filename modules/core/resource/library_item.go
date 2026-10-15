@@ -481,6 +481,9 @@ func (s *LibraryService) normalize(ctx context.Context, actor security.Actor, it
 		return LibraryItem{}, errors.New("library item content_type is unsupported")
 	}
 	if item.Template == nil {
+		if len(item.Widgets) != 0 {
+			return LibraryItem{}, errors.New("library item without template has widgets")
+		}
 		if len(item.Fields) != 0 {
 			return LibraryItem{}, errors.New("library item without template has fields")
 		}
@@ -490,6 +493,21 @@ func (s *LibraryService) normalize(ctx context.Context, actor security.Actor, it
 	templateRuntime, exists := runtime.Profile().Template(*item.Template)
 	if !exists {
 		return LibraryItem{}, fmt.Errorf("library item references unknown template %q", *item.Template)
+	}
+	widgets, err := normalizeWidgetBindings(runtime.Profile(), templateRuntime, item.Widgets)
+	if err != nil {
+		return LibraryItem{}, fmt.Errorf("validate library item widgets: %w", err)
+	}
+	item.Widgets = widgets
+	for _, binding := range widgets {
+		widgetRuntime, _ := runtime.Profile().Widget(binding.Code)
+		references, err := widgetRuntime.FieldSchema().FileReferences(binding.Params)
+		if err != nil {
+			return LibraryItem{}, err
+		}
+		if err := s.common.validateFileReferences(ctx, actor, references, nil); err != nil {
+			return LibraryItem{}, err
+		}
 	}
 	fields, err := templateRuntime.FieldSchema().Validate(item.Fields)
 	if err != nil {

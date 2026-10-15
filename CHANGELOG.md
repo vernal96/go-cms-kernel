@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.13.0
+
+- Add the built-in `core_resource_fields` widget. Editors select one or more fields from the current resource template; public responses return their raw values in `data.fields`, including `null` for selected unset fields.
+- Validate selected template keys on widget writes, resource and LibraryItem template changes, and static placements. Stored widgets with removed keys remain readable for repair and report `invalid_params` during public rendering.
+
 ## 0.12.0
 
 - Accept an explicit `--password` or `--generate-password` when creating users, and require `--password` when changing a user's password. Passwords are no longer read from stdin.

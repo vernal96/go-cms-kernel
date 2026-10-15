@@ -516,6 +516,9 @@ func validationError(err error) error {
 			Fields:  fields,
 		}
 	}
+	if errors.Is(err, widget.ErrInvalidParams) {
+		return ValidationError{Message: err.Error()}
+	}
 	if errors.Is(err, site.ErrInvalid) || errors.Is(err, resource.ErrInvalid) ||
 		errors.Is(err, resource.ErrInvalidReference) {
 		return fmt.Errorf("%w: request data is invalid", ErrValidation)

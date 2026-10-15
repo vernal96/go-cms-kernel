@@ -82,7 +82,7 @@ func (testModuleRuntime) ModuleCode() kernel.ModuleCode {
 }
 
 func (testModuleRuntime) Widgets() []widget.Widget {
-	return []widget.Widget{testWidget{}}
+	return []widget.Widget{testWidget{}, templateFieldValidationWidget{}}
 }
 
 type testWidget struct{}
@@ -1511,6 +1511,56 @@ func TestLibraryServiceCopiesDefaultTemplateOnlyAtCreation(t *testing.T) {
 	}
 }
 
+func TestLibraryItemWidgetTemplateFieldSelectionRejectsTemplateChange(t *testing.T) {
+	common, treeRepository, _ := newTestService(t)
+	ctx := context.Background()
+	home, err := common.Create(ctx, security.System(), CreateInput{
+		SiteID: 1, Type: resourcetype.Page, Title: "Home",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	library, err := common.Create(ctx, security.System(), CreateInput{
+		SiteID: 1, ParentID: &home.ID, Type: resourcetype.Library,
+		Title: "Catalog", Slug: "catalog", TypeSettings: map[string]any{
+			"item_url_pattern": "/{slug}", "default_item_template": "article",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := &memoryLibraryRepository{memoryRepository: treeRepository, items: map[ID]LibraryItem{}}
+	common.repository = repository
+	libraryService, err := NewLibraryService(repository, common)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := libraryService.Create(ctx, security.System(), CreateLibraryItemInput{
+		SiteID: 1, LibraryID: library.ID, Title: "Article", Slug: "article",
+		Fields: map[string]any{"headline": "Headline"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored := repository.items[created.ID]
+	stored.Widgets = []widget.Binding{{
+		ID: 1, Code: "test_template_field_validation", Area: widget.AreaDefault,
+		Presentation: widget.DefaultPresentation(), Params: map[string]any{"fields": []string{"headline"}},
+	}}
+	repository.items[created.ID] = stored
+	empty := template.Code("empty")
+	_, err = libraryService.Update(ctx, security.System(), UpdateLibraryItemInput{
+		ID: created.ID, ExpectedVersion: created.Version, Template: &empty,
+		Title: created.Title, Slug: created.Slug, Fields: map[string]any{},
+	})
+	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "headline") {
+		t.Fatalf("library item template change with selected old field = %v", err)
+	}
+	if repository.items[created.ID].Template == nil || *repository.items[created.ID].Template != "article" {
+		t.Fatal("rejected template change altered stored library item")
+	}
+}
+
 func TestLibraryServiceResolvesSemanticQueryKindsAndTimestamps(t *testing.T) {
 	common, treeRepository, _ := newTestService(t)
 	ctx := context.Background()
@@ -2526,3 +2576,126 @@ func TestWidgetReorderPreservesRemovedAreaUntilExplicitMove(t *testing.T) {
 }
 
 func (testModule) Validate(context.Context, kernel.ModuleValidationContext) error { return nil }
+
+type templateFieldValidationWidget struct{}
+
+var templateFieldValidationRef = widget.NewRef("template_field_validation")
+
+func (templateFieldValidationWidget) Definition() widget.Definition {
+	return widget.Definition{
+		Reference:   templateFieldValidationRef,
+		Label:       "Template field validation",
+		Description: "Template field validation",
+		Fields:      []field.Definition{{Key: "fields", Label: "Fields", Type: field.TypeString, Required: true, Options: field.StringOptions{Multiple: true}}},
+	}
+}
+
+func (templateFieldValidationWidget) New(map[string]any) (widget.Instance, error) {
+	return widget.Functional{Description: templateFieldValidationWidget{}.Definition(), Render: func(context.Context, widget.RenderInput, map[string]any) (map[string]any, error) {
+		return map[string]any{}, nil
+	}}.New(map[string]any{})
+}
+
+func (templateFieldValidationWidget) ValidateConfiguration(params map[string]any, _ widget.ParamBindings, source *field.Schema) error {
+	keys, ok := params["fields"].([]string)
+	if !ok || source == nil {
+		return errors.New("template field selection is invalid")
+	}
+	for _, key := range keys {
+		if _, exists := source.Shape(key); !exists {
+			return fmt.Errorf("template field %q does not exist", key)
+		}
+	}
+	return nil
+}
+
+func TestNormalizeWidgetBindingsKeepsStaleStoredConfigurationRepairable(t *testing.T) {
+	widgets, err := widget.Compile([]widget.Source{{
+		Module:  widget.ModuleDescriptor{Code: "core", Label: "Core"},
+		Widgets: []widget.Widget{templateFieldValidationWidget{}},
+	}}, nil, field.StandardTypes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	templates, err := template.Compile([]template.Definition{{
+		Code: "current", Label: "Current",
+		Fields: []field.Definition{{Key: "title", Label: "Title", Type: field.TypeString}},
+	}}, field.StandardTypes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	templateRuntime, _ := templates.Template("current")
+	bindings := []widget.Binding{{
+		ID: 1, Code: "core_template_field_validation", Area: widget.AreaDefault,
+		Presentation: widget.DefaultPresentation(),
+		Params:       map[string]any{"fields": []string{"removed"}},
+	}}
+	if _, err := normalizeWidgetBindings(widgets, templateRuntime, bindings, true); err != nil {
+		t.Fatalf("stale stored widget should load for repair: %v", err)
+	}
+	if _, err := normalizeWidgetBindings(widgets, templateRuntime, bindings); err == nil || !strings.Contains(err.Error(), "removed") {
+		t.Fatalf("candidate configuration should reject stale selected key: %v", err)
+	}
+}
+
+func TestResourceWidgetTemplateFieldSelectionRejectsTemplateChange(t *testing.T) {
+	service, repository, _ := newTestService(t)
+	ctx := context.Background()
+	article := template.Code("article")
+	created, err := service.Create(ctx, security.System(), CreateInput{
+		SiteID: 1, Type: resourcetype.Page, Template: &article,
+		Title: "Page", Slug: "page", Fields: map[string]any{"headline": "Headline"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := service.CreateWidget(ctx, security.System(), created.ID, CreateWidgetInput{
+		ExpectedVersion: created.Version, Code: "test_template_field_validation",
+		Area: "body", Columns: 12, Params: map[string]any{"fields": []string{"headline"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding.ID <= 0 {
+		t.Fatalf("created binding = %#v", binding)
+	}
+	current, err := service.Get(ctx, security.System(), created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := template.Code("empty")
+	_, err = service.Update(ctx, security.System(), UpdateInput{
+		ID: current.ID, ExpectedVersion: current.Version, Type: current.Type,
+		Template: &empty, Title: current.Title, Slug: current.Slug,
+		Fields: map[string]any{},
+	})
+	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "headline") {
+		t.Fatalf("template change with selected old field = %v", err)
+	}
+	if _, err := service.Get(ctx, security.System(), created.ID); err != nil {
+		t.Fatalf("rejected template change altered stored resource: %v", err)
+	}
+	stored := repository.items[created.ID]
+	stored.Widgets[0].Params = map[string]any{"fields": []string{"removed"}}
+	repository.items[created.ID] = stored
+	stale, err := service.Get(ctx, security.System(), created.ID)
+	if err != nil || stale.Widgets[0].Params["fields"].([]string)[0] != "removed" {
+		t.Fatalf("stale stored widget should remain readable for repair: %#v, %v", stale.Widgets, err)
+	}
+	_, err = service.Update(ctx, security.System(), updateInputFrom(stale))
+	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "removed") {
+		t.Fatalf("resource save with stale widget = %v", err)
+	}
+	if _, err := service.UpdateWidget(ctx, security.System(), created.ID, binding.ID, UpdateWidgetInput{
+		ExpectedVersion: stale.Version, Columns: 12,
+		Params: map[string]any{"fields": []string{"headline"}},
+	}); err != nil {
+		t.Fatalf("repair stale widget: %v", err)
+	}
+	stored = repository.items[created.ID]
+	stored.Widgets[0].Params = map[string]any{"fields": []string{"removed"}}
+	repository.items[created.ID] = stored
+	if err := service.DeleteWidget(ctx, security.System(), created.ID, binding.ID, stale.Version); err != nil {
+		t.Fatalf("delete stale widget: %v", err)
+	}
+}
