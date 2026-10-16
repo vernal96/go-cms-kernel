@@ -272,7 +272,7 @@ func newCatalogForTest(
 	return catalog
 }
 
-func TestResolveRequiresPermissionAndPublicGuestSite(t *testing.T) {
+func TestResolveUsesSiteVisibilityForPublicReadAndPermissionsForPrivateSite(t *testing.T) {
 	t.Parallel()
 
 	item := Site{
@@ -307,14 +307,104 @@ func TestResolveRequiresPermissionAndPublicGuestSite(t *testing.T) {
 		t.Fatalf("private guest error = %v", err)
 	}
 
-	denied := newCatalogForTest(t, item, testAccess{})
-	if _, err := denied.ResolveByDomain(
+	noGuestGrant := newCatalogForTest(t, item, testAccess{})
+	if _, err := noGuestGrant.ResolveByDomain(
 		context.Background(),
 		security.Guest(),
 		item.Domain,
-	); !errors.Is(err, security.ErrForbidden) {
-		t.Fatalf("permission error = %v", err)
+	); err != nil {
+		t.Fatalf("public guest access without a global permission grant = %v", err)
 	}
+	if _, err := noGuestGrant.ResolveByDomain(
+		context.Background(), security.User(42), item.Domain,
+	); err != nil {
+		t.Fatalf("public user access without a group permission grant = %v", err)
+	}
+
+	privateNoGrant := privateItem
+	privateNoGrant.Domain = "private.example.com"
+	privateWithoutGrant := newCatalogForTest(t, privateNoGrant, testAccess{})
+	if _, err := privateWithoutGrant.ResolveByDomain(
+		context.Background(),
+		security.Guest(),
+		privateNoGrant.Domain,
+	); !errors.Is(err, security.ErrForbidden) {
+		t.Fatalf("private guest access without a grant = %v", err)
+	}
+}
+
+func TestPublicSiteReadAccessIsScopedAndTracksRuntimePublication(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	items := []Site{
+		{Name: "Public", ID: 1, ProfileCode: "test", Domain: "public.example.com", Locale: "en-US", IsPublic: true},
+		{Name: "Private", ID: 2, ProfileCode: "test", Domain: "private.example.com", Locale: "en-US", IsPublic: false},
+	}
+	factory, err := kernel.NewProfileRuntimeFactory(
+		testResolver{},
+		kernel.RuntimeServices{
+			EventBus: testEventBus{},
+			Logger:   slog.New(slog.NewJSONHandler(io.Discard, nil)),
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := factory.Compile(ctx, kernel.Profile{Code: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := &memoryRepository{items: items}
+	catalog, err := NewCatalog(
+		repository,
+		testProfiles{"test": profile},
+		testAccess{allow: true},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.Reload(ctx); err != nil {
+		t.Fatal(err)
+	}
+	assertAccess := func(id ID, actor security.Actor, wantAllowed bool) {
+		t.Helper()
+		runtime, exists := catalog.RuntimeByID(id)
+		if !exists {
+			t.Fatalf("site %d runtime is unavailable", id)
+		}
+		err := catalog.CheckReadAccess(ctx, actor, runtime)
+		if (err == nil) != wantAllowed {
+			t.Fatalf("site %d read access error = %v, want allowed=%t", id, err, wantAllowed)
+		}
+	}
+	assertAccess(1, security.Guest(), true)
+	assertAccess(1, security.User(42), true)
+	assertAccess(2, security.Guest(), false)
+
+	if _, err := catalog.Update(ctx, security.System(), UpdateInput{
+		ID: 2, Name: "Private", ProfileCode: "test", Domain: "private.example.com",
+		Locale: "en-US", Settings: map[string]any{}, IsPublic: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assertAccess(2, security.Guest(), true)
+	if _, err := catalog.Update(ctx, security.System(), UpdateInput{
+		ID: 1, Name: "Public", ProfileCode: "test", Domain: "public.example.com",
+		Locale: "en-US", Settings: map[string]any{}, IsPublic: false,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assertAccess(1, security.Guest(), false)
+
+	repository.mu.Lock()
+	repository.items[0].IsPublic = true
+	repository.items[1].IsPublic = false
+	repository.mu.Unlock()
+	if err := catalog.Reload(ctx); err != nil {
+		t.Fatal(err)
+	}
+	assertAccess(1, security.Guest(), true)
+	assertAccess(2, security.Guest(), false)
 }
 
 func TestUpdateAtomicallyReplacesDomainSnapshotAndAudit(t *testing.T) {

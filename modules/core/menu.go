@@ -93,7 +93,7 @@ func (r *Runtime) serveMenu(response http.ResponseWriter, request *http.Request)
 	}
 	input, err := parseMenuInput(request.URL.RawQuery)
 	if err == nil {
-		err = r.authorization.Check(ctx, actor, permission.MustCode("core", "resource", permission.Read))
+		err = checkMenuReadAccess(ctx, actor, runtime.Site().IsPublic, r.authorization)
 	}
 	var result resource.MenuResult
 	if err == nil {
@@ -121,6 +121,22 @@ func (r *Runtime) serveMenu(response http.ResponseWriter, request *http.Request)
 	response.Header().Set("Content-Type", "application/json; charset=utf-8")
 	response.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(response).Encode(result)
+}
+
+func checkMenuReadAccess(
+	ctx context.Context,
+	actor security.Actor,
+	publicSite bool,
+	authorizer security.Authorizer,
+) error {
+	if publicSite {
+		return nil
+	}
+	return authorizer.Check(
+		ctx,
+		actor,
+		permission.MustCode("core", "resource", permission.Read),
+	)
 }
 
 func (r *Runtime) menu(ctx context.Context, runtime *site.Runtime, input resource.MenuInput) (resource.MenuResult, error) {

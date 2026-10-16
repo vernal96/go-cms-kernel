@@ -29,11 +29,32 @@ func Published(item Resource, now time.Time) bool {
 		(item.UnpublishedAt == nil || now.Before(*item.UnpublishedAt))
 }
 
+func (s *LibraryService) authorizeRead(
+	ctx context.Context,
+	actor security.Actor,
+	siteID site.ID,
+	publicOnly bool,
+) error {
+	if publicOnly {
+		runtime, exists := s.common.runtime(ctx, siteID)
+		if !exists {
+			return ErrNotFound
+		}
+		if runtime.Site().IsPublic {
+			return nil
+		}
+		if actor.IsGuest() {
+			return security.ErrForbidden
+		}
+	}
+	return s.common.authorizer.Check(ctx, actor, readPermission)
+}
+
 func (s *LibraryService) Collection(ctx context.Context, actor security.Actor, siteID site.ID, id ID, publicOnly bool) (LibraryCollection, error) {
 	if err := validateContext(ctx, "library collection"); err != nil {
 		return LibraryCollection{}, err
 	}
-	if err := s.common.authorizer.Check(ctx, actor, readPermission); err != nil {
+	if err := s.authorizeRead(ctx, actor, siteID, publicOnly); err != nil {
 		return LibraryCollection{}, err
 	}
 	mount, err := s.common.repository.ByID(ctx, id)
@@ -105,7 +126,7 @@ func (s *LibraryService) ResolvePublished(ctx context.Context, actor security.Ac
 	if err := validateContext(ctx, "resolve library item"); err != nil {
 		return ResolvedLibraryItem{}, err
 	}
-	if err := s.common.authorizer.Check(ctx, actor, readPermission); err != nil {
+	if err := s.authorizeRead(ctx, actor, siteID, true); err != nil {
 		return ResolvedLibraryItem{}, err
 	}
 	item, mount, err := s.repository.ResolveLibraryItemRoute(ctx, siteID, path)

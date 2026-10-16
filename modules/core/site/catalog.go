@@ -147,6 +147,9 @@ func (c *Catalog) CheckReadAccess(
 	if err := c.CheckCurrent(ctx, runtime); err != nil {
 		return err
 	}
+	if runtime.site.IsPublic {
+		return nil
+	}
 	if err := c.access.Check(ctx, actor, readPermission); err != nil {
 		return err
 	}
@@ -154,7 +157,7 @@ func (c *Catalog) CheckReadAccess(
 	if err != nil {
 		return err
 	}
-	if guest && !runtime.site.IsPublic {
+	if guest {
 		return security.ErrForbidden
 	}
 	return nil

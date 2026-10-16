@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.15.0
+
+- Let a public site's `is_public` setting authorize public reads of its published resources, library items, and menu without global guest grants for `core.site.read` or `core.resource.read`. Closing the site immediately denies anonymous public requests; resource publication and schedules still apply.
+- Preserve permission checks for private sites and management APIs, including authorized public-only library queries on private sites.
+
 ## 0.14.0
 
 - Add cached `resource.breadcrumbs` to public resource JSON with ordered `{title, link}` entries. Skip unpublished and deleted ancestors, and keep scheduled publication accurate on cache hits.

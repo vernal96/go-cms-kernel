@@ -613,6 +613,14 @@ func (r resourceRepository) ByPath(
 	return resource.Resource{}, resource.ErrNotFound
 }
 
+func (resourceRepository) MenuRecords(
+	context.Context,
+	site.ID,
+	resource.MenuInput,
+) ([]resource.MenuRecord, error) {
+	return []resource.MenuRecord{}, nil
+}
+
 func (r resourceRepository) BreadcrumbCandidates(_ context.Context, siteID site.ID, id resource.ID, includeHome bool) ([]resource.BreadcrumbCandidate, error) {
 	byID := make(map[resource.ID]resource.Resource, len(r.byID)+len(r.byPath))
 	for key, item := range r.byID {
@@ -853,12 +861,13 @@ func TestHandlerLooksUpCompiledRuntimeByRequestHost(t *testing.T) {
 	}
 }
 
-func TestHandlerHidesRuntimeWithoutGuestPermissionOrPublicFlag(
+func TestHandlerUsesSitePublicationForPublicRuntimeAccess(
 	t *testing.T,
 ) {
 	tests := []struct {
-		name    string
-		factory databaseFactory
+		name       string
+		factory    databaseFactory
+		wantStatus int
 	}{
 		{
 			name: "public site without guest grant",
@@ -866,12 +875,14 @@ func TestHandlerHidesRuntimeWithoutGuestPermissionOrPublicFlag(
 				sites:  repository{isPublic: true},
 				access: deniedAccessRepository{},
 			},
+			wantStatus: http.StatusOK,
 		},
 		{
 			name: "private site with guest grant",
 			factory: databaseFactory{
 				sites: repository{isPublic: false},
 			},
+			wantStatus: http.StatusForbidden,
 		},
 	}
 	for _, test := range tests {
@@ -907,20 +918,20 @@ func TestHandlerHidesRuntimeWithoutGuestPermissionOrPublicFlag(
 			if err != nil {
 				t.Fatal(err)
 			}
-			request := httptest.NewRequest(
-				http.MethodGet,
-				"/api/_cms/runtime",
-				nil,
-			)
-			request.Host = "example.com"
-			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, request)
-			if response.Code != http.StatusForbidden {
-				t.Fatalf(
-					"status = %d, body = %q",
-					response.Code,
-					response.Body.String(),
-				)
+			for _, path := range []string{"/api/_cms/runtime", "/api/menu"} {
+				request := httptest.NewRequest(http.MethodGet, path, nil)
+				request.Host = "example.com"
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, request)
+				if response.Code != test.wantStatus {
+					t.Fatalf(
+						"%s status = %d, want %d, body = %q",
+						path,
+						response.Code,
+						test.wantStatus,
+						response.Body.String(),
+					)
+				}
 			}
 		})
 	}

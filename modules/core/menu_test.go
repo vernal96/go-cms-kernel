@@ -184,6 +184,18 @@ func TestRevisionRestoreInvalidatesMenuResults(t *testing.T) {
 func (menuDeniedAuthorizer) Check(context.Context, security.Actor, permission.Code) error {
 	return security.ErrForbidden
 }
+
+func TestMenuReadUsesPublicSiteVisibilityWithoutResourceGrant(t *testing.T) {
+	for _, actor := range []security.Actor{security.Guest(), security.User(42)} {
+		if err := checkMenuReadAccess(context.Background(), actor, true, menuDeniedAuthorizer{}); err != nil {
+			t.Fatalf("public menu denied actor %v without resource grant: %v", actor, err)
+		}
+	}
+	if err := checkMenuReadAccess(context.Background(), security.Guest(), false, menuDeniedAuthorizer{}); !errors.Is(err, security.ErrForbidden) {
+		t.Fatalf("private menu access error = %v", err)
+	}
+}
+
 func TestMenuChecksPermissionBeforeCache(t *testing.T) {
 	runtime := &Runtime{authorization: menuDeniedAuthorizer{}, menuStore: newMemoryCacheStore()}
 	ctx := WithSiteRuntime(context.Background(), &site.Runtime{})

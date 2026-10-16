@@ -265,7 +265,22 @@ func (s *LibraryService) Move(ctx context.Context, actor security.Actor, id, tar
 }
 
 func (s *LibraryService) Query(ctx context.Context, actor security.Actor, query LibraryItemQuery) (LibraryItemPage, error) {
-	if err := s.common.authorizer.Check(ctx, actor, readPermission); err != nil {
+	if query.PublicOnly {
+		runtime, exists := s.common.runtime(ctx, query.SiteID)
+		if !exists {
+			return LibraryItemPage{}, ErrNotFound
+		}
+		if runtime.Site().IsPublic {
+			collection, err := s.Collection(ctx, actor, query.SiteID, query.LibraryID, true)
+			if err != nil {
+				return LibraryItemPage{}, err
+			}
+			query.SiteID = collection.Source.SiteID
+			query.LibraryID = collection.Source.ID
+		} else if err := s.common.authorizer.Check(ctx, actor, readPermission); err != nil {
+			return LibraryItemPage{}, err
+		}
+	} else if err := s.common.authorizer.Check(ctx, actor, readPermission); err != nil {
 		return LibraryItemPage{}, err
 	}
 	library, runtime, err := s.library(ctx, query.SiteID, query.LibraryID)

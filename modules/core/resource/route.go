@@ -109,7 +109,7 @@ func (r *RouteResolver) ResolvePublishedByPath(
 	if err != nil {
 		return Resource{}, ErrNotFound
 	}
-	if err := r.authorizer.Check(ctx, actor, readPermission); err != nil {
+	if err := r.authorizePublishedRead(ctx, actor, siteRuntime); err != nil {
 		return Resource{}, err
 	}
 
@@ -148,7 +148,7 @@ func (r *RouteResolver) ResolvePublishedByID(
 	if id <= 0 {
 		return Resource{}, ErrNotFound
 	}
-	if err := r.authorizer.Check(ctx, actor, readPermission); err != nil {
+	if err := r.authorizePublishedRead(ctx, actor, siteRuntime); err != nil {
 		return Resource{}, err
 	}
 
@@ -161,6 +161,20 @@ func (r *RouteResolver) ResolvePublishedByID(
 		)
 	}
 	return r.resolveStored(ctx, actor, siteRuntime, item, options)
+}
+
+func (r *RouteResolver) authorizePublishedRead(
+	ctx context.Context,
+	actor security.Actor,
+	siteRuntime *site.Runtime,
+) error {
+	if siteRuntime.Site().IsPublic {
+		return nil
+	}
+	if actor.IsGuest() {
+		return security.ErrForbidden
+	}
+	return r.authorizer.Check(ctx, actor, readPermission)
 }
 
 func (r *RouteResolver) resolveStored(

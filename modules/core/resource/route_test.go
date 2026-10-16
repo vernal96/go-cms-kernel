@@ -36,7 +36,7 @@ func (p *allowPreviewPolicy) AllowPreview(
 }
 
 func TestRouteResolverChecksPublicationPathModeAndPermission(t *testing.T) {
-	service, repository, _ := newTestService(t)
+	service, repository, _ := newTestServiceWithSiteVisibility(t, true)
 	siteRuntime, exists := service.sites.RuntimeByID(1)
 	if !exists {
 		t.Fatal("site runtime is unavailable")
@@ -155,21 +155,61 @@ func TestRouteResolverChecksPublicationPathModeAndPermission(t *testing.T) {
 		Path:     &path,
 		IsPublic: true,
 	}}
-	denied, err := NewRouteResolver(
-		repository,
-		deniedRouteAuthorizer{},
-	)
+	privateService, privateRepository, _ := newTestService(t)
+	privateRuntime, exists := privateService.sites.RuntimeByID(1)
+	if !exists {
+		t.Fatal("private site runtime is unavailable")
+	}
+	privateRepository.items = map[ID]Resource{1: repository.items[1]}
+	denied, err := NewRouteResolver(privateRepository, testAuthorizer{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := denied.ResolvePublishedByPath(
 		context.Background(),
 		security.Guest(),
-		siteRuntime,
+		privateRuntime,
 		path,
 		ResolveRouteOptions{},
 	); !errors.Is(err, security.ErrForbidden) {
 		t.Fatalf("permission error = %v", err)
+	}
+	userDenied, err := NewRouteResolver(privateRepository, deniedRouteAuthorizer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := userDenied.ResolvePublishedByPath(
+		context.Background(), security.User(42), privateRuntime, path, ResolveRouteOptions{},
+	); !errors.Is(err, security.ErrForbidden) {
+		t.Fatalf("private user without a resource grant error = %v", err)
+	}
+
+	publicService, publicRepository, _ := newTestServiceWithSiteVisibility(t, true)
+	publicRuntime, exists := publicService.sites.RuntimeByID(1)
+	if !exists {
+		t.Fatal("public site runtime is unavailable")
+	}
+	publicRepository.items[1] = Resource{
+		ID: 1, SiteID: 1, Type: "page", Path: &path, IsPublic: true,
+	}
+	publicResolver, err := NewRouteResolver(publicRepository, deniedRouteAuthorizer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, actor := range []security.Actor{security.Guest(), security.User(42)} {
+		if _, err := publicResolver.ResolvePublishedByPath(
+			context.Background(), actor, publicRuntime, path, ResolveRouteOptions{},
+		); err != nil {
+			t.Fatalf("public route denied actor %v without resource grant: %v", actor, err)
+		}
+	}
+	publicRepository.items[1] = Resource{
+		ID: 1, SiteID: 1, Type: "page", Path: &path, IsPublic: false,
+	}
+	if _, err := publicResolver.ResolvePublishedByPath(
+		context.Background(), security.Guest(), publicRuntime, path, ResolveRouteOptions{},
+	); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unpublished public-site resource error = %v", err)
 	}
 }
 

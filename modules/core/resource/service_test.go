@@ -238,6 +238,12 @@ func (s testSites) RuntimeByID(id site.ID) (*site.Runtime, bool) {
 	return runtime, exists
 }
 
+type staleTestSites struct{ testSites }
+
+func (staleTestSites) CheckCurrent(context.Context, *site.Runtime) error {
+	return site.ErrUnavailable
+}
+
 type memoryRepository struct {
 	nextID       ID
 	nextWidgetID widget.BindingID
@@ -253,6 +259,7 @@ type memoryLibraryRepository struct {
 	items               map[ID]LibraryItem
 	nextID              ID
 	lastQuery           LibraryItemQuery
+	queryCalls          int
 	templateCodeLookups int
 }
 
@@ -369,6 +376,7 @@ func (r *memoryLibraryRepository) MoveLibraryItem(_ context.Context, _ *security
 }
 
 func (r *memoryLibraryRepository) QueryLibraryItems(_ context.Context, query LibraryItemQuery) (LibraryItemPage, error) {
+	r.queryCalls++
 	r.lastQuery = query
 	result := LibraryItemPage{}
 	for _, item := range r.items {
@@ -949,6 +957,14 @@ func newTestService(
 	t *testing.T,
 	imageOptions ...*field.MediaOptions,
 ) (*Service, *memoryRepository, *testMediaService) {
+	return newTestServiceWithSiteVisibility(t, false, imageOptions...)
+}
+
+func newTestServiceWithSiteVisibility(
+	t *testing.T,
+	isPublic bool,
+	imageOptions ...*field.MediaOptions,
+) (*Service, *memoryRepository, *testMediaService) {
 	t.Helper()
 	image := &field.MediaOptions{Disk: "public", VirtualPath: "resources/images", SettingsCode: "resource_image"}
 	if len(imageOptions) > 0 {
@@ -1021,6 +1037,7 @@ func newTestService(
 			ProfileCode: "test",
 			Domain:      fmt.Sprintf("site-%d.example.com", siteID),
 			Locale:      "en-US",
+			IsPublic:    isPublic,
 			Settings:    map[string]any{},
 		}, blueprint)
 		if err != nil {
@@ -1650,6 +1667,103 @@ func TestLibraryServiceResolvesSemanticQueryKindsAndTimestamps(t *testing.T) {
 	})
 	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "incompatible storage kinds") {
 		t.Fatalf("incompatible kinds error = %v", err)
+	}
+}
+
+func TestPublicLibraryQueryRequiresPublishedCurrentLibrary(t *testing.T) {
+	common, treeRepository, _ := newTestServiceWithSiteVisibility(t, true)
+	ctx := context.Background()
+	home, err := common.Create(ctx, security.System(), CreateInput{SiteID: 1, Title: "Home"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	library, err := common.Create(ctx, security.System(), CreateInput{
+		SiteID: 1, ParentID: &home.ID, Type: resourcetype.Library,
+		Title: "Catalog", Slug: "catalog", TypeSettings: map[string]any{"item_url_pattern": "/{slug}"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := &memoryLibraryRepository{
+		memoryRepository: treeRepository,
+		items: map[ID]LibraryItem{
+			1000: {ID: 1000, SiteID: 1, LibraryID: library.ID, IsPublic: true},
+		},
+	}
+	common.repository = repository
+	common.authorizer = deniedRouteAuthorizer{}
+	service, err := NewLibraryService(repository, common)
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := LibraryItemQuery{
+		SiteID: 1, LibraryID: library.ID, Limit: 10, PublicOnly: true,
+	}
+	page, err := service.Query(ctx, security.Guest(), query)
+	if err != nil || len(page.Items) != 1 || repository.queryCalls != 1 {
+		t.Fatalf("published library query = %#v, calls=%d, error=%v", page.Items, repository.queryCalls, err)
+	}
+
+	storedLibrary := treeRepository.items[library.ID]
+	storedLibrary.IsPublic = false
+	treeRepository.items[library.ID] = storedLibrary
+	if _, err := service.Query(ctx, security.Guest(), query); !errors.Is(err, ErrNotFound) || repository.queryCalls != 1 {
+		t.Fatalf("private library query error/calls = %v/%d", err, repository.queryCalls)
+	}
+
+	storedLibrary.IsPublic = true
+	future := time.Now().UTC().Add(time.Hour)
+	storedLibrary.PublishedAt = &future
+	treeRepository.items[library.ID] = storedLibrary
+	if _, err := service.Query(ctx, security.Guest(), query); !errors.Is(err, ErrNotFound) || repository.queryCalls != 1 {
+		t.Fatalf("future library query error/calls = %v/%d", err, repository.queryCalls)
+	}
+
+	storedLibrary.PublishedAt = nil
+	treeRepository.items[library.ID] = storedLibrary
+	common.sites = staleTestSites{testSites: common.sites.(testSites)}
+	if _, err := service.Query(ctx, security.Guest(), query); !errors.Is(err, site.ErrUnavailable) || repository.queryCalls != 1 {
+		t.Fatalf("stale library query error/calls = %v/%d", err, repository.queryCalls)
+	}
+}
+
+func TestAuthorizedPrivateSitePublicOnlyLibraryQueryRetainsAccess(t *testing.T) {
+	common, treeRepository, _ := newTestService(t)
+	ctx := context.Background()
+	home, err := common.Create(ctx, security.System(), CreateInput{SiteID: 1, Title: "Home"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	library, err := common.Create(ctx, security.System(), CreateInput{
+		SiteID: 1, ParentID: &home.ID, Type: resourcetype.Library,
+		Title: "Catalog", Slug: "catalog", TypeSettings: map[string]any{"item_url_pattern": "/{slug}"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := &memoryLibraryRepository{
+		memoryRepository: treeRepository,
+		items: map[ID]LibraryItem{
+			1000: {ID: 1000, SiteID: 1, LibraryID: library.ID, IsPublic: true},
+		},
+	}
+	common.repository = repository
+	service, err := NewLibraryService(repository, common)
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := LibraryItemQuery{
+		SiteID: 1, LibraryID: library.ID, Limit: 10, PublicOnly: true,
+	}
+
+	page, err := service.Query(ctx, security.User(42), query)
+	if err != nil || len(page.Items) != 1 || repository.queryCalls != 1 || !repository.lastQuery.PublicOnly {
+		t.Fatalf("authorized private-site public-only query = %#v, calls=%d, error=%v", page.Items, repository.queryCalls, err)
+	}
+
+	common.authorizer = deniedRouteAuthorizer{}
+	if _, err := service.Query(ctx, security.User(42), query); !errors.Is(err, security.ErrForbidden) || repository.queryCalls != 1 {
+		t.Fatalf("unauthorized private-site public-only query error/calls = %v/%d", err, repository.queryCalls)
 	}
 }
 
