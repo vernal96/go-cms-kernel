@@ -22,6 +22,7 @@
 ## Change discipline
 
 - Keep changes coherent and avoid unrelated refactors.
+- For new static Go declarations of standard field definitions, prefer the typed constructors in `modules/core/field` and their `With...` methods. Keep dynamic JSON/API field configuration and `field.ConfigField` on their existing contracts; runtime validation remains required.
 - Pass `context.Context` through blocking, I/O, and lifecycle operations.
 - Prefer explicit constructors, factories, interfaces, and registries over
   reflection or mutable global state.

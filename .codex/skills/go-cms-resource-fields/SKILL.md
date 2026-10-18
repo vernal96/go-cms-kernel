@@ -13,6 +13,8 @@ New field types and validator types belong to their feature module. To contribut
 
 Preserve the existing separation between field **definitions/schema** and field **values**. Field definitions belong to templates/code/runtime metadata; persisted field values belong to resource instances.
 
+For new static Go declarations of standard template/resource fields, prefer the typed constructors in `modules/core/field` and their `With...` methods instead of manually pairing a standard `TypeCode` with `Options any`. This guidance applies to Go declarations only: keep dynamic JSON/API field definitions and `field.ConfigField` on their existing contracts, and retain runtime schema validation.
+
 ## Core rule
 
 Template field values must not be stored in generic resource `Settings` JSONB.

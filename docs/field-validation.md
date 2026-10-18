@@ -8,14 +8,11 @@ import (
     "github.com/vernal96/go-cms-kernel/modules/core/field/validation"
 )
 
-var slug = field.Definition{
-    Key: "slug", Type: field.TypeString, Label: "Slug",
-    Validators: []field.ValidatorDefinition{
-        validation.MinLength(2),
-        validation.MaxLength(100),
-        validation.Regex(`^[a-z0-9-]+$`),
-    },
-}
+var slug = field.String("slug", "Slug").WithValidators(
+	validation.MinLength(2),
+	validation.MaxLength(100),
+	validation.Regex(`^[a-z0-9-]+$`),
+)
 ```
 
 `field.Schema.Compile` resolves each validator from the site runtime registry, decodes its options, checks compatibility and compiles it once. Unknown codes, duplicate codes, invalid options, invalid scopes and nil compiled validators fail schema compilation. Required validator options reject both missing keys and `null`; an explicit numeric zero remains valid where the validator permits it. At validation time the schema checks presence/`Required`, normalizes, checks emptiness and intrinsic type constraints, then runs configured validators in declaration order. Applicable failures accumulate as `{key, code, params}`; repeater and list paths include indices such as `items[2].title`. The backend is authoritative.

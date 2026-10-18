@@ -19,7 +19,7 @@ func ImageField(runtime *site.Runtime) (field.Definition, bool) {
 	if options == nil {
 		return field.Definition{}, false
 	}
-	return field.Definition{Key: "image_media_id", Label: "Изображение", Type: field.TypeMedia, Options: *options}, true
+	return field.Media("image_media_id", "Изображение", *options), true
 }
 
 func (s *Service) validateImageField(ctx context.Context, actor security.Actor, runtime *site.Runtime, id media.ID) error {

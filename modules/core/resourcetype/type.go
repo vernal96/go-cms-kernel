@@ -247,8 +247,8 @@ func (libraryType) Metadata() Metadata {
 		Label:        "Библиотека",
 		Capabilities: Capabilities{SupportsTemplate: true, SupportsContent: true, SupportsWidgets: true, SupportsFields: true, MutableType: false, OwnsLibraryItems: true, DefaultIcon: "box-archive"},
 		SettingsFields: []field.Definition{
-			{Key: "item_url_pattern", Type: field.TypeString, Label: "Шаблон URL ресурса", Required: true},
-			{Key: "default_item_template", Type: field.TypeString, Label: "Шаблон ресурса по умолчанию", Editor: "resource-template"},
+			field.String("item_url_pattern", "Шаблон URL ресурса").WithRequired(true),
+			field.String("default_item_template", "Шаблон ресурса по умолчанию").WithEditor("resource-template"),
 		},
 		SettingsDefaults: map[string]any{"item_url_pattern": DefaultItemURLPattern},
 		ContentTypes:     []ContentTypeOption{{Code: "html", Label: "HTML", Editor: "html"}},

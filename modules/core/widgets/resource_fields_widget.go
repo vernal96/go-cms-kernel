@@ -18,14 +18,9 @@ func (resourceFieldsWidget) Definition() widget.Definition {
 		Reference:   ResourceFields,
 		Label:       "Поля ресурса",
 		Description: "Возвращает выбранные поля текущего ресурса",
-		Fields: []field.Definition{{
-			Key:      "fields",
-			Type:     field.TypeString,
-			Label:    "Поля",
-			Required: true,
-			Options:  field.StringOptions{Multiple: true},
-			Editor:   "template-field-picker",
-		}},
+		Fields: []field.Definition{
+			field.String("fields", "Поля", field.StringOptions{Multiple: true}).WithRequired(true).WithEditor("template-field-picker"),
+		},
 	}
 }
 

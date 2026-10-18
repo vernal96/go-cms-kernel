@@ -11,32 +11,72 @@
 | `json` | Структурированные JSON-значения |
 | `repeater` | Повторяемые вложенные значения с дочерними определениями |
 
-Пример поля, объявляемого в шаблоне (импортируйте `modules/core/field/validation`):
+## Объявление полей в Go
+
+Для новых объявлений стандартных полей используйте конструкторы пакета `field`: они сами задают стандартный `TypeCode` и принимают настройки нужного типа. Для `String`, `Integer`, `Float`, `Textarea`, `Email` и `Phone` настройки можно опустить либо передать одним аргументом; передача более одного аргумента вызывает panic. `Checkbox` и `JSON` дополнительных настроек не принимают. Остальные конструкторы требуют типизированные настройки:
+
+| Конструктор | Настройки |
+| --- | --- |
+| `field.String`, `field.Textarea`, `field.Email` | `field.StringOptions` (`Multiple`) |
+| `field.Integer` | `field.IntegerOptions` (`Multiple`, `Step *int64`) |
+| `field.Float` | `field.FloatOptions` (`Multiple`, `Step *float64`) |
+| `field.Checkbox`, `field.JSON` | Нет |
+| `field.Radio` | `field.RadioOptions` (`Choices`) |
+| `field.Select` | `field.SelectOptions` (`Choices`, `Multiple`) |
+| `field.Phone` | `field.PhoneOptions` (`Multiple`) |
+| `field.Media` | `field.MediaOptions` (`Disk`, `VirtualPath`, `SettingsCode`, `MIMETypes`, `Multiple`) |
+| `field.Repeater` | `field.RepeaterOptions` (`Fields []field.Definition`) |
+
+Например, обычные поля шаблона можно объявить так:
 
 ```go
-field.Definition{
-    Key:   "summary",
-    Type:  field.TypeTextarea,
-    Label: "Краткое описание",
-    Validators: []field.ValidatorDefinition{validation.MaxLength(255)},
+fields := []field.Definition{
+    field.String("title", "Заголовок").WithRequired(true),
+    field.Textarea("summary", "Краткое описание").WithValidators(
+        validation.MaxLength(255),
+    ),
+    field.Select("status", "Статус", field.SelectOptions{
+        Choices: []field.Choice{
+            {Value: "draft", Label: "Черновик"},
+            {Value: "published", Label: "Опубликован"},
+        },
+    }),
 }
 ```
 
-Для `radio` и `select` в `Options` передаётся список choices. Единственное файловое поле — `field.TypeMedia` (`media`); оно хранит ID отдельной Media для каждого выбранного файла. Тип значения отвечает за нормализацию/валидацию, а `Editor`/metadata описывают административное представление. Поля настроек сайта `Profile.Params` — отдельный контракт, описанный в [профилях](../../profiles.md).
+Общие свойства задаются цепочкой методов, каждый из которых возвращает новое значение `Definition`: `WithRequired(bool)`, `WithValidators(...field.ValidatorDefinition)`, `WithEditor(field.EditorCode)`, `WithVisibleWhen(*field.VisibleWhen)` и `WithPublic(bool)`. `WithValidators` заменяет список валидаторов переданным списком. Это копирующие методы: исходное определение не меняется, а срезы, карта параметров и условие показа отделены от переданных значений. `WithPublic` относится к публичной проекции параметров профиля; для полей шаблона ресурсов он не включает публикацию.
+
+Указанные типы аргументов позволяют компилятору Go отклонить, например, `field.Media("image", "Изображение", field.SelectOptions{})`. Конструкторы не компилируют схему и не заменяют runtime-проверки: Core по-прежнему проверяет настройки при компиляции схемы, а JSON/API-конфигурации и динамические типы проходят свои runtime-проверки. Если тип стандартный, но его литерал удобнее в конкретном контексте, существующий `field.Definition{...}` остаётся поддержан.
+
+Для собственного типа сторонний модуль может объявить свои параметры и функцию-конструктор, возвращающую общий `field.Definition`; Kernel не требуется изменять:
+
+```go
+type ProductOptions struct {
+    CategoryID int64
+    Multiple   bool
+}
+
+func Product(key, label string, options ProductOptions) field.Definition {
+    return field.Definition{
+        Key: key, Label: label, Type: "catalog.product", Options: options,
+    }
+}
+```
+
+`field.ConfigField` — отдельное описание параметра конфигурации компонента для редактора. Оно содержит редакторские метаданные (`Key`, `Label`, `Type`, `Required`, `Validators`, `Options` и `Default`) и само по себе не является объявлением поля `field.Definition` или заменой конструктора стандартного типа.
+
+Формат определений в JSON и HTTP API не меняется: там по-прежнему передаются код типа и сериализуемые `options`. Типизированные конструкторы относятся к удобному Go API; подробности runtime-валидации приведены в [контракте проверок полей](../../field-validation.md). Поля параметров сайта `Profile.Params` — отдельный контракт, описанный в [профилях](../../profiles.md).
 
 ## Файловое поле
 
 `field.MediaOptions` содержит обязательные `Disk`, `VirtualPath` и `SettingsCode`, а также необязательные `MIMETypes` и `Multiple`:
 
 ```go
-field.Definition{
-    Key: "gallery", Label: "Галерея", Type: field.TypeMedia,
-    Options: field.MediaOptions{
+field.Media("gallery", "Галерея", field.MediaOptions{
         Disk: "public", VirtualPath: "site/news/gallery",
         SettingsCode: "news_gallery", Multiple: true,
         MIMETypes: []string{"image/*"},
-    },
-}
+    })
 ```
 
 `Disk` должен быть объявленным диском, `VirtualPath` — допустимым виртуальным путём на нём, а `SettingsCode` — кодом схемы настроек медиа, объявленной в `core.Config.MediaSettings`. Компиляция профиля проверяет эти опции и наличие схемы. `MIMETypes` принимает MIME-типы и шаблоны наподобие `image/*`; сервер проверяет диск и фактический MIME каждого выбранного файла при сохранении. Интерфейс фильтрует неподходящие файлы до загрузки, но серверная проверка остаётся обязательной. `Multiple: false` хранит одно значение Media ID; `Multiple: true` — упорядоченный список таких ID.
@@ -64,20 +104,19 @@ var Profile = kernel.Profile{
 		core.New(core.Config{MediaSettings: []media.SettingsDefinition{{
 			Code: "site_logo",
 			Fields: []field.Definition{
-				{Key: "title", Label: "Название", Type: field.TypeString},
-				{Key: "alt", Label: "Альтернативный текст", Type: field.TypeString},
-				{Key: "description", Label: "Описание", Type: field.TypeTextarea},
+				field.String("title", "Название"),
+				field.String("alt", "Альтернативный текст"),
+				field.Textarea("description", "Описание"),
 			},
 		}}}),
 		admin.New(),
 	},
-	Params: []field.Definition{{
-        Key: "logo", Label: "Логотип", Type: field.TypeMedia, Required: true,
-        Options: field.MediaOptions{
+	Params: []field.Definition{
+		field.Media("logo", "Логотип", field.MediaOptions{
 			Disk: "public", VirtualPath: "site/logo", SettingsCode: "site_logo",
 			MIMETypes: []string{"image/*"},
-		},
-	}},
+		}).WithRequired(true),
+	},
 }
 ```
 

@@ -34,9 +34,9 @@ func (w libraryResourcesWidget) Definition() widget.Definition {
 	return widget.Definition{Reference: reference, Label: label,
 		Description: "Постраничный список опубликованных ресурсов текущей библиотеки",
 		Fields: []field.Definition{
-			{Key: "per_page", Type: field.TypeInteger, Label: "Ресурсов на странице", Required: true, Validators: []field.ValidatorDefinition{validation.Min(1), validation.Max(100)}},
-			{Key: "filters", Type: field.TypeJSON, Label: "Фильтры ресурсов", Editor: "json"},
-			{Key: "sorting", Type: field.TypeJSON, Label: "Сортировка ресурсов", Editor: "json"},
+			field.Integer("per_page", "Ресурсов на странице").WithRequired(true).WithValidators(validation.Min(1), validation.Max(100)),
+			field.JSON("filters", "Фильтры ресурсов").WithEditor("json"),
+			field.JSON("sorting", "Сортировка ресурсов").WithEditor("json"),
 		}, SummaryFields: []string{"per_page"}}
 }
 

@@ -279,7 +279,7 @@ func validateStaticAttachmentMedia(options field.MediaOptions, types field.TypeR
 	if options.Multiple {
 		return errors.New("mail static attachment media must be single-value")
 	}
-	_, err := field.Compile([]field.Definition{{Key: "attachment", Type: field.TypeMedia, Label: "Attachment", Options: options}}, types)
+	_, err := field.Compile([]field.Definition{field.Media("attachment", "Attachment", options)}, types)
 	if err != nil {
 		return fmt.Errorf("mail static attachment media configuration is invalid: %w", err)
 	}

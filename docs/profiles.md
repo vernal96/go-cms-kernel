@@ -148,22 +148,12 @@ import (
 	"github.com/vernal96/go-cms-kernel/modules/core/field/validation"
 )
 
-var editorialRequired = true
-
 var editorialParams = []field.Definition{
-	{
-		Key: "organization_name", Type: field.TypeString,
-		Label: "Название организации", Required: &editorialRequired,
-	},
-	{
-		Key: "contact_email", Type: field.TypeEmail,
-		Label: "Контактный email", Public: true,
-	},
-	{
-		Key: "office_phone", Type: field.TypePhone,
-		Label: "Телефон приёмной",
-		Validators: []field.ValidatorDefinition{validation.Regex(`^\+7`)},
-	},
+	field.String("organization_name", "Название организации").WithRequired(true),
+	field.Email("contact_email", "Контактный email").WithPublic(true),
+	field.Phone("office_phone", "Телефон приёмной").WithValidators(
+		validation.Regex(`^\+7`),
+	),
 }
 
 var Profile = kernel.Profile{
@@ -195,8 +185,8 @@ var Profile = kernel.Profile{
 При добавлении определений:
 
 1. Выбирайте стабильные уникальные `Key` в пределах параметров профиля: ключ используется для сохранения значения в настройках сайта.
-2. Указывайте `Type` из списка выше и опции соответствующего типа. Не задавайте `Options`, если тип их не принимает.
-3. Если параметр должен попадать в публичную проекцию сайта, явно установите `Public: true`; без этого значения остаются непубличными.
+2. Для новых Go-объявлений используйте соответствующий конструктор `field` из [справочника полей Core](modules/core/fields.md#объявление-полей-в-go); он связывает стандартный тип с его типизированными опциями. Существующие литералы `field.Definition` остаются допустимыми.
+3. Если параметр должен попадать в публичную проекцию сайта, вызовите `.WithPublic(true)`; без этого значения остаются непубличными.
 4. Добавьте профиль в `Profiles` конфигурации приложения по инструкции выше. Отдельная миграция БД для добавления определения не нужна: значения профиля хранятся в настройках сайта.
 5. Если поле удаляется или переименовывается, согласуйте это с чтением его ключа в коде и с используемыми настройками сайтов: смена `Key` означает новый параметр.
 

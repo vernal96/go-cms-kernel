@@ -14,7 +14,7 @@ Templates: []template.Definition{{
     Label: "Статья",
     Icon: "file-lines",
     Fields: []field.Definition{
-        {Key: "lead", Type: field.TypeTextarea, Label: "Вступление"},
+        field.Textarea("lead", "Вступление"),
     },
     EditorTabs: []field.EditorTab{
         {Code: "content", Label: "Содержание", Fields: []string{"lead"}},
@@ -47,7 +47,7 @@ Templates: []template.Definition{{
 | `EditorTabs []field.EditorTab` | Необязательная группировка `Fields` в редакторе. Если табы заданы, каждое поле должно входить ровно в один таб; неизвестные и повторные ключи отклоняются. Не меняет сохранение и публичность значения. |
 | `Layout template.Layout` | Упорядоченные зоны и элементы внутри них. При отсутствии зон доступна стандартная зона `default`. |
 
-Для каждого `field.Definition` используются `Key` (уникальный ключ), `Type` (тип значения), `Label`, `Required`, `Validators`, `Options`, `Editor`, `VisibleWhen`. `Public` имеет смысл для параметров сайта `Profile.Params`; не используйте его как переключатель публичности поля шаблона. Типы и опции подробно перечислены в [справочнике полей](modules/core/fields.md) и [контракте проверки](field-validation.md). `field.EditorTab` содержит `Code`, `Label`, `Fields []string` с ключами полей; порядок табов и ключей задаёт порядок в редакторе.
+Для новых Go-объявлений стандартных типов используйте типизированные конструкторы из [справочника полей](modules/core/fields.md#объявление-полей-в-go); литералы `field.Definition` также поддерживаются. Каждое определение имеет `Key` (уникальный ключ), `Type` (тип значения), `Label`, `Required`, `Validators`, `Options`, `Editor`, `VisibleWhen`. `Public` имеет смысл для параметров сайта `Profile.Params`; не используйте его как переключатель публичности поля шаблона. Типы и опции подробно перечислены в [справочнике полей](modules/core/fields.md) и [контракте проверки](field-validation.md). `field.EditorTab` содержит `Code`, `Label`, `Fields []string` с ключами полей; порядок табов и ключей задаёт порядок в редакторе.
 
 Имена иконок задаются без `fa-solid fa-`: например, `Icon: "building-columns"`. Строка не проверяется kernel на наличие в библиотеке Font Awesome. Для пустого `Icon` метаданные шаблона и дерева ресурсов содержат `file-lines`; frontend отображает его тем же способом, что и остальные имена иконок. См. также [навигацию документации](README.md).
 

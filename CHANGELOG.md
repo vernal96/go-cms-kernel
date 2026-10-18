@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.17.0
+
+- Add typed Go constructors for every built-in field type and value-returning methods for required, validators, editor, visibility, and public settings. Constructor options are copied so later changes to inputs or derived definitions do not mutate each other.
+- Keep `field.Definition`, `Options any`, the `field.Type` extension contract, runtime schema validation, and JSON/HTTP formats unchanged. Migrate static built-in module field declarations to the typed API and document custom constructors.
+
 ## 0.16.0
 
 - Add typed Definition Contributions for profile compilation and Runtime Contributions for each site runtime. Kernel validates target modules and declared dependencies, applies registrations before finalization, and stops the build on errors without knowing feature-module extension types.

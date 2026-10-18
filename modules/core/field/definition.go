@@ -240,23 +240,68 @@ func CloneDefinitions(source []Definition) []Definition {
 }
 
 func cloneEditorValue(value any) any {
-	switch typed := value.(type) {
-	case []string:
-		return append([]string(nil), typed...)
-	case []any:
-		result := make([]any, len(typed))
-		for index, item := range typed {
-			result[index] = cloneEditorValue(item)
+	if value == nil {
+		return nil
+	}
+	return cloneValue(reflect.ValueOf(value)).Interface()
+}
+
+func cloneValue(value reflect.Value) reflect.Value {
+	if !value.IsValid() {
+		return value
+	}
+
+	switch value.Kind() {
+	case reflect.Interface:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		result := reflect.New(value.Type()).Elem()
+		result.Set(cloneValue(value.Elem()))
+		return result
+	case reflect.Pointer:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		result := reflect.New(value.Type().Elem())
+		result.Elem().Set(cloneValue(value.Elem()))
+		return result
+	case reflect.Slice:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		result := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
+		for index := 0; index < value.Len(); index++ {
+			result.Index(index).Set(cloneValue(value.Index(index)))
 		}
 		return result
-	case map[string]any:
-		result := make(map[string]any, len(typed))
-		for key, item := range typed {
-			result[key] = cloneEditorValue(item)
+	case reflect.Map:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		result := reflect.MakeMapWithSize(value.Type(), value.Len())
+		iterator := value.MapRange()
+		for iterator.Next() {
+			result.SetMapIndex(iterator.Key(), cloneValue(iterator.Value()))
+		}
+		return result
+	case reflect.Array:
+		result := reflect.New(value.Type()).Elem()
+		for index := 0; index < value.Len(); index++ {
+			result.Index(index).Set(cloneValue(value.Index(index)))
+		}
+		return result
+	case reflect.Struct:
+		result := reflect.New(value.Type()).Elem()
+		result.Set(value)
+		for index := 0; index < value.NumField(); index++ {
+			if value.Type().Field(index).PkgPath == "" {
+				result.Field(index).Set(cloneValue(value.Field(index)))
+			}
 		}
 		return result
 	default:
-		return typed
+		return value
 	}
 }
 
