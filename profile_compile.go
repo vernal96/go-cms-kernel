@@ -9,13 +9,22 @@ import (
 	"github.com/vernal96/go-cms-kernel/filesystem"
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/template"
-	"github.com/vernal96/go-cms-kernel/permission"
 )
 
 func (f *ProfileRuntimeFactory) Compile(
 	ctx context.Context,
 	profile Profile,
 ) (*ProfileBlueprint, error) {
+	definitions, err := CompileProfileDefinitions(ctx, profile)
+	if err != nil {
+		return nil, err
+	}
+	return f.CompileWithDefinitions(ctx, profile, definitions)
+}
+
+// CompileWithDefinitions reuses a frozen snapshot after application services
+// have been bound; it never executes definition contributions a second time.
+func (f *ProfileRuntimeFactory) CompileWithDefinitions(ctx context.Context, profile Profile, definitions *ProfileDefinitions) (*ProfileBlueprint, error) {
 	if ctx == nil {
 		return nil, errors.New("profile compile context is nil")
 	}
@@ -33,101 +42,13 @@ func (f *ProfileRuntimeFactory) Compile(
 		return nil, err
 	}
 
-	moduleCodes := make(
-		map[ModuleCode]struct{},
-		len(profile.Modules),
-	)
-
-	for index, profileModule := range profile.Modules {
-		if profileModule == nil || isNilValue(profileModule) {
-			return nil, fmt.Errorf(
-				"profile %q module at index %d is nil",
-				profile.Code,
-				index,
-			)
-		}
-
-		moduleCode := profileModule.Code()
-		if moduleCode == "" {
-			return nil, fmt.Errorf(
-				"profile %q module at index %d has empty code",
-				profile.Code,
-				index,
-			)
-		}
-
-		if _, exists := moduleCodes[moduleCode]; exists {
-			return nil, fmt.Errorf(
-				"profile %q contains duplicate module %q",
-				profile.Code,
-				moduleCode,
-			)
-		}
-
-		moduleCodes[moduleCode] = struct{}{}
-	}
-	if err := validateModuleDependencyOrder(profile); err != nil {
+	if err := validateProfileModules(profile); err != nil {
 		return nil, err
 	}
-
-	registry := newRuntimeRegistry()
-
-	for _, profileModule := range profile.Modules {
-		moduleRegistry, err := RegistryForModule(profileModule)
-		if err != nil {
-			return nil, fmt.Errorf("profile %q: %w", profile.Code, err)
-		}
-
-		for index, fieldType := range moduleRegistry.FieldTypes {
-			if err := registry.addFieldType(fieldType); err != nil {
-				return nil, fmt.Errorf(
-					"register field type at index %d from module %q: %w",
-					index,
-					profileModule.Code(),
-					err,
-				)
-			}
-		}
-		for index, item := range moduleRegistry.ValidatorTypes {
-			if err := registry.addValidatorType(item); err != nil {
-				return nil, fmt.Errorf("register validator type at index %d from module %q: %w", index, profileModule.Code(), err)
-			}
-		}
-		for index, resourceType := range moduleRegistry.ResourceTypes {
-			if err := registry.addResourceType(resourceType); err != nil {
-				return nil, fmt.Errorf(
-					"register resource type at index %d from module %q: %w",
-					index,
-					profileModule.Code(),
-					err,
-				)
-			}
-		}
-		if len(moduleRegistry.PermissionEntities) == 0 {
-			continue
-		}
-		permissionDefinitions, err := permission.Definitions(
-			string(profileModule.Code()),
-			moduleRegistry.PermissionEntities,
-		)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"register permissions from module %q: %w",
-				profileModule.Code(),
-				err,
-			)
-		}
-		for index, definition := range permissionDefinitions {
-			if err := registry.addPermission(definition); err != nil {
-				return nil, fmt.Errorf(
-					"register permission at index %d from module %q: %w",
-					index,
-					profileModule.Code(),
-					err,
-				)
-			}
-		}
+	if err := definitions.validateProfile(profile); err != nil {
+		return nil, err
 	}
+	registry := definitions.registry
 
 	if image := profile.Settings.FileSystem.ResourceImage; image != nil {
 		if image.Multiple {

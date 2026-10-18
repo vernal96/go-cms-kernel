@@ -34,7 +34,6 @@ func (b *ProfileBlueprint) Build(
 	profile := b.profile
 	registry := b.registry.cloneDefinitions()
 	hooks := entityhooks.NewRegistry(entityhooks.Site, scope.SiteID())
-	widgetSources := make([]widget.Source, 0, len(profile.Modules))
 	for _, module := range profile.Modules {
 		dependencies, err := resolveModuleDependencies(module, registry)
 		if err != nil {
@@ -132,22 +131,16 @@ func (b *ProfileBlueprint) Build(
 		if err := registry.add(runtime); err != nil {
 			return nil, err
 		}
-		if provider, ok := runtime.(widget.Provider); ok {
-			descriptor := ModuleDescriptor{Label: string(module.Code())}
-			if provider, ok := module.(ModuleDescriptorProvider); ok {
-				descriptor = provider.ModuleDescriptor()
-			}
-			widgetSources = append(widgetSources, widget.Source{
-				Module: widget.ModuleDescriptor{
-					Code: string(module.Code()), Label: descriptor.Label,
-					Description: descriptor.Description,
-				},
-				Widgets: provider.Widgets(),
-			})
-		}
+	}
+
+	if err := applyRuntimeContributions(ctx, profile, registry); err != nil {
+		return nil, err
 	}
 
 	for _, moduleRuntime := range registry.Modules() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		finalizer, ok := moduleRuntime.(RuntimeBuildFinalizer)
 		if !ok {
 			continue
@@ -159,6 +152,24 @@ func (b *ProfileBlueprint) Build(
 				profile.Code,
 				err,
 			)
+		}
+	}
+
+	widgetSources := make([]widget.Source, 0, len(profile.Modules))
+	for _, module := range profile.Modules {
+		moduleRuntime, _ := registry.Module(module.Code())
+		if provider, ok := moduleRuntime.(widget.Provider); ok {
+			descriptor := ModuleDescriptor{Label: string(module.Code())}
+			if provider, ok := module.(ModuleDescriptorProvider); ok {
+				descriptor = provider.ModuleDescriptor()
+			}
+			widgetSources = append(widgetSources, widget.Source{
+				Module: widget.ModuleDescriptor{
+					Code: string(module.Code()), Label: descriptor.Label,
+					Description: descriptor.Description,
+				},
+				Widgets: provider.Widgets(),
+			})
 		}
 	}
 

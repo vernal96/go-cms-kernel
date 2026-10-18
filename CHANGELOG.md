@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.16.0
+
+- Add typed Definition Contributions for profile compilation and Runtime Contributions for each site runtime. Kernel validates target modules and declared dependencies, applies registrations before finalization, and stops the build on errors without knowing feature-module extension types.
+- Move Core field, validator, resource type, and permission definitions and Forms action/element extension registration to module-owned, sealed registries. Admin and Mail now own their permission definitions. Keep `RegistryProvider` as a fallback for existing modules.
+- Compile profile definitions once and reuse their frozen snapshot during boot and site runtime creation. Document module extension contracts, lifecycle, and examples for Forms and custom fields.
+
 ## 0.15.0
 
 - Let a public site's `is_public` setting authorize public reads of its published resources, library items, and menu without global guest grants for `core.site.read` or `core.resource.read`. Closing the site immediately denies anonymous public requests; resource publication and schedules still apply.

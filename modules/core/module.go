@@ -97,23 +97,6 @@ func (module) ModuleDescriptor() kernel.ModuleDescriptor {
 	}
 }
 
-func (module) baseRegistry() kernel.ModuleRegistry {
-	return kernel.ModuleRegistry{
-		FieldTypes:     field.StandardTypes(),
-		ValidatorTypes: field.StandardValidatorTypes(),
-		ResourceTypes:  resourcetype.StandardTypes(),
-		PermissionEntities: []permission.Entity{
-			{Code: "site"},
-			{Code: "resource"},
-			{Code: "resource_history", Actions: []permission.Action{permission.Read, permission.Delete}},
-			{Code: "file"},
-			{Code: "media"},
-			{Code: "user"},
-			{Code: "group"},
-		},
-	}
-}
-
 func (m module) Build(
 	buildContext context.Context,
 	ctx kernel.ModuleContext,
@@ -304,7 +287,7 @@ func (r *Runtime) RepositoryCache() (
 
 var _ kernel.Module = module{}
 var _ kernel.ModuleDescriptorProvider = module{}
-var _ kernel.RegistryProvider = module{}
+var _ kernel.DefinitionProvider = module{}
 var _ kernel.ModuleRuntime = (*Runtime)(nil)
 
 func (module) EntityHookEventNames() []string {
@@ -322,19 +305,54 @@ func (r *Runtime) ResourceQuery() *resource.QueryService {
 	return r.resourceQuery
 }
 
-func (m module) Registry() (kernel.ModuleRegistry, error) {
+func (m module) NewDefinitions(
+	ctx context.Context,
+	definitionContext kernel.DefinitionContext,
+) (kernel.ModuleDefinitions, error) {
+	if ctx == nil {
+		return nil, errors.New("core definition context is nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	settings, err := media.SettingsFields(m.config.MediaSettings)
 	if err != nil {
-		return kernel.ModuleRegistry{}, err
+		return nil, err
 	}
-	registry := m.baseRegistry()
-	for i, t := range registry.FieldTypes {
-		switch t.Code() {
+	definitions := newDefinitions(ModuleCode, definitionContext.Registry())
+	for _, fieldType := range field.StandardTypes() {
+		switch fieldType.Code() {
 		case field.TypeMedia:
-			registry.FieldTypes[i] = field.MediaType(settings)
+			fieldType = field.MediaType(settings)
+		}
+		if err := definitions.RegisterFieldType(fieldType); err != nil {
+			return nil, err
 		}
 	}
-	return registry, nil
+	for _, validator := range field.StandardValidatorTypes() {
+		if err := definitions.RegisterValidatorType(validator); err != nil {
+			return nil, err
+		}
+	}
+	for _, resourceType := range resourcetype.StandardTypes() {
+		if err := definitions.RegisterResourceType(resourceType); err != nil {
+			return nil, err
+		}
+	}
+	for _, entity := range []permission.Entity{
+		{Code: "site"},
+		{Code: "resource"},
+		{Code: "resource_history", Actions: []permission.Action{permission.Read, permission.Delete}},
+		{Code: "file"},
+		{Code: "media"},
+		{Code: "user"},
+		{Code: "group"},
+	} {
+		if err := definitions.RegisterPermissionEntity(entity); err != nil {
+			return nil, err
+		}
+	}
+	return definitions, nil
 }
 
 // clone detaches mutable declarations from the caller.

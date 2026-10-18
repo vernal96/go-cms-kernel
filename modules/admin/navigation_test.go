@@ -258,16 +258,21 @@ func navigationSiteRuntime(
 
 func corePermissionCatalog(t *testing.T) *permission.Catalog {
 	t.Helper()
-	registry, err := kernel.RegistryForModule(core.New(core.Config{}))
+	profileDefinitions, err := kernel.CompileProfileDefinitions(context.Background(), kernel.Profile{
+		Code:    "admin-navigation",
+		Modules: []kernel.Module{core.New(core.Config{})},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	definitions, err := permission.Definitions(
-		string(core.ModuleCode),
-		registry.PermissionEntities,
-	)
-	if err != nil {
-		t.Fatal(err)
+	registry := profileDefinitions.Registry()
+	definitions := make([]permission.Definition, 0, len(registry.Permissions()))
+	for _, code := range registry.Permissions() {
+		definition, ok := registry.Permission(code)
+		if !ok {
+			t.Fatalf("permission %q missing from profile definitions", code)
+		}
+		definitions = append(definitions, definition)
 	}
 	catalog, err := permission.NewCatalog(definitions)
 	if err != nil {

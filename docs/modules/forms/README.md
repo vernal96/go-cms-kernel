@@ -4,6 +4,8 @@
 
 Разделы: [сущности](entities.md), [API](api.md), [виджеты](widgets.md), [типы полей](fields.md), [фоновые действия](background.md).
 
+Для регистрации собственных типов действий и элементов из зависимого модуля см. [Contributions модулей](../../contributions.md#runtime-contributions-forms).
+
 Для запуска нужны Forms database factory, CAPTCHA provider и параметры публичных лимитов; временное хранилище требуется при использовании upload spool. Встроенное действие отправки письма использует Mail.
 
 Подключение: `forms.New(forms.Config{...})`. Собственные настройки включают `Filesystems []filesystem.Binding` с alias `forms.SpoolFilesystemAlias`. При `SpoolEnabled` привязка обязательна; диск должен быть приватным и поддерживать ограниченное сканирование для очистки. Публичные лимиты, CAPTCHA provider и зависимости проверяются перед запуском, включая профили без сайтов.

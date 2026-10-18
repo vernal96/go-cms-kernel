@@ -6,7 +6,6 @@ import (
 
 	"github.com/vernal96/go-cms-kernel"
 	"github.com/vernal96/go-cms-kernel/modules/admin"
-	"github.com/vernal96/go-cms-kernel/permission"
 )
 
 func TestModuleBuildsAdminRuntime(t *testing.T) {
@@ -24,29 +23,17 @@ func TestModuleBuildsAdminRuntime(t *testing.T) {
 }
 
 func TestModuleRegistersAdminPanelPermission(t *testing.T) {
-	registry, err := kernel.RegistryForModule(admin.New())
+	definitions, err := admin.New().(kernel.DefinitionProvider).NewDefinitions(context.Background(), kernel.DefinitionContext{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	definitions, err := permission.Definitions(
-		string(admin.ModuleCode),
-		registry.PermissionEntities,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	found := false
-	for _, definition := range definitions {
-		if definition.Code == admin.AccessPermission {
-			found = true
-			break
-		}
-	}
-	if !found {
+	catalog := definitions.(kernel.DefinitionCatalogProvider).DefinitionCatalog()
+	definition, found := catalog.Permission(admin.AccessPermission)
+	if !found || definition.Code != admin.AccessPermission || len(catalog.Permissions()) != 4 {
 		t.Fatalf(
 			"permission %q is not registered in %#v",
 			admin.AccessPermission,
-			definitions,
+			catalog.Permissions(),
 		)
 	}
 }

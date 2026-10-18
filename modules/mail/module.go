@@ -72,11 +72,26 @@ func (module) ModuleDescriptor() kernel.ModuleDescriptor {
 	return kernel.ModuleDescriptor{Label: "Mail", Description: "Шаблоны и асинхронная отправка почты"}
 }
 
-func (module) Registry() (kernel.ModuleRegistry, error) {
-	return kernel.ModuleRegistry{PermissionEntities: []permission.Entity{
+func (module) NewDefinitions(
+	ctx context.Context,
+	_ kernel.DefinitionContext,
+) (kernel.ModuleDefinitions, error) {
+	if ctx == nil {
+		return nil, errors.New("mail definition context is nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	definitions := newDefinitions()
+	for _, entity := range []permission.Entity{
 		{Code: "template"},
 		{Code: "message", Actions: []permission.Action{permission.Read, permission.Create, permission.Delete}},
-	}}, nil
+	} {
+		if err := definitions.RegisterPermissionEntity(entity); err != nil {
+			return nil, err
+		}
+	}
+	return definitions, nil
 }
 
 func (module) JobNames() []string { return []string{SendJobName} }
@@ -339,9 +354,9 @@ func normalizeConfig(config Config) (Config, error) {
 }
 
 var _ kernel.Module = module{}
+var _ kernel.DefinitionProvider = module{}
 var _ kernel.DependencyProvider = module{}
 var _ kernel.ModuleDescriptorProvider = module{}
-var _ kernel.RegistryProvider = module{}
 var _ job.NamesProvider = module{}
 var _ kernel.ModuleRuntime = (*Runtime)(nil)
 var _ kernel.RuntimeTransitionParticipant = (*Runtime)(nil)

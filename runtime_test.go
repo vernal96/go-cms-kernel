@@ -1639,17 +1639,18 @@ func TestProfileRuntimeRejectsInvalidTemplates(t *testing.T) {
 }
 
 func TestCoreModuleRegistersAllStandardFieldTypes(t *testing.T) {
-	registry, err := kernel.RegistryForModule(core.New(core.Config{}))
+	snapshot, err := kernel.CompileProfileDefinitions(context.Background(), kernel.Profile{Code: "standard", Modules: []kernel.Module{core.New(core.Config{})}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.FieldTypes) != 12 {
-		t.Fatalf("standard field types = %d", len(registry.FieldTypes))
+	registry := snapshot.Registry()
+	if len(registry.FieldTypes()) != 12 {
+		t.Fatalf("standard field types = %d", len(registry.FieldTypes()))
 	}
 
-	found := make(map[field.TypeCode]bool, len(registry.FieldTypes))
-	for _, fieldType := range registry.FieldTypes {
-		found[fieldType.Code()] = true
+	found := make(map[field.TypeCode]bool, len(registry.FieldTypes()))
+	for _, code := range registry.FieldTypes() {
+		found[code] = true
 	}
 	for _, code := range []field.TypeCode{
 		field.TypeString,
@@ -1670,18 +1671,18 @@ func TestCoreModuleRegistersAllStandardFieldTypes(t *testing.T) {
 		}
 	}
 
-	if len(registry.ResourceTypes) != 5 {
+	if len(registry.ResourceTypes()) != 5 {
 		t.Fatalf(
 			"standard resource types = %d",
-			len(registry.ResourceTypes),
+			len(registry.ResourceTypes()),
 		)
 	}
 	resourceTypes := make(
 		map[resourcetype.Code]bool,
-		len(registry.ResourceTypes),
+		len(registry.ResourceTypes()),
 	)
-	for _, resourceType := range registry.ResourceTypes {
-		resourceTypes[resourceType.Code()] = true
+	for _, code := range registry.ResourceTypes() {
+		resourceTypes[code] = true
 	}
 	for _, code := range []resourcetype.Code{
 		resourcetype.Page,

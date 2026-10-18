@@ -73,10 +73,11 @@ func declarationCoreConfig() core.Config {
 
 func TestBootValidatesEveryModuleWithoutSites(t *testing.T) {
 	for _, test := range []struct {
-		name    string
-		modules func() []kernel.Module
-		alter   func(*appkernel.Definition)
-		want    string
+		name            string
+		modules         func() []kernel.Module
+		alter           func(*appkernel.Definition)
+		want            string
+		definitionError bool
 	}{
 		{name: "valid profiles without sites", modules: func() []kernel.Module {
 			return []kernel.Module{mail.New(declarationMailConfig()), forms.New(declarationFormsConfig()), seo.New(seo.Config{}), counter.New(7)}
@@ -92,7 +93,7 @@ func TestBootValidatesEveryModuleWithoutSites(t *testing.T) {
 		{name: "core limits", alter: func(d *appkernel.Definition) {
 			d.Profiles[0].Modules[0] = core.New(core.Config{RepositoryCacheTTL: -time.Second})
 		}, want: "cache TTL"},
-		{name: "module dependency", modules: func() []kernel.Module { return []kernel.Module{forms.New(declarationFormsConfig())} }, want: "mail"},
+		{name: "module dependency", modules: func() []kernel.Module { return []kernel.Module{forms.New(declarationFormsConfig())} }, want: "mail", definitionError: true},
 		{name: "database adapter", modules: func() []kernel.Module { return []kernel.Module{search.New()} }, want: "database for module"},
 		{name: "mail application", modules: func() []kernel.Module { return []kernel.Module{mail.New(declarationMailConfig())} }, alter: func(d *appkernel.Definition) { d.ModuleApplications = nil }, want: "application dependency"},
 		{name: "mail limits", modules: func() []kernel.Module { return []kernel.Module{mail.New(mail.Config{})} }, want: "maximum attempts"},
@@ -157,6 +158,18 @@ func TestBootValidatesEveryModuleWithoutSites(t *testing.T) {
 				test.alter(&definition)
 			}
 			application, err := appkernel.New(context.Background(), definition)
+			if test.definitionError {
+				if err == nil || !strings.Contains(err.Error(), test.want) || !strings.Contains(err.Error(), `"unused"`) {
+					if application != nil {
+						_ = application.Close()
+					}
+					t.Fatalf("New definition error = %v; want profile and %q", err, test.want)
+				}
+				if !closed {
+					t.Fatal("database remained open after failed definition build")
+				}
+				return
+			}
 			if err != nil {
 				t.Fatal(err)
 			}

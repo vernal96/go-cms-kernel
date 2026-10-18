@@ -31,10 +31,21 @@ func (module) Dependencies() []kernel.ModuleCode {
 	return []kernel.ModuleCode{core.ModuleCode}
 }
 
-func (module) Registry() (kernel.ModuleRegistry, error) {
-	return kernel.ModuleRegistry{
-		PermissionEntities: []permission.Entity{{Code: "panel"}},
-	}, nil
+func (module) NewDefinitions(
+	ctx context.Context,
+	_ kernel.DefinitionContext,
+) (kernel.ModuleDefinitions, error) {
+	if ctx == nil {
+		return nil, errors.New("admin definition context is nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	definitions := newDefinitions()
+	if err := definitions.RegisterPermissionEntity(permission.Entity{Code: "panel"}); err != nil {
+		return nil, err
+	}
+	return definitions, nil
 }
 
 func (m module) Build(
@@ -74,7 +85,7 @@ func (*Runtime) ModuleCode() kernel.ModuleCode {
 }
 
 var _ kernel.Module = module{}
-var _ kernel.RegistryProvider = module{}
+var _ kernel.DefinitionProvider = module{}
 var _ kernel.DependencyProvider = module{}
 var _ kernel.ModuleRuntime = (*Runtime)(nil)
 

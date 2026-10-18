@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -75,6 +76,9 @@ func moduleFilesystemBindings(module Module) []filesystem.Binding {
 }
 
 type RuntimeRegistry struct {
+	definitions     map[ModuleCode]ModuleDefinitions
+	definitionOrder []ModuleCode
+	catalogFrozen   bool
 	modules         map[ModuleCode]ModuleRuntime
 	moduleRuntimes  []ModuleRuntime
 	fieldTypes      map[field.TypeCode]field.Type
@@ -86,6 +90,7 @@ type RuntimeRegistry struct {
 
 func newRuntimeRegistry() *RuntimeRegistry {
 	return &RuntimeRegistry{
+		definitions:    make(map[ModuleCode]ModuleDefinitions),
 		modules:        make(map[ModuleCode]ModuleRuntime),
 		fieldTypes:     make(map[field.TypeCode]field.Type),
 		validatorTypes: make(map[field.ValidatorCode]field.ValidatorType),
@@ -113,6 +118,13 @@ func (r *RuntimeRegistry) FieldType(
 	code field.TypeCode,
 ) (field.Type, bool) {
 	fieldType, exists := r.fieldTypes[code]
+	if !exists && !r.catalogFrozen {
+		for _, catalog := range r.definitionCatalogs() {
+			if fieldType, exists = catalog.FieldType(code); exists {
+				break
+			}
+		}
+	}
 	return fieldType, exists
 }
 
@@ -121,12 +133,24 @@ func (r *RuntimeRegistry) FieldTypes() []field.TypeCode {
 	for code := range r.fieldTypes {
 		result = append(result, code)
 	}
+	if !r.catalogFrozen {
+		for _, catalog := range r.definitionCatalogs() {
+			result = append(result, catalog.FieldTypes()...)
+		}
+	}
 	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
-	return result
+	return slices.Compact(result)
 }
 
 func (r *RuntimeRegistry) ValidatorType(code field.ValidatorCode) (field.ValidatorType, bool) {
 	item, exists := r.validatorTypes[code]
+	if !exists && !r.catalogFrozen {
+		for _, catalog := range r.definitionCatalogs() {
+			if item, exists = catalog.ValidatorType(code); exists {
+				break
+			}
+		}
+	}
 	return item, exists
 }
 
@@ -135,14 +159,26 @@ func (r *RuntimeRegistry) ValidatorTypes() []field.ValidatorCode {
 	for code := range r.validatorTypes {
 		result = append(result, code)
 	}
+	if !r.catalogFrozen {
+		for _, catalog := range r.definitionCatalogs() {
+			result = append(result, catalog.ValidatorTypes()...)
+		}
+	}
 	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
-	return result
+	return slices.Compact(result)
 }
 
 func (r *RuntimeRegistry) ResourceType(
 	code resourcetype.Code,
 ) (resourcetype.Type, bool) {
 	resourceType, exists := r.resourceTypes[code]
+	if !exists && !r.catalogFrozen {
+		for _, catalog := range r.definitionCatalogs() {
+			if resourceType, exists = catalog.ResourceType(code); exists {
+				break
+			}
+		}
+	}
 	return resourceType, exists
 }
 
@@ -151,23 +187,46 @@ func (r *RuntimeRegistry) ResourceTypes() []resourcetype.Code {
 	for code := range r.resourceTypes {
 		result = append(result, code)
 	}
+	if !r.catalogFrozen {
+		for _, catalog := range r.definitionCatalogs() {
+			result = append(result, catalog.ResourceTypes()...)
+		}
+	}
 	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
-	return result
+	return slices.Compact(result)
 }
 
 func (r *RuntimeRegistry) Permission(
 	code permission.Code,
 ) (permission.Definition, bool) {
 	definition, exists := r.permissions[code]
+	if !exists && !r.catalogFrozen {
+		for _, catalog := range r.definitionCatalogs() {
+			if definition, exists = catalog.Permission(code); exists {
+				break
+			}
+		}
+	}
 	return definition, exists
 }
 
 func (r *RuntimeRegistry) Permissions() []permission.Code {
-	return append([]permission.Code(nil), r.permissionCodes...)
+	result := append([]permission.Code(nil), r.permissionCodes...)
+	if !r.catalogFrozen {
+		for _, catalog := range r.definitionCatalogs() {
+			result = append(result, catalog.Permissions()...)
+		}
+	}
+	return result
 }
 
 func (r *RuntimeRegistry) cloneDefinitions() *RuntimeRegistry {
 	result := newRuntimeRegistry()
+	result.catalogFrozen = true
+	result.definitionOrder = append([]ModuleCode(nil), r.definitionOrder...)
+	for code, target := range r.definitions {
+		result.definitions[code] = target
+	}
 	for code, fieldType := range r.fieldTypes {
 		result.fieldTypes[code] = fieldType
 	}

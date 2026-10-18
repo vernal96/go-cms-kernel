@@ -54,49 +54,29 @@ func validateApplicationProfile(profile kernel.Profile) error {
 	return nil
 }
 
-func buildPermissionCatalog(
-	profiles []kernel.Profile,
-) (*permission.Catalog, error) {
+func buildPermissionCatalog(profiles []*kernel.ProfileDefinitions) (*permission.Catalog, error) {
 	seenPermissions := make(map[permission.Code]permission.Definition)
 	definitions := make([]permission.Definition, 0)
-
 	for _, profile := range profiles {
-		for _, profileModule := range profile.Modules {
-			if profileModule == nil || nilInterface(profileModule) {
-				continue
+		if profile == nil || profile.Registry() == nil {
+			return nil, fmt.Errorf("profile definitions are unavailable for permission catalog")
+		}
+		registry := profile.Registry()
+		for _, code := range registry.Permissions() {
+			definition, exists := registry.Permission(code)
+			if !exists {
+				return nil, fmt.Errorf("permission %q is unavailable in profile definitions", code)
 			}
-			moduleCode := profileModule.Code()
-			registry, err := kernel.RegistryForModule(profileModule)
-			if err != nil {
-				return nil, fmt.Errorf("profile %q: %w", profile.Code, err)
-			}
-			if len(registry.PermissionEntities) == 0 {
-				continue
-			}
-			moduleDefinitions, err := permission.Definitions(
-				string(moduleCode),
-				registry.PermissionEntities,
-			)
-			if err != nil {
-				return nil, fmt.Errorf(
-					"build permissions for module %q: %w",
-					moduleCode,
-					err,
-				)
-			}
-			for _, definition := range moduleDefinitions {
-				if previous, exists := seenPermissions[definition.Code]; exists {
-					if previous != definition {
-						return nil, fmt.Errorf("permission %q has inconsistent declarations across profiles", definition.Code)
-					}
-					continue
+			if previous, exists := seenPermissions[code]; exists {
+				if previous != definition {
+					return nil, fmt.Errorf("permission %q has inconsistent declarations across profiles", code)
 				}
-				seenPermissions[definition.Code] = definition
-				definitions = append(definitions, definition)
+				continue
 			}
+			seenPermissions[code] = definition
+			definitions = append(definitions, definition)
 		}
 	}
-
 	return permission.NewCatalog(definitions)
 }
 

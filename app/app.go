@@ -101,15 +101,16 @@ type App struct {
 	workerCancel    context.CancelFunc
 	workers         sync.WaitGroup
 
-	profileBlueprints map[kernel.ProfileCode]*kernel.ProfileBlueprint
-	sites             *site.Catalog
-	services          Services
-	permissions       *permission.Catalog
-	cmsSites          *coremanagement.Sites
-	cmsResources      *coremanagement.Resources
-	cmsFiles          *coremanagement.Files
-	adminManagement   *admin.Management
-	siteAccessPolicy  coremanagement.SiteAccessPolicy
+	profileDefinitions map[kernel.ProfileCode]*kernel.ProfileDefinitions
+	profileBlueprints  map[kernel.ProfileCode]*kernel.ProfileBlueprint
+	sites              *site.Catalog
+	services           Services
+	permissions        *permission.Catalog
+	cmsSites           *coremanagement.Sites
+	cmsResources       *coremanagement.Resources
+	cmsFiles           *coremanagement.Files
+	adminManagement    *admin.Management
+	siteAccessPolicy   coremanagement.SiteAccessPolicy
 
 	bootOnce sync.Once
 	bootErr  error
@@ -255,7 +256,17 @@ func New(
 	}
 	application.coreDatabase = coreDatabase
 
-	permissionCatalog, err := buildPermissionCatalog(definition.Profiles)
+	application.profileDefinitions = make(map[kernel.ProfileCode]*kernel.ProfileDefinitions, len(definition.Profiles))
+	snapshots := make([]*kernel.ProfileDefinitions, 0, len(definition.Profiles))
+	for _, profile := range definition.Profiles {
+		snapshot, err := kernel.CompileProfileDefinitions(ctx, profile)
+		if err != nil {
+			return nil, fmt.Errorf("compile definitions for profile %q: %w", profile.Code, err)
+		}
+		application.profileDefinitions[profile.Code] = snapshot
+		snapshots = append(snapshots, snapshot)
+	}
+	permissionCatalog, err := buildPermissionCatalog(snapshots)
 	if err != nil {
 		return nil, err
 	}

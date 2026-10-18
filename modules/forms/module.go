@@ -65,9 +65,30 @@ func (module) ModuleDescriptor() kernel.ModuleDescriptor {
 	return kernel.ModuleDescriptor{Label: "Формы", Description: "Конструктор форм и результаты отправок"}
 }
 func (module) Registry() (kernel.ModuleRegistry, error) {
-	return kernel.ModuleRegistry{FieldTypes: fieldTypes(), PermissionEntities: []permission.Entity{{Code: "form"}, {Code: "result"}, {Code: "action"}, {Code: "status"}}}, nil
+	return kernel.ModuleRegistry{FieldTypes: fieldTypes(), PermissionEntities: formsPermissionEntities()}, nil
+}
+func (module) NewDefinitions(ctx context.Context, _ kernel.DefinitionContext) (kernel.ModuleDefinitions, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	definitions := newDefinitions()
+	for _, fieldType := range fieldTypes() {
+		if err := definitions.RegisterFieldType(fieldType); err != nil {
+			return nil, err
+		}
+	}
+	for _, entity := range formsPermissionEntities() {
+		if err := definitions.RegisterPermissionEntity(entity); err != nil {
+			return nil, err
+		}
+	}
+	return definitions, nil
 }
 func (module) JobNames() []string { return []string{ExecuteActionJobName} }
+
+func formsPermissionEntities() []permission.Entity {
+	return []permission.Entity{{Code: "form"}, {Code: "result"}, {Code: "action"}, {Code: "status"}}
+}
 
 func (m module) Build(ctx context.Context, moduleContext kernel.ModuleContext) (kernel.ModuleRuntime, error) {
 	database, err := kernel.ModuleDatabaseFrom[Database](moduleContext, "", ModuleCode)
@@ -278,6 +299,7 @@ var _ kernel.Module = module{}
 var _ kernel.DependencyProvider = module{}
 var _ kernel.ModuleDescriptorProvider = module{}
 var _ kernel.RegistryProvider = module{}
+var _ kernel.DefinitionProvider = module{}
 var _ job.NamesProvider = module{}
 var _ kernel.ModuleRuntime = (*Runtime)(nil)
 var _ kernel.RuntimeBuildFinalizer = (*Runtime)(nil)

@@ -7,6 +7,10 @@ description: Use for GO CMS template/resource field definitions and values, fiel
 
 Follow root `AGENTS.md`. Load `go-cms-resources` when resource identity, Library/LibraryItem storage or resource lifecycle is also affected. Load `go-cms-development` for cross-package reusable architecture changes.
 
+## Custom field types and validators
+
+New field types and validator types belong to their feature module. To contribute a type to Core, declare an explicit dependency on `core`, use `DefinitionContributionProvider` and `kernel.DefineFor[*core.Definitions]`, and register through `RegisterFieldType` / `RegisterValidatorType`. Implement `field.Type` or `field.ValidatorType` and their compiled contracts; validate options during `Compile`. Definitions are profile-scoped and sealed before template/schema compilation. Persist references as typed field codes; never persist runtime Go objects or resolve schemas for the first time in request handlers. A profile without the provider cannot resolve the code. See `docs/contributions.md`.
+
 Preserve the existing separation between field **definitions/schema** and field **values**. Field definitions belong to templates/code/runtime metadata; persisted field values belong to resource instances.
 
 ## Core rule

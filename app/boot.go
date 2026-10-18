@@ -131,7 +131,7 @@ func (a *App) boot(ctx context.Context) error {
 	)
 
 	for _, profile := range profiles {
-		blueprint, err := factory.Compile(ctx, profile)
+		blueprint, err := factory.CompileWithDefinitions(ctx, profile, a.profileDefinitions[profile.Code])
 		if err != nil {
 			return fmt.Errorf(
 				"compile profile blueprint %q: %w",

@@ -7,6 +7,12 @@ description: Use for cross-package GO CMS backend implementation that changes ar
 
 Follow root `AGENTS.md`. This skill adds only the workflow for reusable backend architecture work.
 
+## Module contributions
+
+For cross-module extensions, read `docs/contributions.md` before adding registration behavior. Prefer an owner-defined typed contract with `DefinitionContributionProvider`/`DefineFor` for profile declarations or `RuntimeContributionProvider`/`ContributeTo` for site runtime behavior. Declare the target in `Dependencies()`. Definitions are profile-scoped and must validate/seal in `FinalizeDefinitionBuild`; runtime registries are created per site and finalized through `RuntimeBuildFinalizer`. Keep feature-specific registries in their owning modules.
+
+`RegistryProvider`/`ModuleRegistry` remains supported for existing declarations and consumers. Do not describe it as removed or add feature-specific types to Kernel merely for convenience. `widget.Provider`, `adminui.NavigationProvider`, dependency declarations and finalizer hooks are distinct contracts; do not replace them mechanically.
+
 ## Discovery
 
 1. Inspect the declaration/entry point being changed.

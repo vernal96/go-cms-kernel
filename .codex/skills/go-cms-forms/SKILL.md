@@ -7,6 +7,10 @@ description: Use for GO CMS Forms module architecture and implementation: site-o
 
 Follow root `AGENTS.md`. Load `go-cms-api`, `go-cms-authorization`, `go-cms-events-jobs`, `go-cms-runtime-integrity`, `go-cms-mail` or `go-cms-admin-ui` only when the current task materially crosses those scopes.
 
+## Forms extension points
+
+Forms owns its `ActionType` and `ElementType` contracts and registrars. External modules should declare a dependency on `forms`, expose runtime contributions from their built runtime, and use `kernel.ContributeTo[forms.ActionRegistrar]` / `kernel.ContributeTo[forms.ElementRegistrar]`. Return registration errors so invalid or duplicate codes fail site runtime construction. Forms finalizes both registries before the SiteRuntime is published; never use a package-global registry. See `docs/contributions.md` for the lifecycle and example.
+
 ## Module boundary
 
 Forms is an optional feature module and owns the complete form-builder domain. Generic kernel/App must not gain Forms-specific fields, services or conditionals.

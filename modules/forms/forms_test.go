@@ -172,34 +172,59 @@ func (m actionRegistryModule) Build(context.Context, kernel.ModuleContext) (kern
 	return m.runtime, nil
 }
 
-type customActionContributor struct{ action ActionType }
+type customActionContributor struct {
+	actions  []ActionType
+	elements []ElementType
+	applyErr error
+}
 
 func (customActionContributor) Code() kernel.ModuleCode { return "forms_custom_action_test" }
 func (customActionContributor) Dependencies() []kernel.ModuleCode {
 	return []kernel.ModuleCode{ModuleCode}
 }
-func (m customActionContributor) Build(_ context.Context, moduleContext kernel.ModuleContext) (kernel.ModuleRuntime, error) {
-	dependency, err := kernel.ModuleDependencyFrom[interface {
-		kernel.ModuleRuntime
-		ActionRegistrar
-		ElementRegistrar
-	}](moduleContext, ModuleCode)
-	if err != nil {
-		return nil, err
-	}
-	if err := dependency.RegisterActionType(m.action); err != nil {
-		return nil, err
-	}
-	if err := dependency.RegisterElementType(ElementDefinition{Description: ElementTypeMetadata{Code: "contributor.notice", Label: "Notice"}}); err != nil {
-		return nil, err
-	}
-	return customActionContributorRuntime{}, nil
+func (m customActionContributor) Build(context.Context, kernel.ModuleContext) (kernel.ModuleRuntime, error) {
+	return customActionContributorRuntime{actions: m.actions, elements: m.elements, applyErr: m.applyErr}, nil
 }
 
-type customActionContributorRuntime struct{}
+type customActionContributorRuntime struct {
+	actions  []ActionType
+	elements []ElementType
+	applyErr error
+}
 
 func (customActionContributorRuntime) ModuleCode() kernel.ModuleCode {
 	return "forms_custom_action_test"
+}
+
+func (r customActionContributorRuntime) RuntimeContributions() []kernel.RuntimeContribution {
+	contributions := make([]kernel.RuntimeContribution, 0, 2)
+	if len(r.actions) > 0 || len(r.elements) > 0 || r.applyErr != nil {
+		contributions = append(contributions, kernel.ContributeTo[interface {
+			kernel.ModuleRuntime
+			ActionRegistrar
+			ElementRegistrar
+		}](ModuleCode, func(_ context.Context, target interface {
+			kernel.ModuleRuntime
+			ActionRegistrar
+			ElementRegistrar
+		}) error {
+			if r.applyErr != nil {
+				return r.applyErr
+			}
+			for _, action := range r.actions {
+				if err := target.RegisterActionType(action); err != nil {
+					return err
+				}
+			}
+			for _, element := range r.elements {
+				if err := target.RegisterElementType(element); err != nil {
+					return err
+				}
+			}
+			return nil
+		}))
+	}
+	return contributions
 }
 
 func TestContributorModuleRegistersActionBeforeFormsFinalization(t *testing.T) {
@@ -215,7 +240,13 @@ func TestContributorModuleRegistersActionBeforeFormsFinalization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blueprint, err := factory.Compile(context.Background(), kernel.Profile{Code: "forms-actions", Modules: []kernel.Module{actionRegistryModule{runtime: runtime}, customActionContributor{action: fakeActionType{code: "custom"}}}})
+	contributor := customActionContributor{
+		actions: []ActionType{fakeActionType{code: "custom"}},
+		elements: []ElementType{ElementDefinition{
+			Description: ElementTypeMetadata{Code: "contributor.notice", Label: "Notice"},
+		}},
+	}
+	blueprint, err := factory.Compile(context.Background(), kernel.Profile{Code: "forms-actions", Modules: []kernel.Module{actionRegistryModule{runtime: runtime}, contributor}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,6 +262,215 @@ func TestContributorModuleRegistersActionBeforeFormsFinalization(t *testing.T) {
 	if err := runtime.RegisterActionType(fakeActionType{code: "late"}); err == nil {
 		t.Fatal("Forms action registry remained mutable after runtime publication")
 	}
+}
+
+func TestRuntimeContributionsSupportMultipleFormsExtensions(t *testing.T) {
+	runtime := newFormsExtensionTestRuntime(t)
+	contributor := customActionContributor{
+		actions: []ActionType{
+			fakeActionType{code: "custom.one"},
+			fakeActionType{code: "custom.two"},
+		},
+		elements: []ElementType{
+			ElementDefinition{Description: ElementTypeMetadata{Code: "contributor.notice", Label: "Notice"}},
+			ElementDefinition{Description: ElementTypeMetadata{Code: "contributor.callout", Label: "Callout"}},
+		},
+	}
+	if _, err := buildFormsExtensionProfile(t, runtime, contributor); err != nil {
+		t.Fatal(err)
+	}
+	for _, code := range []string{"custom.one", "custom.two"} {
+		if _, ok := runtime.actions.Type(code); !ok {
+			t.Fatalf("action %q was not contributed", code)
+		}
+	}
+	for _, code := range []ElementTypeCode{"contributor.notice", "contributor.callout"} {
+		if _, ok := runtime.service.elements.Type(code); !ok {
+			t.Fatalf("element %q was not contributed", code)
+		}
+	}
+}
+
+func TestRuntimeContributionErrorsRejectFormsRuntimeBuild(t *testing.T) {
+	t.Run("duplicate action", func(t *testing.T) {
+		runtime := newFormsExtensionTestRuntime(t)
+		contributor := customActionContributor{actions: []ActionType{
+			fakeActionType{code: "duplicate"}, fakeActionType{code: "duplicate"},
+		}}
+		if _, err := buildFormsExtensionProfile(t, runtime, contributor); err == nil {
+			t.Fatal("duplicate action contribution did not fail runtime build")
+		}
+	})
+	t.Run("duplicate element", func(t *testing.T) {
+		runtime := newFormsExtensionTestRuntime(t)
+		contributor := customActionContributor{elements: []ElementType{
+			ElementDefinition{Description: ElementTypeMetadata{Code: "duplicate.element", Label: "One"}},
+			ElementDefinition{Description: ElementTypeMetadata{Code: "duplicate.element", Label: "Two"}},
+		}}
+		if _, err := buildFormsExtensionProfile(t, runtime, contributor); err == nil {
+			t.Fatal("duplicate element contribution did not fail runtime build")
+		}
+	})
+	t.Run("apply error", func(t *testing.T) {
+		runtime := newFormsExtensionTestRuntime(t)
+		contributor := customActionContributor{applyErr: errors.New("extension rejected")}
+		if _, err := buildFormsExtensionProfile(t, runtime, contributor); err == nil || !strings.Contains(err.Error(), "extension rejected") {
+			t.Fatalf("contribution error = %v", err)
+		}
+	})
+}
+
+func TestRuntimeContributionsRequireFormsTargetAndDependency(t *testing.T) {
+	t.Run("missing target", func(t *testing.T) {
+		contributor := customActionContributor{actions: []ActionType{fakeActionType{code: "missing.target"}}}
+		factory := newFormsExtensionTestFactory(t)
+		if _, err := factory.Compile(context.Background(), kernel.Profile{Code: "missing-target", Modules: []kernel.Module{contributor}}); err == nil {
+			t.Fatal("profile with contribution provider but no Forms target was accepted")
+		}
+	})
+	t.Run("undeclared dependency", func(t *testing.T) {
+		runtime := newFormsExtensionTestRuntime(t)
+		contributor := customActionContributor{actions: []ActionType{fakeActionType{code: "undeclared"}}}
+		module := dependencyFreeContributor{customActionContributor: contributor}
+		factory := newFormsExtensionTestFactory(t)
+		blueprint, err := factory.Compile(context.Background(), kernel.Profile{Code: "missing-dependency", Modules: []kernel.Module{actionRegistryModule{runtime: runtime}, module}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := blueprint.Build(context.Background(), kernel.NewRuntimeScope("92", "", "", nil)); err == nil {
+			t.Fatal("runtime contribution without declared Forms dependency was accepted")
+		}
+	})
+}
+
+func TestRuntimeContributionsAreIsolatedBySiteAndOptionalProvider(t *testing.T) {
+	runtimes := make([]*Runtime, 0, 2)
+	factory := newFormsExtensionTestFactory(t)
+	provider := siteScopedContributor{}
+	blueprint, err := factory.Compile(context.Background(), kernel.Profile{Code: "forms-site-scope", Modules: []kernel.Module{
+		dynamicFormsRuntimeModule{runtimes: &runtimes}, provider,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, siteID := range []string{"101", "102"} {
+		if _, err := blueprint.Build(context.Background(), kernel.NewRuntimeScope(siteID, "", "", nil)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(runtimes) != 2 {
+		t.Fatalf("Forms runtimes built = %d, want 2", len(runtimes))
+	}
+	if _, ok := runtimes[0].actions.Type("site.101"); !ok {
+		t.Fatal("site 101 extension missing")
+	}
+	if _, ok := runtimes[0].actions.Type("site.102"); ok {
+		t.Fatal("site 102 extension leaked into site 101")
+	}
+	if _, ok := runtimes[1].actions.Type("site.102"); !ok {
+		t.Fatal("site 102 extension missing")
+	}
+	if _, ok := runtimes[1].actions.Type("site.101"); ok {
+		t.Fatal("site 101 extension leaked into site 102")
+	}
+
+	plainRuntime := newFormsExtensionTestRuntime(t)
+	plainBlueprint, err := factory.Compile(context.Background(), kernel.Profile{Code: "forms-without-provider", Modules: []kernel.Module{actionRegistryModule{runtime: plainRuntime}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plainBlueprint.Build(context.Background(), kernel.NewRuntimeScope("103", "", "", nil)); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := plainRuntime.actions.Type("custom"); ok {
+		t.Fatal("extension was available without its provider module")
+	}
+}
+
+func newFormsExtensionTestRuntime(t *testing.T) *Runtime {
+	t.Helper()
+	elements, err := newElementCatalog(testImageFileOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &Runtime{actions: newActionRegistry(), service: &Service{elements: elements}}
+}
+
+func newFormsExtensionTestFactory(t *testing.T) *kernel.ProfileRuntimeFactory {
+	t.Helper()
+	factory, err := kernel.NewProfileRuntimeFactory(formsTestDatabaseResolver{}, kernel.RuntimeServices{
+		EventBus: formsTestEventBus{}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return factory
+}
+
+func buildFormsExtensionProfile(t *testing.T, runtime *Runtime, contributor customActionContributor) (*kernel.ProfileRuntime, error) {
+	t.Helper()
+	blueprint, err := newFormsExtensionTestFactory(t).Compile(context.Background(), kernel.Profile{Code: "forms-extension-test", Modules: []kernel.Module{
+		actionRegistryModule{runtime: runtime}, contributor,
+	}})
+	if err != nil {
+		return nil, err
+	}
+	return blueprint.Build(context.Background(), kernel.NewRuntimeScope("9", "", "", nil))
+}
+
+type dependencyFreeContributor struct{ customActionContributor }
+
+func (dependencyFreeContributor) Code() kernel.ModuleCode           { return "forms_custom_action_test" }
+func (dependencyFreeContributor) Dependencies() []kernel.ModuleCode { return nil }
+func (m dependencyFreeContributor) Build(ctx context.Context, _ kernel.ModuleContext) (kernel.ModuleRuntime, error) {
+	return customActionContributorRuntime{actions: m.actions, elements: m.elements, applyErr: m.applyErr}, nil
+}
+
+type dynamicFormsRuntimeModule struct{ runtimes *[]*Runtime }
+
+func (dynamicFormsRuntimeModule) Code() kernel.ModuleCode { return ModuleCode }
+func (dynamicFormsRuntimeModule) Registry() (kernel.ModuleRegistry, error) {
+	return kernel.ModuleRegistry{FieldTypes: field.StandardTypes(), ValidatorTypes: field.StandardValidatorTypes()}, nil
+}
+func (dynamicFormsRuntimeModule) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
+}
+func (m dynamicFormsRuntimeModule) Build(context.Context, kernel.ModuleContext) (kernel.ModuleRuntime, error) {
+	elements, err := newElementCatalog(testImageFileOptions())
+	if err != nil {
+		return nil, err
+	}
+	runtime := &Runtime{actions: newActionRegistry(), service: &Service{elements: elements}}
+	*m.runtimes = append(*m.runtimes, runtime)
+	return runtime, nil
+}
+
+type siteScopedContributor struct{}
+
+func (siteScopedContributor) Code() kernel.ModuleCode { return "forms_site_scoped_test" }
+func (siteScopedContributor) Dependencies() []kernel.ModuleCode {
+	return []kernel.ModuleCode{ModuleCode}
+}
+func (siteScopedContributor) Validate(context.Context, kernel.ModuleValidationContext) error {
+	return nil
+}
+func (siteScopedContributor) Build(_ context.Context, moduleContext kernel.ModuleContext) (kernel.ModuleRuntime, error) {
+	return siteScopedContributorRuntime{siteID: moduleContext.Scope().SiteID()}, nil
+}
+
+type siteScopedContributorRuntime struct{ siteID string }
+
+func (siteScopedContributorRuntime) ModuleCode() kernel.ModuleCode { return "forms_site_scoped_test" }
+func (r siteScopedContributorRuntime) RuntimeContributions() []kernel.RuntimeContribution {
+	return []kernel.RuntimeContribution{kernel.ContributeTo[interface {
+		kernel.ModuleRuntime
+		ActionRegistrar
+	}](ModuleCode, func(_ context.Context, target interface {
+		kernel.ModuleRuntime
+		ActionRegistrar
+	}) error {
+		return target.RegisterActionType(fakeActionType{code: "site." + r.siteID})
+	})}
 }
 
 type allowAuthorizer struct{}

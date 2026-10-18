@@ -27,8 +27,9 @@ before serving HTTP. Zero values retain each module's documented defaults;
 Mail and Forms still require explicit delivery/public limits.
 
 Profile compilation validates every module, even when there are no sites using
-the profile. It checks bindings and calls `Validate` after the definition
-registry has been assembled. Errors include the profile and module. The starter
+the profile. It checks bindings and calls `Validate` after profile definitions
+and contributions have been compiled. Those definition errors can surface in
+`App.New`, before `Boot`; errors include the profile and module. The starter
 propagates boot failure, closes opened resources, and exits before opening the
 HTTP listener or starting workers. External I/O and site-specific data can still
 fail during runtime; these cannot be checked by the Go compiler.
@@ -57,12 +58,17 @@ resolved cache/filesystem aliases, and provides the profile's definition
 registry. `Disk(code)` checks an application disk explicitly named by the
 module's configuration, such as Mail's upload destination.
 
-Optional capabilities are `RegistryProvider` (`Registry() (ModuleRegistry,
-error)`), `CacheBindingsProvider` (`CacheBindings() []cache.Binding`) and
+Optional capabilities include `DefinitionProvider`,
+`DefinitionContributionProvider`, `RuntimeContributionProvider`,
+`CacheBindingsProvider` (`CacheBindings() []cache.Binding`) and
 `FilesystemBindingsProvider` (`FilesystemBindings() []filesystem.Binding`).
-Return fresh mutable data from these methods. Registry declarations are derived
-from the module's own typed configuration. Generic kernel code never interprets
-module-specific configuration fields.
+Use owner-defined typed contributions for new registries; see
+[Contributions](contributions.md). `RegistryProvider`
+(`Registry() (ModuleRegistry, error)`) remains supported as a fallback only
+when a module does not implement `DefinitionProvider`. If both are implemented,
+profile compilation takes the `DefinitionProvider` path. Keep declarations
+module-owned and return fresh mutable binding slices. Generic kernel code never
+interprets module-specific configuration fields.
 
 This API is included in v0.4.0. Upgrade the kernel dependency and module
 declarations together; `ProfileModule` and untyped module configuration have

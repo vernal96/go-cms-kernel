@@ -22,7 +22,15 @@ func TestPermissionCatalogUsesConfiguredRegistryAcrossProfiles(t *testing.T) {
 	for _, code := range []string{"first", "second", "first"} {
 		profiles = append(profiles, kernel.Profile{Code: kernel.ProfileCode(code), Modules: []kernel.Module{configuredPermissionsModule{config: code}}})
 	}
-	catalog, err := buildPermissionCatalog(profiles)
+	snapshots := make([]*kernel.ProfileDefinitions, 0, len(profiles))
+	for _, profile := range profiles {
+		snapshot, err := kernel.CompileProfileDefinitions(context.Background(), profile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshots = append(snapshots, snapshot)
+	}
+	catalog, err := buildPermissionCatalog(snapshots)
 	if err != nil {
 		t.Fatal(err)
 	}
