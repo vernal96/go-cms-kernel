@@ -6,6 +6,7 @@ import (
 
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
+	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/core/template"
 	"github.com/vernal96/go-cms-kernel/modules/core/widget"
 	"github.com/vernal96/go-cms-kernel/modules/core/widgets"
@@ -38,7 +39,24 @@ func buildWidgets(r *Runtime, types []resourcetype.Code, templates []template.De
 		}
 		return r.services.LibraryItems.QueryCollection(ctx, security.Guest(), input)
 	}
-	r.widgets = append(widgets.All(), widgets.NewResourceList(query, types, templates), widgets.NewLibraryResources(collectionQuery, false), widgets.NewLibraryResources(collectionQuery, true))
+	projectFields := func(ctx context.Context, code *template.Code, values map[string]any, keys []string) (map[string]any, error) {
+		if keys == nil {
+			return r.publicFields.TemplateFields(ctx, code, values)
+		}
+		return r.publicFields.SelectedTemplateFields(ctx, code, values, keys)
+	}
+	projectLibraryFields := func(ctx context.Context, source *site.Runtime, code *template.Code, values map[string]any) (map[string]any, error) {
+		if source == nil {
+			return nil, fmt.Errorf("library source runtime is unavailable")
+		}
+		module, exists := source.Profile().Registry().Module("core")
+		coreRuntime, ok := module.(*Runtime)
+		if !exists || !ok || coreRuntime.publicFields == nil {
+			return nil, fmt.Errorf("library source public field projector is unavailable")
+		}
+		return coreRuntime.publicFields.TemplateFields(ctx, code, values)
+	}
+	r.widgets = append(widgets.All(), widgets.NewResourceList(query, types, templates, projectFields), widgets.NewLibraryResources(collectionQuery, false, projectLibraryFields), widgets.NewLibraryResources(collectionQuery, true, projectLibraryFields))
 	return nil
 }
 

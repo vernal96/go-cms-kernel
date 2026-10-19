@@ -2,13 +2,16 @@ package widgets
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/vernal96/go-cms-kernel/cache"
+	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
+	"github.com/vernal96/go-cms-kernel/modules/core/template"
 	"github.com/vernal96/go-cms-kernel/modules/core/widget"
 )
 
@@ -81,7 +84,9 @@ func TestResourceListExplicitIDsStillApplyExclusionsAndCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := &widgetCache{entries: map[string][]byte{}, tags: map[cache.Tag]map[string]bool{}}
-	current := NewResourceList(service, []resourcetype.Code{resourcetype.Page}, nil)
+	current := NewResourceList(service, []resourcetype.Code{resourcetype.Page}, nil, func(_ context.Context, _ *template.Code, values map[string]any, _ []string) (map[string]any, error) {
+		return values, nil
+	})
 	instance, err := current.New(map[string]any{"parent_mode": "root", "resources": []any{float64(20), float64(10)}, "exclude": []any{float64(20)}, "limit": int64(20), "pagination_enabled": false, "exclude_current": false, "filters": []any{}, "sorting": []any{}})
 	if err != nil {
 		t.Fatal(err)
@@ -126,6 +131,92 @@ func TestResourceListValidatesSelectedParentAndPagination(t *testing.T) {
 	_, err = resource.NewQueryService(nil)
 	if err == nil {
 		t.Fatal("missing query service error")
+	}
+}
+
+func TestResourceListProjectsSelectedMediaFieldsAndSkipsResultCache(t *testing.T) {
+	code := template.Code("page")
+	repository := &listRepository{page: resource.Page{Items: []resource.Resource{{
+		ID: 10, SiteID: 7, Type: resourcetype.Page, Template: &code,
+		Fields: map[string]any{"cover": int64(5)},
+	}}}}
+	service, err := resource.NewQueryService(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projected := false
+	current := NewResourceList(service, []resourcetype.Code{resourcetype.Page}, []template.Definition{{
+		Code: code, Label: "Page", Fields: []field.Definition{{Key: "cover", Type: field.TypeMedia}},
+	}}, func(_ context.Context, selectedTemplate *template.Code, values map[string]any, keys []string) (map[string]any, error) {
+		projected = true
+		if selectedTemplate == nil || *selectedTemplate != code || len(keys) != 1 || keys[0] != "cover" || values["cover"] != int64(5) {
+			t.Fatalf("projector inputs template=%v values=%#v keys=%#v", selectedTemplate, values, keys)
+		}
+		return map[string]any{"cover": map[string]any{"id": int64(5), "url": "/media/5"}}, nil
+	})
+	instance, err := current.New(map[string]any{
+		"parent_mode": "root", "limit": int64(10), "pagination_enabled": false,
+		"exclude_current": false, "fields": []string{"resource.field.cover"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &widgetCache{entries: map[string][]byte{}, tags: map[cache.Tag]map[string]bool{}}
+	input := widget.RenderInput{Site: widget.SiteSnapshot{ID: 7}}
+	first, err := renderCachedList(t, store, instance, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := renderCachedList(t, store, instance, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !projected || len(repository.queries) != 2 {
+		t.Fatalf("projector called=%v, repository queries=%d; media results must not use resource-only cache", projected, len(repository.queries))
+	}
+	items := first["items"].([]map[string]any)
+	if got := items[0]["fields"].(map[string]any)["cover"]; !reflect.DeepEqual(got, map[string]any{"id": int64(5), "url": "/media/5"}) {
+		t.Fatalf("projected field = %#v", got)
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("repeated projected results differ: %#v / %#v", first, second)
+	}
+}
+
+func TestResourceListSkipsResultCacheForRepeaterMediaField(t *testing.T) {
+	code := template.Code("page")
+	repository := &listRepository{page: resource.Page{Items: []resource.Resource{{
+		ID: 11, SiteID: 7, Type: resourcetype.Page, Template: &code,
+		Fields: map[string]any{"gallery": []any{map[string]any{"image": int64(5)}}},
+	}}}}
+	service, err := resource.NewQueryService(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := NewResourceList(service, []resourcetype.Code{resourcetype.Page}, []template.Definition{{
+		Code: code, Label: "Page", Fields: []field.Definition{{
+			Key: "gallery", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: []field.Definition{{Key: "image", Type: field.TypeMedia}}},
+		}},
+	}}, func(_ context.Context, _ *template.Code, values map[string]any, _ []string) (map[string]any, error) {
+		return values, nil
+	})
+	instance, err := current.New(map[string]any{
+		"parent_mode": "root", "limit": int64(10), "pagination_enabled": false,
+		"exclude_current": false, "fields": []string{"resource.field.gallery"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &widgetCache{entries: map[string][]byte{}, tags: map[cache.Tag]map[string]bool{}}
+	input := widget.RenderInput{Site: widget.SiteSnapshot{ID: 7}}
+	if _, err := renderCachedList(t, store, instance, input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renderCachedList(t, store, instance, input); err != nil {
+		t.Fatal(err)
+	}
+	if len(repository.queries) != 2 {
+		t.Fatalf("repository queries = %d; repeater media results must not use resource-only cache", len(repository.queries))
 	}
 }
 

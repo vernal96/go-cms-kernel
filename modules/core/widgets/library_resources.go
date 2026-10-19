@@ -3,12 +3,14 @@ package widgets
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/field/validation"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
+	"github.com/vernal96/go-cms-kernel/modules/core/template"
 	"github.com/vernal96/go-cms-kernel/modules/core/widget"
 )
 
@@ -18,12 +20,15 @@ var LibraryMirrorResources = widget.NewRef("library_mirror_resources")
 type LibraryCollectionQuery func(context.Context, resource.LibraryItemQuery) (resource.LibraryItemPage, resource.LibraryCollection, error)
 
 type libraryResourcesWidget struct {
-	query  LibraryCollectionQuery
-	mirror bool
+	query         LibraryCollectionQuery
+	mirror        bool
+	projectFields LibraryPublicFieldProjection
 }
 
-func NewLibraryResources(query LibraryCollectionQuery, mirror bool) widget.Widget {
-	return libraryResourcesWidget{query: query, mirror: mirror}
+type LibraryPublicFieldProjection func(context.Context, *site.Runtime, *template.Code, map[string]any) (map[string]any, error)
+
+func NewLibraryResources(query LibraryCollectionQuery, mirror bool, project LibraryPublicFieldProjection) widget.Widget {
+	return libraryResourcesWidget{query: query, mirror: mirror, projectFields: project}
 }
 
 func (w libraryResourcesWidget) Definition() widget.Definition {
@@ -43,6 +48,9 @@ func (w libraryResourcesWidget) Definition() widget.Definition {
 func (w libraryResourcesWidget) New(values map[string]any) (widget.Instance, error) {
 	if w.query == nil {
 		return nil, errors.New("library collection query is unavailable")
+	}
+	if w.projectFields == nil {
+		return nil, errors.New("public field projector is unavailable")
 	}
 	limit := intValue(values, "per_page")
 	if limit < 1 || limit > 100 {
@@ -107,7 +115,14 @@ func (i *libraryResourcesInstance) Render(ctx context.Context, input widget.Rend
 		if err != nil {
 			return nil, err
 		}
-		items = append(items, map[string]any{"id": item.ID, "title": item.Title, "annotation": item.Annotation, "url": url, "image_media_id": item.ImageMediaID, "published_at": item.PublishedAt, "fields": item.Fields})
+		fields := item.Fields
+		if i.widget.projectFields != nil {
+			fields, err = i.widget.projectFields(ctx, collection.Runtime, item.Template, fields)
+			if err != nil {
+				return nil, fmt.Errorf("project fields for library item %d: %w", item.ID, err)
+			}
+		}
+		items = append(items, map[string]any{"id": item.ID, "title": item.Title, "annotation": item.Annotation, "url": url, "image_media_id": item.ImageMediaID, "published_at": item.PublishedAt, "fields": fields})
 	}
 	return map[string]any{"resources": items, "next_cursor": page.NextCursor, "cursor_parameter": "cursor." + input.Key}, nil
 }

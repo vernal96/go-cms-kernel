@@ -28,6 +28,15 @@ type memoryFiles struct {
 	items map[file.ID]file.File
 }
 
+type failingGetFiles struct {
+	file.Service
+	err error
+}
+
+func (f failingGetFiles) GetFile(context.Context, security.Actor, file.ID) (file.File, error) {
+	return file.File{}, f.err
+}
+
 func (f memoryFiles) GetFile(
 	_ context.Context,
 	_ security.Actor,
@@ -210,6 +219,23 @@ func TestServiceCreateResolveAndClone(t *testing.T) {
 	if *again.Title != "Hero image" ||
 		again.Params["meta_alt"] != "Hero" {
 		t.Fatalf("media clone leaked mutation: %#v", again)
+	}
+}
+
+func TestServiceResolvePreservesUnexpectedFileLookupErrors(t *testing.T) {
+	lookupErr := errors.New("file database unavailable")
+	repository := newMemoryRepository()
+	repository.items[1] = Media{ID: 1, FileID: 9}
+	service, err := NewService(repository, failingGetFiles{err: lookupErr}, nil, testAuthorizer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.Resolve(context.Background(), security.Guest(), 1)
+	if !errors.Is(err, lookupErr) {
+		t.Fatalf("resolve error = %v; want underlying file lookup error", err)
+	}
+	if errors.Is(err, ErrInvalidReference) {
+		t.Fatalf("unexpected lookup error was misclassified as invalid reference: %v", err)
 	}
 }
 

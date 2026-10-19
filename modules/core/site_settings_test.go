@@ -10,6 +10,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/modules/core/field"
 	"github.com/vernal96/go-cms-kernel/modules/core/file"
 	"github.com/vernal96/go-cms-kernel/modules/core/media"
+	"github.com/vernal96/go-cms-kernel/modules/core/publicfields"
 	"github.com/vernal96/go-cms-kernel/security"
 )
 
@@ -20,8 +21,8 @@ type settingsFiles struct {
 }
 
 func (f *settingsFiles) URL(_ context.Context, actor security.Actor, id file.ID) (string, error) {
-	if !actor.IsGuest() {
-		f.t.Fatal("file lookup inherited caller privileges")
+	if !actor.IsSystem() {
+		f.t.Fatal("file visibility check did not use system actor")
 	}
 	f.id = id
 	return "/files/logo.svg", f.err
@@ -32,11 +33,11 @@ type settingsMedia struct {
 	err error
 }
 
-func (m settingsMedia) Get(_ context.Context, actor security.Actor, id media.ID) (media.Media, error) {
-	if !actor.IsGuest() || id <= 0 {
+func (m settingsMedia) Resolve(_ context.Context, actor security.Actor, id media.ID) (media.ResolvedMedia, error) {
+	if !actor.IsSystem() || id <= 0 {
 		m.t.Fatal("invalid media lookup")
 	}
-	return media.Media{ID: id, FileID: 12}, m.err
+	return media.ResolvedMedia{Media: media.Media{ID: id, FileID: 12}, File: file.File{ID: 12}}, m.err
 }
 
 func TestPublicSettingsProjection(t *testing.T) {
@@ -47,12 +48,16 @@ func TestPublicSettingsProjection(t *testing.T) {
 		{Key: "missing", Public: true}, {Key: "nil", Public: true},
 	}
 	values := map[string]any{"private": "secret", "unknown": "secret", "title": "A", "count": int64(3), "flag": false, "list": []any{}, "object": map[string]any{"x": 1}, "nil": nil}
-	got, err := projectPublicSettings(context.Background(), values, defs, nil, nil)
+	projector, err := publicfields.New(nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := projector.PublicSettings(context.Background(), values, defs)
 	want := map[string]any{"title": "A", "count": int64(3), "flag": false, "list": []any{}, "object": map[string]any{"x": 1}, "nil": nil}
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %#v, %v", got, err)
 	}
-	empty, err := projectPublicSettings(context.Background(), values, nil, nil, nil)
+	empty, err := projector.PublicSettings(context.Background(), values, nil)
 	if err != nil || empty == nil || len(empty) != 0 {
 		t.Fatalf("empty %#v, %v", empty, err)
 	}
@@ -81,7 +86,12 @@ func TestPublicSettingsReferences(t *testing.T) {
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					files := &settingsFiles{t: t, err: tc.fileErr}
-					got, err := projectPublicSettings(context.Background(), map[string]any{"logo": int64(7)}, []field.Definition{{Key: "logo", Type: kind, Public: true}}, files, settingsMedia{t: t, err: tc.mediaErr})
+					settings := []media.SettingsDefinition{{Code: "image", Fields: []field.Definition{{Key: "alt", Type: field.TypeString}}}}
+					projector, err := publicfields.New(nil, settings, files, settingsMedia{t: t, err: tc.mediaErr})
+					if err != nil {
+						t.Fatal(err)
+					}
+					got, err := projector.PublicSettings(context.Background(), map[string]any{"logo": int64(7)}, []field.Definition{{Key: "logo", Type: kind, Public: true, Options: field.MediaOptions{SettingsCode: "image"}}})
 					if tc.fail {
 						if err == nil {
 							t.Fatal("unexpected error suppressed")
@@ -97,7 +107,7 @@ func TestPublicSettingsReferences(t *testing.T) {
 						}
 						return
 					}
-					if got["logo"] != (publicFileValue{ID: 7, URL: "/files/logo.svg"}) {
+					if !reflect.DeepEqual(got["logo"], publicfields.MediaValue{ID: 7, URL: "/_cms/files/12", Settings: map[string]any{}}) {
 						t.Fatalf("reference = %#v", got)
 					}
 					wantID := file.ID(12)
@@ -114,8 +124,8 @@ func TestPublicSettingsProjectsNestedRepeaterReferences(t *testing.T) {
 	publicFields := []field.Definition{
 		{Key: "icon", Type: field.TypeMedia, Public: true, Options: field.MediaOptions{Disk: "public", VirtualPath: "site/icons", SettingsCode: "image"}},
 		{Key: "documents", Type: field.TypeMedia, Public: true, Options: field.MediaOptions{Disk: "public", VirtualPath: "site/documents", SettingsCode: "document", Multiple: true}},
-		{Key: "logo", Type: field.TypeMedia, Public: true},
-		{Key: "gallery", Type: field.TypeMedia, Public: true, Options: field.MediaOptions{Multiple: true}},
+		{Key: "logo", Type: field.TypeMedia, Public: true, Options: field.MediaOptions{SettingsCode: "image"}},
+		{Key: "gallery", Type: field.TypeMedia, Public: true, Options: field.MediaOptions{SettingsCode: "image", Multiple: true}},
 		{Key: "secret", Type: field.TypeString, Public: false},
 		{Key: "nested", Type: field.TypeRepeater, Public: true, Options: field.RepeaterOptions{Fields: []field.Definition{
 			{Key: "attachment", Type: field.TypeMedia, Public: true, Options: field.MediaOptions{Disk: "public", VirtualPath: "site/attachments", SettingsCode: "document"}},
@@ -134,22 +144,30 @@ func TestPublicSettingsProjectsNestedRepeaterReferences(t *testing.T) {
 		},
 	}}
 
-	got, err := projectPublicSettings(context.Background(), values, definitions, &settingsFiles{t: t}, settingsMedia{t: t})
+	settings := []media.SettingsDefinition{
+		{Code: "image", Fields: []field.Definition{{Key: "alt", Type: field.TypeString}}},
+		{Code: "document", Fields: []field.Definition{{Key: "caption", Type: field.TypeString}}},
+	}
+	projector, err := publicfields.New(nil, settings, &settingsFiles{t: t}, settingsMedia{t: t})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := projector.PublicSettings(context.Background(), values, definitions)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := map[string]any{"portals": []map[string]any{{
-		"icon": publicFileValue{ID: 1, URL: "/files/logo.svg"},
+		"icon": publicfields.MediaValue{ID: 1, URL: "/_cms/files/12", Settings: map[string]any{}},
 		"documents": []any{
-			publicFileValue{ID: 2, URL: "/files/logo.svg"},
-			publicFileValue{ID: 3, URL: "/files/logo.svg"},
+			publicfields.MediaValue{ID: 2, URL: "/_cms/files/12", Settings: map[string]any{}},
+			publicfields.MediaValue{ID: 3, URL: "/_cms/files/12", Settings: map[string]any{}},
 		},
-		"logo": publicFileValue{ID: 7, URL: "/files/logo.svg"},
+		"logo": publicfields.MediaValue{ID: 7, URL: "/_cms/files/12", Settings: map[string]any{}},
 		"gallery": []any{
-			publicFileValue{ID: 7, URL: "/files/logo.svg"},
-			publicFileValue{ID: 7, URL: "/files/logo.svg"},
+			publicfields.MediaValue{ID: 7, URL: "/_cms/files/12", Settings: map[string]any{}},
+			publicfields.MediaValue{ID: 7, URL: "/_cms/files/12", Settings: map[string]any{}},
 		},
-		"nested": []map[string]any{{"attachment": publicFileValue{ID: 4, URL: "/files/logo.svg"}}},
+		"nested": []map[string]any{{"attachment": publicfields.MediaValue{ID: 4, URL: "/_cms/files/12", Settings: map[string]any{}}}},
 	}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("public settings = %#v, want %#v", got, want)

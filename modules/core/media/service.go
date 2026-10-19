@@ -176,13 +176,16 @@ func (s *service) Resolve(
 		item.FileID,
 	)
 	if err != nil {
-		return ResolvedMedia{}, fmt.Errorf(
-			"%w: get file %d for media %d: %v",
-			ErrInvalidReference,
-			item.FileID,
-			id,
-			err,
-		)
+		if errors.Is(err, file.ErrNotFound) {
+			return ResolvedMedia{}, fmt.Errorf(
+				"%w: get file %d for media %d: %w",
+				ErrInvalidReference,
+				item.FileID,
+				id,
+				err,
+			)
+		}
+		return ResolvedMedia{}, fmt.Errorf("get file %d for media %d: %w", item.FileID, id, err)
 	}
 
 	return ResolvedMedia{

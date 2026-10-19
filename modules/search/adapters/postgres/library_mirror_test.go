@@ -12,6 +12,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	sitepostgres "github.com/vernal96/go-cms-kernel/modules/core/site/adapters/postgres"
+	"github.com/vernal96/go-cms-kernel/modules/core/template"
 	"github.com/vernal96/go-cms-kernel/modules/core/widget"
 	"github.com/vernal96/go-cms-kernel/modules/core/widgets"
 	"github.com/vernal96/go-cms-kernel/modules/search"
@@ -204,7 +205,9 @@ func TestPostgresLibraryMirrorWidgetsLargeCollection(t *testing.T) {
 		if isMirror {
 			mount = mirror
 		}
-		instance, err := widgets.NewLibraryResources(query, isMirror).New(map[string]any{"per_page": float64(17), "sorting": []any{map[string]any{"field": "resource.id", "direction": "asc"}}})
+		instance, err := widgets.NewLibraryResources(query, isMirror, func(_ context.Context, _ *site.Runtime, _ *template.Code, fields map[string]any) (map[string]any, error) {
+			return fields, nil
+		}).New(map[string]any{"per_page": float64(17), "sorting": []any{map[string]any{"field": "resource.id", "direction": "asc"}}})
 		if err != nil {
 			t.Fatal(err)
 		}

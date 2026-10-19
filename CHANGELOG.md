@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.18.0
+
+- Return public Media fields as `{id, url, mime_type, size, settings}` in site settings and resource and library widget data, including multiple and nested fields. URLs use the relative `/_cms/files/{fileID}` delivery path; unavailable files yield `null` without changing array positions.
+- Add a site-scoped public field projector for widgets with declared media output. Keep management field values as numeric IDs and avoid caching Resource List results that depend on media metadata.
+
 ## 0.17.1
 
 - Record the underlying server error in the existing HTTP access log entry for API 5xx responses while keeping client error messages safe. Include a status description when no cause is available; continue to redact panic values.

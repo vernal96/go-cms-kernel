@@ -25,20 +25,55 @@ var ResourceList = widget.NewRef("resource_list")
 const resourceListCacheTTL = 5 * time.Minute
 
 type resourceListWidget struct {
-	query  *resource.QueryService
-	fields []field.Choice
-	types  []field.Choice
+	query          *resource.QueryService
+	fields         []field.Choice
+	types          []field.Choice
+	projectFields  PublicFieldProjection
+	mediaFieldKeys map[string]bool
 }
+
+type PublicFieldProjection func(context.Context, *template.Code, map[string]any, []string) (map[string]any, error)
 
 // NewResourceList builds the site-scoped core widget implementation. Services
 // are captured during module runtime build; the HTTP widget layer caches results.
-func NewResourceList(query *resource.QueryService, types []resourcetype.Code, templates []template.Definition) widget.Widget {
+func NewResourceList(query *resource.QueryService, types []resourcetype.Code, templates []template.Definition, project PublicFieldProjection) widget.Widget {
+	return newResourceList(query, types, templates, project)
+}
+
+func newResourceList(query *resource.QueryService, types []resourcetype.Code, templates []template.Definition, project PublicFieldProjection) widget.Widget {
 	fieldChoices := resourceListFieldChoices(templates)
 	typeChoices := make([]field.Choice, len(types))
 	for index, code := range types {
 		typeChoices[index] = field.Choice{Value: string(code), Label: string(code)}
 	}
-	return resourceListWidget{query: query, fields: fieldChoices, types: typeChoices}
+	return resourceListWidget{query: query, fields: fieldChoices, types: typeChoices, projectFields: project, mediaFieldKeys: mediaFieldKeys(templates)}
+}
+
+func mediaFieldKeys(templates []template.Definition) map[string]bool {
+	result := map[string]bool{}
+	var containsMedia func([]field.Definition) bool
+	containsMedia = func(definitions []field.Definition) bool {
+		for _, definition := range definitions {
+			if definition.Type == field.TypeMedia {
+				return true
+			}
+			if definition.Type == field.TypeRepeater {
+				options, err := field.DecodeOptions[field.RepeaterOptions](definition.Options)
+				if err == nil && containsMedia(options.Fields) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for _, definition := range templates {
+		for _, item := range definition.Fields {
+			if item.Type == field.TypeMedia || (item.Type == field.TypeRepeater && containsMedia([]field.Definition{item})) {
+				result[item.Key] = true
+			}
+		}
+	}
+	return result
 }
 
 func resourceListFieldChoices(templates []template.Definition) []field.Choice {
@@ -91,6 +126,9 @@ func (w resourceListWidget) Definition() widget.Definition {
 func (w resourceListWidget) New(values map[string]any) (widget.Instance, error) {
 	if w.query == nil {
 		return nil, errors.New("resource query service is nil")
+	}
+	if w.projectFields == nil {
+		return nil, errors.New("public field projector is unavailable")
 	}
 	config, err := parseResourceListConfig(values)
 	if err != nil {
@@ -147,7 +185,10 @@ func (i *resourceListInstance) Render(ctx context.Context, input widget.RenderIn
 		return nil, err
 	}
 	i.deadline = page.ValidUntil
-	result := buildResourceListResult(page, query)
+	result, err := buildResourceListResult(ctx, page, query, i.widget.projectFields)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{"items": result.Items, "pagination": result.Pagination}, nil
 }
 
@@ -162,15 +203,30 @@ type resourceListPagination struct {
 	Pages   int `json:"pages"`
 }
 
-func buildResourceListResult(page resource.Page, query resource.Query) resourceListResult {
+func buildResourceListResult(ctx context.Context, page resource.Page, query resource.Query, project PublicFieldProjection) (resourceListResult, error) {
 	result := resourceListResult{Items: make([]map[string]any, len(page.Items))}
 	for n, item := range page.Items {
-		result.Items[n] = projectResource(item, query.Fields)
+		projected := projectResource(item, query.Fields)
+		if project != nil {
+			values, ok := projected["fields"].(map[string]any)
+			if ok {
+				keys := make([]string, 0, len(values))
+				for key := range values {
+					keys = append(keys, key)
+				}
+				fields, err := project(ctx, item.Template, values, keys)
+				if err != nil {
+					return resourceListResult{}, fmt.Errorf("project fields for resource %d: %w", item.ID, err)
+				}
+				projected["fields"] = fields
+			}
+		}
+		result.Items[n] = projected
 	}
 	if query.PerPage > 0 {
 		result.Pagination = &resourceListPagination{Page: query.Page, PerPage: query.PerPage, Total: page.Total, Pages: int(math.Ceil(float64(page.Total) / float64(query.PerPage)))}
 	}
-	return result
+	return result, nil
 }
 func projectResource(item resource.Resource, fields []resource.FieldPath) map[string]any {
 	selected := map[resource.FieldPath]bool{}
@@ -386,6 +442,12 @@ func resourceSorting(value any) ([]resource.Sort, error) {
 	return result, nil
 }
 func (i *resourceListInstance) ResultCachePolicy(input widget.RenderInput) widget.ResultCachePolicy {
+	for _, selected := range i.config.fields {
+		key, ok := strings.CutPrefix(string(selected), "resource.field.")
+		if ok && i.widget.mediaFieldKeys[key] {
+			return widget.ResultCachePolicy{}
+		}
+	}
 	return widget.ResultCachePolicy{TTL: resourceListCacheTTL, Tags: []cache.Tag{cache.Tag(fmt.Sprintf("site:%d:resources", input.Site.ID))}}
 }
 func (i *resourceListInstance) ResultCacheDeadline() time.Time { return i.deadline }

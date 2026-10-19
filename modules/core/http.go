@@ -23,6 +23,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/modules/core/site"
 	"github.com/vernal96/go-cms-kernel/modules/core/template"
 	"github.com/vernal96/go-cms-kernel/modules/core/widget"
+	corewidgets "github.com/vernal96/go-cms-kernel/modules/core/widgets"
 	"github.com/vernal96/go-cms-kernel/modules/resourceextension"
 	"github.com/vernal96/go-cms-kernel/security"
 	httptransport "github.com/vernal96/go-cms-kernel/transport/http"
@@ -479,7 +480,33 @@ func (h pageResourceHandler) renderWidgets(ctx context.Context, siteRuntime *sit
 			rendered.Error = h.widgetError(ctx, item, binding, invalidResultError, errors.New("widget returned nil data"))
 			continue
 		}
-		raw, err := json.Marshal(output.Data)
+		data := make(map[string]any, len(output.Data))
+		for key, value := range output.Data {
+			data[key] = value
+		}
+		if binding.Code == widget.Code(string(ModuleCode)+"_"+string(corewidgets.ResourceFields.Code())) {
+			coreRuntime := siteCoreRuntime(siteRuntime)
+			if coreRuntime == nil || coreRuntime.publicFields == nil {
+				rendered.Error = h.widgetError(ctx, item, binding, invalidResultError, errors.New("public field projector is unavailable"))
+				continue
+			}
+			values, ok := data["fields"].(map[string]any)
+			if !ok {
+				rendered.Error = h.widgetError(ctx, item, binding, invalidResultError, errors.New("resource fields widget returned invalid fields"))
+				continue
+			}
+			keys := make([]string, 0, len(values))
+			for key := range values {
+				keys = append(keys, key)
+			}
+			fields, err := coreRuntime.publicFields.SelectedTemplateFields(ctx, item.Template, values, keys)
+			if err != nil {
+				rendered.Error = h.widgetError(ctx, item, binding, invalidResultError, err)
+				continue
+			}
+			data["fields"] = fields
+		}
+		raw, err := json.Marshal(data)
 		if err != nil {
 			rendered.Error = h.widgetError(ctx, item, binding, invalidResultError, err)
 			continue
@@ -487,6 +514,18 @@ func (h pageResourceHandler) renderWidgets(ctx context.Context, siteRuntime *sit
 		rendered.Data = raw
 	}
 	return result
+}
+
+func siteCoreRuntime(runtime *site.Runtime) *Runtime {
+	if runtime == nil {
+		return nil
+	}
+	module, exists := runtime.Profile().Registry().Module("core")
+	if !exists {
+		return nil
+	}
+	coreRuntime, _ := module.(*Runtime)
+	return coreRuntime
 }
 
 func (h pageResourceHandler) publicExtensions(

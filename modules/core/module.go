@@ -17,6 +17,7 @@ import (
 	"github.com/vernal96/go-cms-kernel/modules/core/group"
 	image "github.com/vernal96/go-cms-kernel/modules/core/image"
 	"github.com/vernal96/go-cms-kernel/modules/core/media"
+	"github.com/vernal96/go-cms-kernel/modules/core/publicfields"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourcetype"
 	"github.com/vernal96/go-cms-kernel/modules/core/resourceviews"
@@ -194,6 +195,10 @@ func (m module) Build(
 		menuStore:       hotStore,
 		menuTTL:         config.MenuCacheTTL,
 	}
+	runtime.publicFields, err = publicfields.New(ctx.Profile().Templates, config.MediaSettings, m.services.Files, m.services.Media)
+	if err != nil {
+		return nil, err
+	}
 	if err := buildWidgets(runtime, ctx.Registry().ResourceTypes(), ctx.Profile().Templates); err != nil {
 		return nil, fmt.Errorf("build core widgets: %w", err)
 	}
@@ -216,6 +221,7 @@ type Runtime struct {
 	viewSiteID      site.ID
 	resultStore     cache.Store
 	mediaSettings   *media.SettingsService
+	publicFields    *publicfields.Projector
 	menuStore       cache.Store
 	menuTTL         time.Duration
 	database        Database
@@ -295,6 +301,14 @@ func (module) EntityHookEventNames() []string {
 }
 
 func (r *Runtime) MediaSettings() *media.SettingsService { return r.mediaSettings }
+
+// PublicFields returns the site-scoped projector used by public field outputs.
+func (r *Runtime) PublicFields() *publicfields.Projector {
+	if r == nil {
+		return nil
+	}
+	return r.publicFields
+}
 
 // ResourceQuery returns the site's resource query service
 // for dependent modules that need to resolve public resources during rendering.
