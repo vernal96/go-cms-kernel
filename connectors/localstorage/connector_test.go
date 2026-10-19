@@ -20,7 +20,7 @@ func TestConnectorStoresWithoutOverwriteAndDeletesIdempotently(t *testing.T) {
 		Code:       "public",
 		Visibility: filesystem.VisibilityPublic,
 		Root:       t.TempDir(),
-		BaseURL:    "https://files.example.test/base",
+		BaseURL:    "https://files.example.test/base?foo=bar&keep=a+b",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -100,8 +100,36 @@ func TestConnectorStoresWithoutOverwriteAndDeletesIdempotently(t *testing.T) {
 		context.Background(),
 		filesystem.Reference{ID: "42", Path: "objects/2026/item"},
 	)
-	if err != nil || publicURL != "https://files.example.test/base/_cms/files/42" {
+	if err != nil || publicURL != "https://files.example.test/base/_cms/files/42?foo=bar&keep=a+b" {
 		t.Fatalf("public URL = %q, %v", publicURL, err)
+	}
+	relativeURL, err := connector.RelativeURL(
+		context.Background(),
+		filesystem.Reference{ID: "42", Path: "objects/2026/item"},
+	)
+	if err != nil || relativeURL != "/base/_cms/files/42?foo=bar&keep=a+b" {
+		t.Fatalf("relative public URL = %q, %v", relativeURL, err)
+	}
+	escapedAbsoluteURL, err := connector.URL(
+		context.Background(),
+		filesystem.Reference{ID: "42/a b", Path: "objects/2026/item"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	escapedRelativeURL, err := connector.RelativeURL(
+		context.Background(),
+		filesystem.Reference{ID: "42/a b", Path: "objects/2026/item"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	escapedAbsolute, err := url.Parse(escapedAbsoluteURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if escapedRelativeURL != escapedAbsolute.RequestURI() {
+		t.Fatalf("escaped relative URL = %q, absolute RequestURI = %q", escapedRelativeURL, escapedAbsolute.RequestURI())
 	}
 
 	if err := connector.Delete(

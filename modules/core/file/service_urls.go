@@ -3,6 +3,7 @@ package file
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/vernal96/go-cms-kernel/filesystem"
@@ -32,6 +33,45 @@ func (s *service) URL(
 		return "", filesystem.ErrInvalidVisibility
 	}
 	return disk.URL(ctx, reference(item))
+}
+
+// PublicURL uses the configured disk driver's public presentation behavior
+// after enforcing file read permission and public visibility.
+func (s *service) PublicURL(
+	ctx context.Context,
+	actor security.Actor,
+	id ID,
+) (string, error) {
+	if err := validateContext(ctx, "create public file URL"); err != nil {
+		return "", err
+	}
+	if err := s.authorizer.Check(ctx, actor, readPermission); err != nil {
+		return "", err
+	}
+	item, err := s.file(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	disk, err := s.disk(item.Storage)
+	if err != nil {
+		return "", err
+	}
+	if disk.Visibility() != filesystem.VisibilityPublic {
+		return "", filesystem.ErrInvalidVisibility
+	}
+	var url string
+	if provider, ok := disk.(filesystem.RelativeURLProvider); ok {
+		url, err = provider.RelativeURL(ctx, reference(item))
+	} else {
+		url, err = disk.URL(ctx, reference(item))
+	}
+	if err != nil {
+		return "", fmt.Errorf("create public presentation URL for file %d: %w", id, err)
+	}
+	if url == "" {
+		return "", errors.New("filesystem driver returned an empty public presentation URL")
+	}
+	return url, nil
 }
 
 func (s *service) TemporaryURL(

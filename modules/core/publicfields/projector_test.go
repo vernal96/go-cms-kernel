@@ -21,7 +21,7 @@ type projectorFiles struct {
 	calls int
 }
 
-func (f *projectorFiles) URL(_ context.Context, actor security.Actor, id file.ID) (string, error) {
+func (f *projectorFiles) PublicURL(_ context.Context, actor security.Actor, id file.ID) (string, error) {
 	if !actor.IsSystem() {
 		return "", errors.New("file visibility check did not use system actor")
 	}
@@ -173,11 +173,11 @@ func (publicProjectionFileService) GetFile(_ context.Context, actor security.Act
 	}
 	return file.File{ID: id, MIMEType: "image/png", Size: 2006}, nil
 }
-func (publicProjectionFileService) URL(_ context.Context, actor security.Actor, id file.ID) (string, error) {
+func (publicProjectionFileService) PublicURL(_ context.Context, actor security.Actor, id file.ID) (string, error) {
 	if !actor.IsSystem() || id != 6 {
 		return "", errors.New("public visibility check did not use system actor")
 	}
-	return "https://cdn.example/image.png", nil
+	return "/_cms/files/6", nil
 }
 
 type guestDeniedMediaAuthorizer struct{ security.Authorizer }

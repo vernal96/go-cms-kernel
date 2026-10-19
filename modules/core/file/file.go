@@ -246,6 +246,7 @@ type Service interface {
 	DeleteFile(context.Context, security.Actor, ID) error
 	DeleteFolder(context.Context, security.Actor, FolderID) error
 	URL(context.Context, security.Actor, ID) (string, error)
+	PublicURL(context.Context, security.Actor, ID) (string, error)
 	TemporaryURL(
 		context.Context,
 		security.Actor,

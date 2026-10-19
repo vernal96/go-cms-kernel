@@ -111,6 +111,16 @@ func (d *memoryDisk) URL(
 	}
 	return "https://public.test/" + reference.ID, nil
 }
+
+type relativeMemoryDisk struct{ *memoryDisk }
+
+func (d *relativeMemoryDisk) RelativeURL(_ context.Context, reference filesystem.Reference) (string, error) {
+	if d.visibility != filesystem.VisibilityPublic {
+		return "", filesystem.ErrInvalidVisibility
+	}
+	return "/_cms/files/" + reference.ID, nil
+}
+
 func (d *memoryDisk) TemporaryURL(
 	_ context.Context,
 	reference filesystem.Reference,
@@ -557,6 +567,35 @@ func TestServiceUploadMeasuresContentAndCompensatesDatabaseFailure(t *testing.T)
 	public.mu.Unlock()
 	if objectCount != 1 {
 		t.Fatalf("physical object count after compensation = %d", objectCount)
+	}
+}
+
+func TestPublicURLUsesConfiguredStoragePresentationAndRejectsPrivateDisks(t *testing.T) {
+	repository := newMemoryRepository()
+	repository.files[101] = File{ID: 101, Storage: "local", Path: "objects/local"}
+	repository.files[102] = File{ID: 102, Storage: "s3", Path: "objects/external"}
+	repository.files[103] = File{ID: 103, Storage: "private", Path: "objects/secret"}
+	local := &relativeMemoryDisk{memoryDisk: newMemoryDisk("local", filesystem.VisibilityPublic)}
+	s3 := newMemoryDisk("s3", filesystem.VisibilityPublic)
+	private := newMemoryDisk("private", filesystem.VisibilityPrivate)
+	service, err := NewService(repository, memoryDisks{"local": local, "s3": s3, "private": private}, testAuthorizer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		id   ID
+		want string
+	}{
+		{id: 101, want: "/_cms/files/101"},
+		{id: 102, want: "https://public.test/102"},
+	} {
+		got, err := service.PublicURL(context.Background(), security.System(), test.id)
+		if err != nil || got != test.want {
+			t.Fatalf("PublicURL(%d) = %q, %v; want %q", test.id, got, err, test.want)
+		}
+	}
+	if _, err := service.PublicURL(context.Background(), security.System(), 103); !errors.Is(err, filesystem.ErrInvalidVisibility) {
+		t.Fatalf("private public URL error = %v", err)
 	}
 }
 

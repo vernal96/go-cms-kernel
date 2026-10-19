@@ -20,12 +20,12 @@ type settingsFiles struct {
 	err error
 }
 
-func (f *settingsFiles) URL(_ context.Context, actor security.Actor, id file.ID) (string, error) {
+func (f *settingsFiles) PublicURL(_ context.Context, actor security.Actor, id file.ID) (string, error) {
 	if !actor.IsSystem() {
 		f.t.Fatal("file visibility check did not use system actor")
 	}
 	f.id = id
-	return "/files/logo.svg", f.err
+	return "/_cms/files/12", f.err
 }
 
 type settingsMedia struct {

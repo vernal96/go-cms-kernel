@@ -49,6 +49,12 @@ type Disk interface {
 	Close() error
 }
 
+// RelativeURLProvider lets a disk present a file through the application's
+// relative delivery route instead of the disk's absolute URL.
+type RelativeURLProvider interface {
+	RelativeURL(context.Context, Reference) (string, error)
+}
+
 // FactoryLabelProvider is an optional application-composition capability.
 // Labels are human-facing disk names for admin/catalog UIs; disk codes remain
 // stable machine identifiers stored in domain data and used for resolution.

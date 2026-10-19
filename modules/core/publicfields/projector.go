@@ -17,7 +17,7 @@ import (
 )
 
 type FileURLService interface {
-	URL(context.Context, security.Actor, file.ID) (string, error)
+	PublicURL(context.Context, security.Actor, file.ID) (string, error)
 }
 
 type MediaResolver interface {
@@ -219,10 +219,9 @@ func (p *Projector) projectMedia(ctx context.Context, value any, settingsCode st
 	if p.files == nil {
 		return nil, errors.New("file URL service is unavailable")
 	}
-	// URL verifies that the backing disk is public. Use the system actor for
-	// this internal visibility check; Guest delivery is handled by OpenDelivery
-	// and does not require the file API's read permission.
-	_, err = p.files.URL(ctx, security.System(), resolvedMedia.File.ID)
+	// PublicURL verifies visibility and delegates presentation to the disk
+	// driver: local storage uses the application route; S3/CDN uses its URL.
+	url, err := p.files.PublicURL(ctx, security.System(), resolvedMedia.File.ID)
 	if err != nil {
 		if unavailable(err) {
 			resolved[key] = nil
@@ -241,7 +240,7 @@ func (p *Projector) projectMedia(ctx context.Context, value any, settingsCode st
 			metadata[definition.Key] = value
 		}
 	}
-	item := MediaValue{ID: id, URL: fmt.Sprintf("/_cms/files/%d", resolvedMedia.File.ID), MIMEType: resolvedMedia.File.MIMEType, Size: resolvedMedia.File.Size, Settings: metadata}
+	item := MediaValue{ID: id, URL: url, MIMEType: resolvedMedia.File.MIMEType, Size: resolvedMedia.File.Size, Settings: metadata}
 	resolved[key] = item
 	return item, nil
 }

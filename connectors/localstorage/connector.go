@@ -453,6 +453,24 @@ func (c *Connector) URL(
 	return c.deliveryURL(reference, time.Time{}, "")
 }
 
+func (c *Connector) RelativeURL(
+	_ context.Context,
+	reference filesystem.Reference,
+) (string, error) {
+	if c.visibility != filesystem.VisibilityPublic {
+		return "", filesystem.ErrInvalidVisibility
+	}
+	absolute, err := c.deliveryURL(reference, time.Time{}, "")
+	if err != nil {
+		return "", err
+	}
+	parsed, err := url.Parse(absolute)
+	if err != nil {
+		return "", fmt.Errorf("parse local file delivery URL: %w", err)
+	}
+	return parsed.RequestURI(), nil
+}
+
 func (c *Connector) TemporaryURL(
 	_ context.Context,
 	reference filesystem.Reference,
