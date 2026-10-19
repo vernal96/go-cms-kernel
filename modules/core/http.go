@@ -351,7 +351,7 @@ func (h pageResourceHandler) ServeHTTP(
 	}
 	candidates, err := h.breadcrumbs.BreadcrumbCandidates(ctx, breadcrumbState.SiteID, breadcrumbState.StartID, breadcrumbState.IncludeHome)
 	if err != nil {
-		h.logError(ctx, "resource breadcrumb resolution failed", item, widget.Binding{}, err)
+		httptransport.RecordError(ctx, err)
 		http.Error(response, "resource response failed", http.StatusInternalServerError)
 		return
 	}
@@ -383,7 +383,7 @@ func (h pageResourceHandler) ServeHTTP(
 		}
 		placements, err := template.Compose(templateRuntime, item.Widgets)
 		if err != nil {
-			h.logError(ctx, "resource widget composition failed", item, widget.Binding{}, err)
+			httptransport.RecordError(ctx, err)
 			http.Error(response, "resource response failed", http.StatusInternalServerError)
 			return
 		}
@@ -405,7 +405,7 @@ func (h pageResourceHandler) ServeHTTP(
 
 	raw, err := json.Marshal(result)
 	if err != nil {
-		h.logError(ctx, "resource response encoding failed", item, widget.Binding{}, err)
+		httptransport.RecordError(ctx, err)
 		http.Error(response, "resource response failed", http.StatusInternalServerError)
 		return
 	}
@@ -674,12 +674,14 @@ func writeResourceRouteError(
 ) {
 	switch {
 	case errors.Is(err, site.ErrUnavailable):
+		httptransport.RecordError(request.Context(), err)
 		http.Error(response, "site runtime unavailable", http.StatusServiceUnavailable)
 	case errors.Is(err, resource.ErrNotFound),
 		errors.Is(err, security.ErrForbidden),
 		errors.Is(err, security.ErrUnauthenticated):
 		http.NotFound(response, request)
 	default:
+		httptransport.RecordError(request.Context(), err)
 		http.Error(
 			response,
 			"resource route failed",

@@ -30,7 +30,7 @@ func registerProfileRoutes(router chi.Router, handler *managementHTTP) {
 
 func (h *managementHTTP) getProfile(response http.ResponseWriter, request *http.Request) {
 	result, err := h.management.Profile(request.Context(), actor(request))
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *managementHTTP) updateProfile(response http.ResponseWriter, request *http.Request) {
@@ -47,7 +47,7 @@ func (h *managementHTTP) updateProfile(response http.ResponseWriter, request *ht
 		Name: payload.Name, LastName: payload.LastName,
 		MiddleName: payload.MiddleName, Phone: payload.Phone,
 	})
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *managementHTTP) changeProfilePassword(response http.ResponseWriter, request *http.Request) {
@@ -61,7 +61,7 @@ func (h *managementHTTP) changeProfilePassword(response http.ResponseWriter, req
 	if err := h.management.ChangeProfilePassword(
 		request.Context(), actor(request), payload.CurrentPassword, payload.NewPassword,
 	); err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -83,7 +83,7 @@ func (h *managementHTTP) updateProfilePreferences(response http.ResponseWriter, 
 			AccentColor: payload.AccentColor,
 		},
 	)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *managementHTTP) selectProfileAvatar(response http.ResponseWriter, request *http.Request) {
@@ -98,7 +98,7 @@ func (h *managementHTTP) selectProfileAvatar(response http.ResponseWriter, reque
 		return
 	}
 	result, err := h.management.SelectProfileAvatar(request.Context(), actor(request), payload.FileID)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *managementHTTP) uploadProfileAvatar(response http.ResponseWriter, request *http.Request) {
@@ -130,18 +130,18 @@ func (h *managementHTTP) uploadProfileAvatar(response http.ResponseWriter, reque
 	result, err := h.management.UploadProfileAvatar(
 		ctx, actor(request), header.Filename, io.LimitReader(uploaded, h.management.avatarMaxSize+1),
 	)
-	writeResult(response, http.StatusCreated, result, err)
+	writeResult(request.Context(), response, http.StatusCreated, result, err)
 }
 
 func (h *managementHTTP) removeProfileAvatar(response http.ResponseWriter, request *http.Request) {
 	result, err := h.management.RemoveProfileAvatar(request.Context(), actor(request))
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *managementHTTP) previewProfileAvatar(response http.ResponseWriter, request *http.Request) {
 	opened, err := h.management.OpenProfileAvatar(request.Context(), actor(request))
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	defer opened.Body.Close()

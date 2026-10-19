@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -45,12 +46,12 @@ func (h *managementHTTP) navigation(response http.ResponseWriter, request *http.
 		selectedSiteID = &value
 	}
 	result, err := h.management.Navigation(request.Context(), actor(request), selectedSiteID)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *managementHTTP) dashboard(response http.ResponseWriter, request *http.Request) {
 	result, err := h.management.Dashboard(request.Context(), actor(request))
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func actor(request *http.Request) security.Actor {
@@ -111,9 +112,9 @@ func decodeBody(response http.ResponseWriter, request *http.Request, target any)
 	return true
 }
 
-func writeResult(response http.ResponseWriter, status int, result any, err error) {
+func writeResult(ctx context.Context, response http.ResponseWriter, status int, result any, err error) {
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(ctx, response, err)
 		return
 	}
 	response.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -121,9 +122,10 @@ func writeResult(response http.ResponseWriter, status int, result any, err error
 	_ = json.NewEncoder(response).Encode(result)
 }
 
-func writeManagementError(response http.ResponseWriter, err error) {
+func writeManagementError(ctx context.Context, response http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, image.ErrBusy):
+		httptransport.RecordError(ctx, err)
 		response.Header().Set("Retry-After", "1")
 		httptransport.WriteJSONError(response, http.StatusServiceUnavailable, "busy", "image processing capacity exhausted")
 	case errors.Is(err, image.ErrInvalidTransform), errors.Is(err, image.ErrLimit), errors.Is(err, image.ErrUnsupportedFormat):
@@ -170,6 +172,7 @@ func writeManagementError(response http.ResponseWriter, err error) {
 		}
 		writeValidation(response, err.Error())
 	default:
+		httptransport.RecordError(ctx, err)
 		httptransport.WriteJSONError(response, http.StatusInternalServerError, "internal_error", "operation failed")
 	}
 }

@@ -54,5 +54,5 @@ func (h *filesHTTP) uploadFieldFile(response http.ResponseWriter, request *http.
 		return
 	}
 	result, err := h.files.UploadFieldFile(request.Context(), actor(request), h.sites, h.resources, target, header.Filename, io.LimitReader(uploaded, h.maxUploadSize+1))
-	writeResult(response, http.StatusCreated, result, err)
+	writeResult(request.Context(), response, http.StatusCreated, result, err)
 }

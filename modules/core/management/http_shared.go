@@ -1,6 +1,7 @@
 package management
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -75,9 +76,9 @@ func decodeBody(response http.ResponseWriter, request *http.Request, target any)
 	return true
 }
 
-func writeResult(response http.ResponseWriter, status int, result any, err error) {
+func writeResult(ctx context.Context, response http.ResponseWriter, status int, result any, err error) {
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(ctx, response, err)
 		return
 	}
 	response.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -85,7 +86,7 @@ func writeResult(response http.ResponseWriter, status int, result any, err error
 	_ = json.NewEncoder(response).Encode(result)
 }
 
-func writeManagementError(response http.ResponseWriter, err error) {
+func writeManagementError(ctx context.Context, response http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, media.ErrFileInUse):
 		httptransport.WriteJSONError(response, http.StatusConflict, "media_file_in_use", "file has other references")
@@ -94,6 +95,7 @@ func writeManagementError(response http.ResponseWriter, err error) {
 	case errors.Is(err, media.ErrFileDeleteUnsupported):
 		writeValidation(response, "the saved reference does not support permanent deletion")
 	case errors.Is(err, image.ErrBusy):
+		httptransport.RecordError(ctx, err)
 		response.Header().Set("Retry-After", "1")
 		httptransport.WriteJSONError(response, 503, "busy", "image processing capacity exhausted")
 	case errors.Is(err, image.ErrInvalidTransform), errors.Is(err, image.ErrUnsupportedFormat), errors.Is(err, image.ErrLimit):
@@ -115,6 +117,7 @@ func writeManagementError(response http.ResponseWriter, err error) {
 	case errors.Is(err, site.ErrReferenced):
 		httptransport.WriteJSONError(response, http.StatusConflict, "site_referenced", "site contains libraries used by mirrors")
 	case errors.Is(err, site.ErrUnavailable):
+		httptransport.RecordError(ctx, err)
 		httptransport.WriteJSONError(response, http.StatusServiceUnavailable, "unavailable", "site runtime is updating")
 	case errors.Is(err, site.ErrConflict), errors.Is(err, resource.ErrConflict), errors.Is(err, file.ErrConflict):
 		httptransport.WriteJSONError(response, http.StatusConflict, "conflict", "object conflicts with existing data")
@@ -146,6 +149,7 @@ func writeManagementError(response http.ResponseWriter, err error) {
 		}
 		writeValidation(response, err.Error())
 	default:
+		httptransport.RecordError(ctx, err)
 		httptransport.WriteJSONError(response, http.StatusInternalServerError, "internal_error", "operation failed")
 	}
 }

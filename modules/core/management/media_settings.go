@@ -39,11 +39,11 @@ func (h *contentHTTP) getMediaSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	service, err := h.sites.mediaSettings(r.Context(), actor(r), sid, SiteAccessView)
 	if err != nil {
-		writeManagementError(w, err)
+		writeManagementError(r.Context(), w, err)
 		return
 	}
 	result, err := service.Get(r.Context(), actor(r), id, r.URL.Query().Get("code"))
-	writeResult(w, http.StatusOK, result, validationError(err))
+	writeResult(r.Context(), w, http.StatusOK, result, validationError(err))
 }
 func (h *contentHTTP) saveMediaSettings(w http.ResponseWriter, r *http.Request) {
 	sid, ok := siteID(w, r)
@@ -56,7 +56,7 @@ func (h *contentHTTP) saveMediaSettings(w http.ResponseWriter, r *http.Request) 
 	}
 	service, err := h.sites.mediaSettings(r.Context(), actor(r), sid, SiteAccessEdit)
 	if err != nil {
-		writeManagementError(w, err)
+		writeManagementError(r.Context(), w, err)
 		return
 	}
 	var body struct {
@@ -68,5 +68,5 @@ func (h *contentHTTP) saveMediaSettings(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	result, err := service.Save(r.Context(), actor(r), id, body.Code, body.Values, body.ExpectedUpdatedAt)
-	writeResult(w, http.StatusOK, result, validationError(err))
+	writeResult(r.Context(), w, http.StatusOK, result, validationError(err))
 }

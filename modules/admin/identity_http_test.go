@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -26,7 +27,7 @@ func TestIdentityProtectionErrorsAreConflicts(t *testing.T) {
 	t.Parallel()
 	for _, err := range []error{group.ErrProtected, group.ErrLastAdministrator, user.ErrSelfBlock, user.ErrLastAdministrator} {
 		response := httptest.NewRecorder()
-		writeManagementError(response, err)
+		writeManagementError(context.Background(), response, err)
 		if response.Code != http.StatusConflict {
 			t.Fatalf("error %v status = %d", err, response.Code)
 		}

@@ -32,7 +32,7 @@ func (h *contentHTTP) listResourceChildren(response http.ResponseWriter, request
 		parentID = &value
 	}
 	result, err := h.resources.ResourceChildren(request.Context(), actor(request), id, parentID)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) resourceMetadata(response http.ResponseWriter, request *http.Request) {
@@ -41,7 +41,7 @@ func (h *contentHTTP) resourceMetadata(response http.ResponseWriter, request *ht
 		return
 	}
 	result, err := h.resources.ResourceMetadata(request.Context(), actor(request), id)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 type createResourceRequest struct {
@@ -86,7 +86,7 @@ func (h *contentHTTP) createResource(response http.ResponseWriter, request *http
 		Fields:           payload.Fields,
 		TypeSettings:     payload.TypeSettings,
 	})
-	writeResult(response, http.StatusCreated, result, err)
+	writeResult(request.Context(), response, http.StatusCreated, result, err)
 }
 
 func (h *contentHTTP) resourceOptions(response http.ResponseWriter, request *http.Request) {
@@ -95,7 +95,7 @@ func (h *contentHTTP) resourceOptions(response http.ResponseWriter, request *htt
 		return
 	}
 	result, err := h.resources.ResourceOptions(request.Context(), actor(request), siteID)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) resourceLookup(response http.ResponseWriter, request *http.Request) {
@@ -108,7 +108,7 @@ func (h *contentHTTP) resourceLookup(response http.ResponseWriter, request *http
 		return
 	}
 	result, err := h.resources.ResourceLookup(request.Context(), actor(request), siteID, request.URL.Query().Get("search"), page, perPage)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) getResource(response http.ResponseWriter, request *http.Request) {
@@ -121,7 +121,7 @@ func (h *contentHTTP) getResource(response http.ResponseWriter, request *http.Re
 		return
 	}
 	result, err := h.resources.Resource(request.Context(), actor(request), siteID, resourceID)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 type updateResourceRequest struct {
@@ -199,7 +199,7 @@ func (h *contentHTTP) updateResource(response http.ResponseWriter, request *http
 			TypeSettings:     payload.TypeSettings,
 		},
 	)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 type resourceWidgetPresentationRequest struct {
@@ -242,7 +242,7 @@ func (h *contentHTTP) createResourceWidget(response http.ResponseWriter, request
 		MarginTop:       payload.MarginTop, MarginBottom: payload.MarginBottom,
 		Enabled: payload.Enabled, Params: payload.Params, ParamBindings: payload.ParamBindings,
 	})
-	writeResult(response, http.StatusCreated, result, err)
+	writeResult(request.Context(), response, http.StatusCreated, result, err)
 }
 
 func (h *contentHTTP) updateResourceWidget(response http.ResponseWriter, request *http.Request) {
@@ -271,7 +271,7 @@ func (h *contentHTTP) updateResourceWidget(response http.ResponseWriter, request
 		ExpectedVersion: payload.ExpectedVersion,
 		MarginBottom:    payload.MarginBottom, Enabled: payload.Enabled, Params: payload.Params, ParamBindings: payload.ParamBindings,
 	})
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) deleteResourceWidget(response http.ResponseWriter, request *http.Request) {
@@ -294,7 +294,7 @@ func (h *contentHTTP) deleteResourceWidget(response http.ResponseWriter, request
 		return
 	}
 	if err := h.resources.DeleteResourceWidget(request.Context(), actor(request), siteID, resourceID, bindingID, payload.ExpectedVersion); err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -323,7 +323,7 @@ func (h *contentHTTP) reorderResourceWidgets(response http.ResponseWriter, reque
 		return
 	}
 	result, err := h.resources.ReorderResourceWidgets(request.Context(), actor(request), siteID, resourceID, payload.ExpectedVersion, payload.Items)
-	writeResult(response, http.StatusOK, struct {
+	writeResult(request.Context(), response, http.StatusOK, struct {
 		Items []ResourceWidget `json:"items"`
 	}{Items: result}, err)
 }
@@ -373,7 +373,7 @@ func (h *contentHTTP) moveResource(response http.ResponseWriter, request *http.R
 		return
 	}
 	result, err := h.resources.MoveResource(request.Context(), actor(request), siteID, resourceID, payload.ParentID, *payload.Position, payload.ExpectedVersion)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 type transferResourceRequest struct {
@@ -402,7 +402,7 @@ func (h *contentHTTP) transferResource(response http.ResponseWriter, request *ht
 		request.Context(), actor(request), sourceSiteID, resourceID,
 		payload.TargetSiteID, payload.ExpectedVersion,
 	)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) getResourceExtension(
@@ -416,7 +416,7 @@ func (h *contentHTTP) getResourceExtension(
 	result, err := h.resources.ResourceExtension(
 		request.Context(), actor(request), siteID, resourceID, code,
 	)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) saveResourceExtension(
@@ -434,7 +434,7 @@ func (h *contentHTTP) saveResourceExtension(
 	result, err := h.resources.SaveResourceExtension(
 		request.Context(), actor(request), siteID, resourceID, code, payload,
 	)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) previewResourceExtension(
@@ -452,7 +452,7 @@ func (h *contentHTTP) previewResourceExtension(
 	result, err := h.resources.PreviewResourceExtension(
 		request.Context(), actor(request), siteID, resourceID, code, payload,
 	)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func resourceExtensionParams(
@@ -494,7 +494,7 @@ func (h *contentHTTP) resourceDelete(response http.ResponseWriter, request *http
 	}
 	err := h.resources.DeleteResource(request.Context(), actor(request), siteID, resourceID, permanent)
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -519,7 +519,7 @@ func (h *contentHTTP) restoreResource(response http.ResponseWriter, request *htt
 	}
 	err := h.resources.RestoreResource(request.Context(), actor(request), siteID, resourceID, payload.WithDescendants)
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)

@@ -62,6 +62,9 @@ func (s *Service) serveHTTP(response http.ResponseWriter, request *http.Request)
 		case errors.Is(err, security.ErrForbidden):
 			status, code, message = http.StatusForbidden, "forbidden", "resource access denied"
 		}
+		if status >= http.StatusInternalServerError {
+			httptransport.RecordError(request.Context(), err)
+		}
 		httptransport.WriteJSONError(response, status, code, message)
 		return
 	}

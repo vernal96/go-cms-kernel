@@ -361,7 +361,7 @@ func (h *siteManagementHTTP) serve(response http.ResponseWriter, request *http.R
 	}
 	runtime, err := h.app.ManagementSiteRuntime(request.Context(), actor, siteID, action)
 	if err != nil {
-		writeSiteManagementError(response, err)
+		writeSiteManagementError(request.Context(), response, err)
 		return
 	}
 	compiled, current := snapshot.byRuntime[runtime]
@@ -383,15 +383,17 @@ func (h *siteManagementHTTP) serve(response http.ResponseWriter, request *http.R
 	next.ServeHTTP(response, request)
 }
 
-func writeSiteManagementError(response http.ResponseWriter, err error) {
+func writeSiteManagementError(ctx context.Context, response http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, security.ErrForbidden):
 		httptransport.WriteJSONError(response, http.StatusForbidden, "forbidden", "access denied")
 	case errors.Is(err, site.ErrUnavailable):
+		httptransport.RecordError(ctx, err)
 		http.Error(response, "site runtime is updating", http.StatusServiceUnavailable)
 	case errors.Is(err, site.ErrNotFound):
 		httptransport.WriteJSONError(response, http.StatusNotFound, "not_found", "not found")
 	default:
+		httptransport.RecordError(ctx, err)
 		httptransport.WriteJSONError(response, http.StatusInternalServerError, "internal_error", "internal server error")
 	}
 }
@@ -433,6 +435,7 @@ func (h *Handler) serveRuntime(
 	if err != nil {
 		switch {
 		case errors.Is(err, site.ErrUnavailable):
+			httptransport.RecordError(request.Context(), err)
 			http.Error(response, "site runtime is updating", http.StatusServiceUnavailable)
 		case errors.Is(err, site.ErrNotFound):
 			http.Error(
@@ -448,6 +451,7 @@ func (h *Handler) serveRuntime(
 				http.StatusForbidden,
 			)
 		default:
+			httptransport.RecordError(request.Context(), err)
 			http.Error(
 				response,
 				"site runtime failed",
@@ -459,21 +463,25 @@ func (h *Handler) serveRuntime(
 
 	settings, err := core.PublicSiteSettings(request.Context(), runtime)
 	if err != nil {
+		httptransport.RecordError(request.Context(), err)
 		http.Error(response, "site settings unavailable", http.StatusInternalServerError)
 		return
 	}
 	item := runtime.Site()
-	response.Header().Set("Content-Type", "application/json; charset=utf-8")
-
-	if err := json.NewEncoder(response).Encode(runtimeResponse{
+	raw, err := json.Marshal(runtimeResponse{
 		SiteID:      item.ID,
 		Domain:      item.Domain,
 		Locale:      item.Locale,
 		ProfileCode: runtime.Profile().Profile().Code,
 		Settings:    settings,
-	}); err != nil {
-		http.Error(response, err.Error(), http.StatusInternalServerError)
+	})
+	if err != nil {
+		httptransport.RecordError(request.Context(), err)
+		http.Error(response, "site runtime response failed", http.StatusInternalServerError)
+		return
 	}
+	response.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = response.Write(append(raw, '\n'))
 }
 
 // dispatchPublicAPI translates the external API URL into the profile-local path.
@@ -526,6 +534,7 @@ func (h *Handler) dispatchProfile(
 	); err != nil {
 		switch {
 		case errors.Is(err, site.ErrUnavailable):
+			httptransport.RecordError(request.Context(), err)
 			http.Error(response, "site runtime is updating", http.StatusServiceUnavailable)
 		case errors.Is(err, site.ErrNotFound):
 			http.NotFound(response, request)
@@ -533,6 +542,7 @@ func (h *Handler) dispatchProfile(
 			errors.Is(err, security.ErrUnauthenticated):
 			http.Error(response, "site forbidden", http.StatusForbidden)
 		default:
+			httptransport.RecordError(request.Context(), err)
 			http.Error(
 				response,
 				"site runtime failed",
@@ -615,6 +625,7 @@ func (h *Handler) serveFile(
 			errors.Is(err, corefile.ErrUnauthorized):
 			http.NotFound(response, request)
 		default:
+			httptransport.RecordError(request.Context(), err)
 			http.Error(
 				response,
 				"file delivery failed",

@@ -18,7 +18,7 @@ func (h *formsHTTP) uploadFieldFile(response http.ResponseWriter, request *http.
 	}
 	formID, err := pathID[FormID](request, "formID")
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	limit := h.service.limits.MaxUploadFileSize
@@ -63,7 +63,7 @@ func (h *formsHTTP) uploadFieldFile(response http.ResponseWriter, request *http.
 	}
 	item, err := h.service.UploadFieldFile(request.Context(), actor, formID, target, header.Filename, io.LimitReader(content, limit+1))
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusCreated, map[string]any{

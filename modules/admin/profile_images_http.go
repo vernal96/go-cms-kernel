@@ -19,7 +19,7 @@ func registerProfileImageRoutes(r chi.Router, h *managementHTTP) {
 }
 func (h *managementHTTP) profileImageState(w http.ResponseWriter, r *http.Request) {
 	state, err := h.management.ProfileImageState(r.Context(), actor(r))
-	writeResult(w, http.StatusOK, management.ImageDTO(state, h.management.images.Limits()), err)
+	writeResult(r.Context(), w, http.StatusOK, management.ImageDTO(state, h.management.images.Limits()), err)
 }
 func (h *managementHTTP) profileImageEdit(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -30,7 +30,7 @@ func (h *managementHTTP) profileImageEdit(w http.ResponseWriter, r *http.Request
 		return
 	}
 	state, err := h.management.EditProfileImage(r.Context(), actor(r), body.ExpectedUpdatedAt, body.Transform)
-	writeResult(w, http.StatusOK, management.ImageDTO(state, h.management.images.Limits()), err)
+	writeResult(r.Context(), w, http.StatusOK, management.ImageDTO(state, h.management.images.Limits()), err)
 }
 func (h *managementHTTP) profileImageRestore(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -40,12 +40,12 @@ func (h *managementHTTP) profileImageRestore(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	state, err := h.management.RestoreProfileImage(r.Context(), actor(r), body.ExpectedUpdatedAt)
-	writeResult(w, http.StatusOK, management.ImageDTO(state, h.management.images.Limits()), err)
+	writeResult(r.Context(), w, http.StatusOK, management.ImageDTO(state, h.management.images.Limits()), err)
 }
 func (h *managementHTTP) profileImageSource(w http.ResponseWriter, r *http.Request) {
 	opened, err := h.management.OpenProfileImageSource(r.Context(), actor(r))
 	if err != nil {
-		writeManagementError(w, err)
+		writeManagementError(r.Context(), w, err)
 		return
 	}
 	defer opened.Body.Close()
@@ -57,7 +57,7 @@ func (h *managementHTTP) profileImageSource(w http.ResponseWriter, r *http.Reque
 func (h *managementHTTP) profileThumbnail(w http.ResponseWriter, r *http.Request) {
 	result, err := h.management.ProfileThumbnail(r.Context(), actor(r))
 	if err != nil {
-		writeManagementError(w, err)
+		writeManagementError(r.Context(), w, err)
 		return
 	}
 	w.Header().Set("Content-Type", result.MIMEType)

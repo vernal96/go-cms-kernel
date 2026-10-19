@@ -46,7 +46,7 @@ func (h *contentHTTP) librarySources(response http.ResponseWriter, request *http
 	}
 	m := h.resources
 	if err := m.requireSite(request.Context(), actor(request), target, ResourceReadPermission, SiteAccessEdit); err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	selected, err := optionalPositiveID(request.URL.Query().Get("selected_id"))
@@ -63,7 +63,7 @@ func (h *contentHTTP) librarySources(response http.ResponseWriter, request *http
 	if selected > 0 {
 		item, err := m.resourceRepo.ByID(request.Context(), resource.ID(selected))
 		if err != nil {
-			writeManagementError(response, err)
+			writeManagementError(request.Context(), response, err)
 			return
 		}
 		items = []resource.Resource{item}
@@ -74,19 +74,19 @@ func (h *contentHTTP) librarySources(response http.ResponseWriter, request *http
 		return
 	}
 	if err := m.requireSite(request.Context(), actor(request), site.ID(sourceSite), ResourceReadPermission, SiteAccessView); err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	if selected == 0 {
 		items, err = m.resourceRepo.ListBySite(request.Context(), site.ID(sourceSite))
 		if err != nil {
-			writeManagementError(response, err)
+			writeManagementError(request.Context(), response, err)
 			return
 		}
 	}
 	runtime, exists := m.sites.RuntimeByID(site.ID(sourceSite))
 	if !exists {
-		writeManagementError(response, site.ErrNotFound)
+		writeManagementError(request.Context(), response, site.ErrNotFound)
 		return
 	}
 	search := strings.ToLower(strings.TrimSpace(request.URL.Query().Get("search")))
@@ -106,13 +106,13 @@ func (h *contentHTTP) librarySources(response http.ResponseWriter, request *http
 	}
 	page, perPage, err = normalizePagination(page, perPage)
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	total := len(options)
 	start := min((page-1)*perPage, total)
 	end := min(start+perPage, total)
-	writeResult(response, http.StatusOK, struct {
+	writeResult(request.Context(), response, http.StatusOK, struct {
 		Items      []LibrarySource `json:"items"`
 		Pagination Pagination      `json:"pagination"`
 	}{options[start:end], Pagination{Page: page, PerPage: perPage, Total: total}}, nil)

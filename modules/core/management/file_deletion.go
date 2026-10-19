@@ -53,7 +53,7 @@ func (h *contentHTTP) deleteMediaFile(w http.ResponseWriter, r *http.Request) {
 	}
 	service, err := h.fileDeletions(r, sid)
 	if err != nil {
-		writeManagementError(w, err)
+		writeManagementError(r.Context(), w, err)
 		return
 	}
 	result, err := service.Delete(r.Context(), actor(r), media.DeleteFileInput{SiteID: int64(sid), MediaID: id, ExpectedFileID: body.ExpectedFileID, ExpectedUpdatedAt: body.ExpectedUpdatedAt})
@@ -61,7 +61,7 @@ func (h *contentHTTP) deleteMediaFile(w http.ResponseWriter, r *http.Request) {
 	if result.Status == "pending" {
 		status = http.StatusAccepted
 	}
-	writeResult(w, status, result, err)
+	writeResult(r.Context(), w, status, result, err)
 }
 
 func (h *contentHTTP) mediaFileDeletionStatus(w http.ResponseWriter, r *http.Request) {
@@ -71,9 +71,9 @@ func (h *contentHTTP) mediaFileDeletionStatus(w http.ResponseWriter, r *http.Req
 	}
 	service, err := h.fileDeletions(r, sid)
 	if err != nil {
-		writeManagementError(w, err)
+		writeManagementError(r.Context(), w, err)
 		return
 	}
 	result, err := service.Status(r.Context(), actor(r), int64(sid), chi.URLParam(r, "operationID"))
-	writeResult(w, http.StatusOK, result, err)
+	writeResult(r.Context(), w, http.StatusOK, result, err)
 }

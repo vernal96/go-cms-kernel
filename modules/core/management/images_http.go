@@ -52,7 +52,7 @@ func (h *filesHTTP) mediaDetails(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		result = MediaDetailsDTO{ID: resolved.Media.ID, UpdatedAt: resolved.Media.UpdatedAt, File: fileItemDTO(resolved.File), EditableImage: image.EditableMIME(resolved.File.MIMEType)}
 	}
-	writeResult(w, http.StatusOK, result, err)
+	writeResult(r.Context(), w, http.StatusOK, result, err)
 }
 func (h *filesHTTP) thumbnail(w http.ResponseWriter, r *http.Request) {
 	id, ok := filesystemFileID(w, r)
@@ -78,12 +78,12 @@ func (h *filesHTTP) thumbnail(w http.ResponseWriter, r *http.Request) {
 	}
 	service, err := h.files.thumbnailService(r.URL.Query().Get("profile"))
 	if err != nil {
-		writeManagementError(w, err)
+		writeManagementError(r.Context(), w, err)
 		return
 	}
 	result, err := service.Get(r.Context(), actor(r), id, spec)
 	if err != nil {
-		writeManagementError(w, err)
+		writeManagementError(r.Context(), w, err)
 		return
 	}
 	etag := fmt.Sprintf(`"%x"`, sha256.Sum256(result.Bytes))
@@ -112,7 +112,7 @@ func (h *filesHTTP) imageState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := h.files.images.State(r.Context(), actor(r), id)
-	writeResult(w, http.StatusOK, ImageDTO(result, h.files.images.Limits()), err)
+	writeResult(r.Context(), w, http.StatusOK, ImageDTO(result, h.files.images.Limits()), err)
 }
 
 type imageEditRequest struct {
@@ -130,7 +130,7 @@ func (h *filesHTTP) editImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := h.files.images.Edit(r.Context(), actor(r), id, body.ExpectedUpdatedAt, body.Transform)
-	writeResult(w, http.StatusOK, ImageDTO(result, h.files.images.Limits()), err)
+	writeResult(r.Context(), w, http.StatusOK, ImageDTO(result, h.files.images.Limits()), err)
 }
 func (h *filesHTTP) restoreImage(w http.ResponseWriter, r *http.Request) {
 	id, ok := imageID(w, r)
@@ -144,7 +144,7 @@ func (h *filesHTTP) restoreImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := h.files.images.Restore(r.Context(), actor(r), id, body.ExpectedUpdatedAt)
-	writeResult(w, http.StatusOK, ImageDTO(result, h.files.images.Limits()), err)
+	writeResult(r.Context(), w, http.StatusOK, ImageDTO(result, h.files.images.Limits()), err)
 }
 func (h *filesHTTP) createMedia(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -154,7 +154,7 @@ func (h *filesHTTP) createMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := h.files.images.Create(r.Context(), actor(r), body.FileID)
-	writeResult(w, http.StatusCreated, struct {
+	writeResult(r.Context(), w, http.StatusCreated, struct {
 		ID media.ID `json:"id"`
 	}{result.ID}, err)
 }

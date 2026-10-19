@@ -52,28 +52,28 @@ func (h *mailHTTP) uploadVariableFile(response http.ResponseWriter, request *htt
 			httptransport.WriteJSONError(response, http.StatusRequestEntityTooLarge, "file_too_large", "uploaded file is too large")
 			return
 		}
-		writeMailError(response, fmt.Errorf("%w: multipart request is invalid", ErrInvalid))
+		writeMailError(request.Context(), response, fmt.Errorf("%w: multipart request is invalid", ErrInvalid))
 		return
 	}
 	defer request.MultipartForm.RemoveAll()
 	if len(request.MultipartForm.Value) != 1 || len(request.MultipartForm.Value["target"]) != 1 || len(request.MultipartForm.File) != 1 || len(request.MultipartForm.File["file"]) != 1 {
-		writeMailError(response, fmt.Errorf("%w: target and file are required", ErrInvalid))
+		writeMailError(request.Context(), response, fmt.Errorf("%w: target and file are required", ErrInvalid))
 		return
 	}
 	var target variableFileUploadTarget
 	decoder := json.NewDecoder(bytes.NewBufferString(request.FormValue("target")))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&target); err != nil {
-		writeMailError(response, fmt.Errorf("%w: upload target is invalid", ErrInvalid))
+		writeMailError(request.Context(), response, fmt.Errorf("%w: upload target is invalid", ErrInvalid))
 		return
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		writeMailError(response, fmt.Errorf("%w: upload target contains trailing data", ErrInvalid))
+		writeMailError(request.Context(), response, fmt.Errorf("%w: upload target contains trailing data", ErrInvalid))
 		return
 	}
 	uploaded, header, err := request.FormFile("file")
 	if err != nil {
-		writeMailError(response, fmt.Errorf("%w: file is required", ErrInvalid))
+		writeMailError(request.Context(), response, fmt.Errorf("%w: file is required", ErrInvalid))
 		return
 	}
 	defer uploaded.Close()
@@ -83,12 +83,12 @@ func (h *mailHTTP) uploadVariableFile(response http.ResponseWriter, request *htt
 	}
 	id, err := pathID[TemplateID](request, "templateID")
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	item, err := service.UploadVariableFile(request.Context(), actor, id, target.FieldPath, header.Filename, io.LimitReader(uploaded, maxUploadSize+1))
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	mimeType, size := item.MIMEType, item.Size
@@ -116,17 +116,17 @@ func (h *mailHTTP) uploadStaticAttachmentFile(response http.ResponseWriter, requ
 			httptransport.WriteJSONError(response, http.StatusRequestEntityTooLarge, "file_too_large", "uploaded file is too large")
 			return
 		}
-		writeMailError(response, fmt.Errorf("%w: multipart request is invalid", ErrInvalid))
+		writeMailError(request.Context(), response, fmt.Errorf("%w: multipart request is invalid", ErrInvalid))
 		return
 	}
 	defer request.MultipartForm.RemoveAll()
 	if len(request.MultipartForm.Value) != 0 || len(request.MultipartForm.File) != 1 || len(request.MultipartForm.File["file"]) != 1 {
-		writeMailError(response, fmt.Errorf("%w: only one file is accepted", ErrInvalid))
+		writeMailError(request.Context(), response, fmt.Errorf("%w: only one file is accepted", ErrInvalid))
 		return
 	}
 	uploaded, header, err := request.FormFile("file")
 	if err != nil {
-		writeMailError(response, fmt.Errorf("%w: file is required", ErrInvalid))
+		writeMailError(request.Context(), response, fmt.Errorf("%w: file is required", ErrInvalid))
 		return
 	}
 	defer uploaded.Close()
@@ -136,7 +136,7 @@ func (h *mailHTTP) uploadStaticAttachmentFile(response http.ResponseWriter, requ
 	}
 	item, err := service.UploadStaticAttachmentFile(request.Context(), actor, header.Filename, io.LimitReader(uploaded, maxUploadSize+1))
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	mimeType, size := item.MIMEType, item.Size

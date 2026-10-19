@@ -65,7 +65,7 @@ func (h *contentHTTP) listLibraryItems(response http.ResponseWriter, request *ht
 		Cursor: request.URL.Query().Get("cursor"), Limit: limit, Search: request.URL.Query().Get("search"),
 		Filters: filters, Sort: sorts,
 	})
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func parseLibraryItemSemanticQuery(request *http.Request) ([]resource.FilterCondition, []resource.Sort, error) {
@@ -141,7 +141,7 @@ func (h *contentHTTP) createLibraryItem(response http.ResponseWriter, request *h
 		return
 	}
 	result, err := h.resources.CreateLibraryItem(request.Context(), actor(request), siteID, libraryID, LibraryItemCreateInput{ImageMediaID: payload.ImageMediaID, Template: payload.Template, Title: payload.Title, Slug: payload.Slug, Annotation: payload.Annotation, Content: payload.Content, IsPublic: payload.IsPublic, IsSearchable: payload.IsSearchable, PublishedAt: payload.PublishedAt, UnpublishedAt: payload.UnpublishedAt, Fields: payload.Fields})
-	writeResult(response, http.StatusCreated, result, err)
+	writeResult(request.Context(), response, http.StatusCreated, result, err)
 }
 
 func (h *contentHTTP) getLibraryItem(response http.ResponseWriter, request *http.Request) {
@@ -150,7 +150,7 @@ func (h *contentHTTP) getLibraryItem(response http.ResponseWriter, request *http
 		return
 	}
 	result, err := h.resources.LibraryItem(request.Context(), actor(request), siteID, itemID)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) updateLibraryItem(response http.ResponseWriter, request *http.Request) {
@@ -171,7 +171,7 @@ func (h *contentHTTP) updateLibraryItem(response http.ResponseWriter, request *h
 		return
 	}
 	result, err := h.resources.UpdateLibraryItem(request.Context(), actor(request), siteID, itemID, LibraryItemUpdateInput{ExpectedVersion: payload.ExpectedVersion, LibraryItemCreateInput: LibraryItemCreateInput{ImageMediaID: payload.ImageMediaID, Template: payload.Template, Title: payload.Title, Slug: payload.Slug, Annotation: payload.Annotation, Content: payload.Content, PublishedAt: payload.PublishedAt, UnpublishedAt: payload.UnpublishedAt, Fields: payload.Fields}, IsPublic: payload.IsPublic, IsSearchable: payload.IsSearchable})
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) moveLibraryItem(response http.ResponseWriter, request *http.Request) {
@@ -191,7 +191,7 @@ func (h *contentHTTP) moveLibraryItem(response http.ResponseWriter, request *htt
 		return
 	}
 	result, err := h.resources.MoveLibraryItem(request.Context(), actor(request), siteID, itemID, payload.LibraryID, payload.ExpectedVersion)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) deleteLibraryItem(response http.ResponseWriter, request *http.Request) {
@@ -218,7 +218,7 @@ func (h *contentHTTP) changeLibraryItemDeleted(response http.ResponseWriter, req
 		err = h.resources.DeleteLibraryItem(request.Context(), actor(request), siteID, itemID, permanent)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)

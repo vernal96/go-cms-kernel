@@ -35,7 +35,7 @@ func (h *managementHTTP) listUsers(response http.ResponseWriter, request *http.R
 		return
 	}
 	result, err := h.management.ListUsers(request.Context(), actor(request), request.URL.Query().Get("search"), user.ListStatus(request.URL.Query().Get("status")), page, perPage)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 type userRequest struct {
@@ -59,7 +59,7 @@ func (h *managementHTTP) createUser(response http.ResponseWriter, request *http.
 		return
 	}
 	result, err := h.management.CreateUser(request.Context(), actor(request), UserCreateInput{Login: payload.Login, Email: payload.Email, Password: payload.Password, Name: payload.Name, LastName: payload.LastName, MiddleName: payload.MiddleName, Phone: payload.Phone, GroupIDs: payload.GroupIDs})
-	writeResult(response, http.StatusCreated, result, err)
+	writeResult(request.Context(), response, http.StatusCreated, result, err)
 }
 
 func (h *managementHTTP) getUser(response http.ResponseWriter, request *http.Request) {
@@ -68,7 +68,7 @@ func (h *managementHTTP) getUser(response http.ResponseWriter, request *http.Req
 		return
 	}
 	result, err := h.management.User(request.Context(), actor(request), id)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *managementHTTP) updateUser(response http.ResponseWriter, request *http.Request) {
@@ -81,7 +81,7 @@ func (h *managementHTTP) updateUser(response http.ResponseWriter, request *http.
 		return
 	}
 	result, err := h.management.UpdateUser(request.Context(), actor(request), id, UserUpdateInput{Login: payload.Login, Email: payload.Email, Name: payload.Name, LastName: payload.LastName, MiddleName: payload.MiddleName, Phone: payload.Phone})
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *managementHTTP) changeUserPassword(response http.ResponseWriter, request *http.Request) {
@@ -96,7 +96,7 @@ func (h *managementHTTP) changeUserPassword(response http.ResponseWriter, reques
 		return
 	}
 	if err := h.management.ChangeUserPassword(request.Context(), actor(request), id, payload.Password); err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -108,7 +108,7 @@ func (h *managementHTTP) userGroups(response http.ResponseWriter, request *http.
 		return
 	}
 	result, err := h.management.UserGroups(request.Context(), actor(request), id)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *managementHTTP) replaceUserGroups(response http.ResponseWriter, request *http.Request) {
@@ -123,7 +123,7 @@ func (h *managementHTTP) replaceUserGroups(response http.ResponseWriter, request
 		return
 	}
 	if err := h.management.ReplaceUserGroups(request.Context(), actor(request), id, payload.GroupIDs); err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -135,7 +135,7 @@ func (h *managementHTTP) blockUser(response http.ResponseWriter, request *http.R
 		return
 	}
 	if err := h.management.BlockUser(request.Context(), actor(request), id); err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -147,7 +147,7 @@ func (h *managementHTTP) unblockUser(response http.ResponseWriter, request *http
 		return
 	}
 	if err := h.management.UnblockUser(request.Context(), actor(request), id); err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -159,7 +159,7 @@ func (h *managementHTTP) listGroups(response http.ResponseWriter, request *http.
 		return
 	}
 	result, err := h.management.ListGroups(request.Context(), actor(request), request.URL.Query().Get("search"), page, perPage)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *managementHTTP) listGroupOptions(response http.ResponseWriter, request *http.Request) {
@@ -168,7 +168,7 @@ func (h *managementHTTP) listGroupOptions(response http.ResponseWriter, request 
 		return
 	}
 	result, err := h.management.ListGroupOptions(request.Context(), actor(request), request.URL.Query().Get("search"), page, perPage)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 type groupRequest struct {
@@ -188,7 +188,7 @@ func (h *managementHTTP) createGroup(response http.ResponseWriter, request *http
 		return
 	}
 	result, err := h.management.CreateGroup(request.Context(), actor(request), GroupCreateInput{Code: payload.Code, Name: payload.Name, PermissionCodes: payload.PermissionCodes, SiteAccess: payload.SiteAccess})
-	writeResult(response, http.StatusCreated, result, err)
+	writeResult(request.Context(), response, http.StatusCreated, result, err)
 }
 
 func (h *managementHTTP) getGroup(response http.ResponseWriter, request *http.Request) {
@@ -197,7 +197,7 @@ func (h *managementHTTP) getGroup(response http.ResponseWriter, request *http.Re
 		return
 	}
 	result, err := h.management.Group(request.Context(), actor(request), id)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *managementHTTP) updateGroup(response http.ResponseWriter, request *http.Request) {
@@ -210,7 +210,7 @@ func (h *managementHTTP) updateGroup(response http.ResponseWriter, request *http
 		return
 	}
 	result, err := h.management.UpdateGroup(request.Context(), actor(request), id, GroupUpdateInput{Name: payload.Name, PermissionCodes: payload.PermissionCodes, SiteAccess: payload.SiteAccess})
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *managementHTTP) deleteGroup(response http.ResponseWriter, request *http.Request) {
@@ -219,7 +219,7 @@ func (h *managementHTTP) deleteGroup(response http.ResponseWriter, request *http
 		return
 	}
 	if err := h.management.DeleteGroup(request.Context(), actor(request), id); err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -227,7 +227,7 @@ func (h *managementHTTP) deleteGroup(response http.ResponseWriter, request *http
 
 func (h *managementHTTP) permissionCatalog(response http.ResponseWriter, request *http.Request) {
 	result, err := h.management.PermissionCatalog(request.Context(), actor(request))
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func adminUserID(response http.ResponseWriter, request *http.Request) (user.ID, bool) {

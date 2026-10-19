@@ -71,14 +71,14 @@ func registerContentRoutes(router chi.Router, sites *Sites, resources *Resources
 
 func (h *contentHTTP) administrationRevisionCount(response http.ResponseWriter, request *http.Request) {
 	count, err := h.resources.AdministrationRevisionCount(request.Context(), actor(request))
-	writeResult(response, http.StatusOK, struct {
+	writeResult(request.Context(), response, http.StatusOK, struct {
 		Count int64 `json:"count"`
 	}{Count: count}, err)
 }
 
 func (h *contentHTTP) administrationPurgeRevisions(response http.ResponseWriter, request *http.Request) {
 	count, err := h.resources.AdministrationPurgeRevisions(request.Context(), actor(request))
-	writeResult(response, http.StatusOK, struct {
+	writeResult(request.Context(), response, http.StatusOK, struct {
 		Count int64 `json:"count"`
 	}{Count: count}, err)
 }
@@ -102,7 +102,7 @@ func (h *contentHTTP) listResourceRevisions(response http.ResponseWriter, reques
 		return
 	}
 	result, err := h.resources.Revisions(request.Context(), actor(request), siteID, resourceID, page, perPage)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) getResourceRevision(response http.ResponseWriter, request *http.Request) {
@@ -115,7 +115,7 @@ func (h *contentHTTP) getResourceRevision(response http.ResponseWriter, request 
 		return
 	}
 	result, err := h.resources.Revision(request.Context(), actor(request), siteID, resourceID, version)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) restoreResourceRevision(response http.ResponseWriter, request *http.Request) {
@@ -138,7 +138,7 @@ func (h *contentHTTP) restoreResourceRevision(response http.ResponseWriter, requ
 		return
 	}
 	result, err := h.resources.RestoreRevision(request.Context(), actor(request), siteID, resourceID, version, payload.ExpectedVersion)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) purgeResourceRevisions(response http.ResponseWriter, request *http.Request) {
@@ -147,7 +147,7 @@ func (h *contentHTTP) purgeResourceRevisions(response http.ResponseWriter, reque
 		return
 	}
 	count, err := h.resources.PurgeRevisions(request.Context(), actor(request), siteID, resourceID)
-	writeResult(response, http.StatusOK, struct {
+	writeResult(request.Context(), response, http.StatusOK, struct {
 		Count int64 `json:"count"`
 	}{Count: count}, err)
 }
@@ -160,7 +160,7 @@ func (h *contentHTTP) listSites(response http.ResponseWriter, request *http.Requ
 	result, err := h.sites.ListSites(
 		request.Context(), actor(request), request.URL.Query().Get("search"), page, perPage,
 	)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) menu(response http.ResponseWriter, request *http.Request) {
@@ -169,7 +169,7 @@ func (h *contentHTTP) menu(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 	result, err := h.resources.Menu(request.Context(), actor(request), id)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) listSiteOptions(response http.ResponseWriter, request *http.Request) {
@@ -189,7 +189,7 @@ func (h *contentHTTP) listSiteOptions(response http.ResponseWriter, request *htt
 	result, err := h.sites.ListSiteOptions(
 		request.Context(), actor(request), request.URL.Query().Get("search"), page, perPage, exclude...,
 	)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 type createSiteRequest struct {
@@ -217,7 +217,7 @@ func (h *contentHTTP) createSite(response http.ResponseWriter, request *http.Req
 		Settings:    payload.Settings,
 		IsPublic:    payload.IsPublic,
 	})
-	writeResult(response, http.StatusCreated, result, err)
+	writeResult(request.Context(), response, http.StatusCreated, result, err)
 }
 
 func (h *contentHTTP) getSite(response http.ResponseWriter, request *http.Request) {
@@ -226,7 +226,7 @@ func (h *contentHTTP) getSite(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	result, err := h.sites.Site(request.Context(), actor(request), id)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 type updateSiteRequest struct {
@@ -263,7 +263,7 @@ func (h *contentHTTP) updateSite(response http.ResponseWriter, request *http.Req
 		Settings:    payload.Settings,
 		IsPublic:    *payload.IsPublic,
 	})
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *contentHTTP) deleteSite(response http.ResponseWriter, request *http.Request) {
@@ -272,7 +272,7 @@ func (h *contentHTTP) deleteSite(response http.ResponseWriter, request *http.Req
 		return
 	}
 	if err := h.sites.DeleteSite(request.Context(), actor(request), id); err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -280,5 +280,5 @@ func (h *contentHTTP) deleteSite(response http.ResponseWriter, request *http.Req
 
 func (h *contentHTTP) listProfiles(response http.ResponseWriter, request *http.Request) {
 	result, err := h.sites.Profiles(request.Context(), actor(request))
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }

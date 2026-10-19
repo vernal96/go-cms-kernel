@@ -162,24 +162,24 @@ func TestPublicAndManagementErrorsUseSafeDistinctMappings(t *testing.T) {
 	}
 	for _, testCase := range publicCases {
 		response := httptest.NewRecorder()
-		writePublicError(response, testCase.err)
+		writePublicError(context.Background(), response, testCase.err)
 		if response.Code != testCase.status || !strings.Contains(response.Body.String(), testCase.code) || strings.Contains(response.Body.String(), "/private/path") {
 			t.Fatalf("public error %v = %d %s", testCase.err, response.Code, response.Body.String())
 		}
 	}
 	response := httptest.NewRecorder()
-	writeManagementError(response, security.ErrForbidden)
+	writeManagementError(context.Background(), response, security.ErrForbidden)
 	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "forbidden") {
 		t.Fatalf("management forbidden = %d %s", response.Code, response.Body.String())
 	}
 	response = httptest.NewRecorder()
-	writePublicError(response, FieldValidationErrors{"email": {"email"}})
+	writePublicError(context.Background(), response, FieldValidationErrors{"email": {"email"}})
 	var validation map[string]any
 	if json.Unmarshal(response.Body.Bytes(), &validation) != nil || response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("validation response = %d %s", response.Code, response.Body.String())
 	}
 	response = httptest.NewRecorder()
-	writePublicError(response, field.ValidationErrors{{Key: "items[2].title", Code: "max_length", Params: map[string]any{"value": 100}}})
+	writePublicError(context.Background(), response, field.ValidationErrors{{Key: "items[2].title", Code: "max_length", Params: map[string]any{"value": 100}}})
 	var structured struct {
 		Fields map[string][]field.ValidationError `json:"fields"`
 	}

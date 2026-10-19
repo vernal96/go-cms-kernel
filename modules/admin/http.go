@@ -100,6 +100,7 @@ func (r *Runtime) requireAccess(next http.Handler) http.Handler {
 				"admin access is forbidden",
 			)
 		default:
+			httptransport.RecordError(request.Context(), err)
 			httptransport.WriteJSONError(
 				response,
 				http.StatusInternalServerError,
@@ -132,6 +133,7 @@ func (r *Runtime) serveSession(
 			writeUnauthorized(response)
 			return
 		}
+		httptransport.RecordError(request.Context(), err)
 		httptransport.WriteJSONError(
 			response,
 			http.StatusInternalServerError,
@@ -150,6 +152,7 @@ func (r *Runtime) serveSession(
 			writeUnauthorized(response)
 			return
 		}
+		httptransport.RecordError(request.Context(), err)
 		httptransport.WriteJSONError(response, http.StatusInternalServerError, "internal_error", "permission lookup failed")
 		return
 	}

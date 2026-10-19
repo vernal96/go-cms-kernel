@@ -58,12 +58,12 @@ func (h *publicFormsHTTP) results(response http.ResponseWriter, request *http.Re
 	for key, target := range map[string]*int{"page": &query.Page, "per_page": &query.PerPage} {
 		if values, exists := request.URL.Query()[key]; exists {
 			if len(values) != 1 {
-				writePublicError(response, ErrInvalid)
+				writePublicError(request.Context(), response, ErrInvalid)
 				return
 			}
 			value, err := strconv.Atoi(values[0])
 			if err != nil {
-				writePublicError(response, ErrInvalid)
+				writePublicError(request.Context(), response, ErrInvalid)
 				return
 			}
 			*target = value
@@ -71,7 +71,7 @@ func (h *publicFormsHTTP) results(response http.ResponseWriter, request *http.Re
 	}
 	result, err := h.service.PublicResults(request.Context(), chi.URLParam(request, "code"), query)
 	if err != nil {
-		writePublicError(response, err)
+		writePublicError(request.Context(), response, err)
 		return
 	}
 	response.Header().Set("Cache-Control", "no-store")

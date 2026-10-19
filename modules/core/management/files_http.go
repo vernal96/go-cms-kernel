@@ -51,7 +51,7 @@ func (h *filesHTTP) resolveFilesystemFolder(response http.ResponseWriter, reques
 		return
 	}
 	result, err := h.files.ResolveFilesystemFolder(request.Context(), actor(request), storage, folderPath)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 type filesystemEnsureFolderRequest struct {
@@ -69,12 +69,12 @@ func (h *filesHTTP) ensureFilesystemFolder(response http.ResponseWriter, request
 		return
 	}
 	result, err := h.files.EnsureFilesystemFolder(request.Context(), actor(request), payload.Disk, payload.Path)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *filesHTTP) filesystemDisks(response http.ResponseWriter, request *http.Request) {
 	result, err := h.files.FilesystemDisks(request.Context(), actor(request))
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *filesHTTP) filesystemItems(response http.ResponseWriter, request *http.Request) {
@@ -88,7 +88,7 @@ func (h *filesHTTP) filesystemItems(response http.ResponseWriter, request *http.
 		return
 	}
 	result, err := h.files.BrowseFilesystem(request.Context(), actor(request), storage, folderID)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 type filesystemFolderRequest struct {
@@ -105,7 +105,7 @@ func (h *filesHTTP) createFilesystemFolder(response http.ResponseWriter, request
 	result, err := h.files.CreateFilesystemFolder(request.Context(), actor(request), file.CreateFolderInput{
 		Storage: payload.Disk, ParentID: payload.ParentID, Name: payload.Name,
 	})
-	writeResult(response, http.StatusCreated, result, err)
+	writeResult(request.Context(), response, http.StatusCreated, result, err)
 }
 
 type filesystemRenameRequest struct {
@@ -122,7 +122,7 @@ func (h *filesHTTP) renameFilesystemFolder(response http.ResponseWriter, request
 		return
 	}
 	result, err := h.files.RenameFilesystemFolder(request.Context(), actor(request), file.RenameFolderInput{ID: id, Name: payload.Name})
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *filesHTTP) uploadFilesystemFile(response http.ResponseWriter, request *http.Request) {
@@ -163,7 +163,7 @@ func (h *filesHTTP) uploadFilesystemFile(response http.ResponseWriter, request *
 		Storage: storage, FolderID: folderID, Name: header.Filename,
 		Content: io.LimitReader(uploaded, h.maxUploadSize+1),
 	})
-	writeResult(response, http.StatusCreated, result, err)
+	writeResult(request.Context(), response, http.StatusCreated, result, err)
 }
 
 func (h *filesHTTP) getFilesystemFile(response http.ResponseWriter, request *http.Request) {
@@ -172,7 +172,7 @@ func (h *filesHTTP) getFilesystemFile(response http.ResponseWriter, request *htt
 		return
 	}
 	result, err := h.files.FilesystemFile(request.Context(), actor(request), id)
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 func (h *filesHTTP) renameFilesystemFile(response http.ResponseWriter, request *http.Request) {
@@ -185,7 +185,7 @@ func (h *filesHTTP) renameFilesystemFile(response http.ResponseWriter, request *
 		return
 	}
 	result, err := h.files.RenameFilesystemFile(request.Context(), actor(request), file.RenameFileInput{ID: id, Name: payload.Name})
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
 type filesystemItemRequest struct {
@@ -207,7 +207,7 @@ func (h *filesHTTP) moveFilesystemItems(response http.ResponseWriter, request *h
 	if err := h.files.MoveFilesystemItems(request.Context(), actor(request), file.MoveItemsInput{
 		Storage: payload.Disk, FolderID: payload.FolderID, Items: filesystemReferences(payload.Items),
 	}); err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -235,7 +235,7 @@ func (h *filesHTTP) deleteFilesystemItems(response http.ResponseWriter, request 
 		return
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -256,7 +256,7 @@ func (h *filesHTTP) serveFilesystemContent(response http.ResponseWriter, request
 	}
 	opened, err := h.files.OpenFilesystemFile(request.Context(), actor(request), id)
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	defer opened.Body.Close()
@@ -312,5 +312,5 @@ func (h *filesHTTP) deleteImpact(response http.ResponseWriter, request *http.Req
 		return
 	}
 	result, err := h.files.DeleteImpact(request.Context(), actor(request), filesystemReferences(payload.Items))
-	writeResult(response, http.StatusOK, result, err)
+	writeResult(request.Context(), response, http.StatusOK, result, err)
 }

@@ -1,6 +1,7 @@
 package mail
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -89,7 +90,7 @@ func (h *mailHTTP) validatorTypes(response http.ResponseWriter, request *http.Re
 	}
 	if err := service.authorizer.Check(request.Context(), actor, TemplateReadPermission); err != nil {
 		if createErr := service.authorizer.Check(request.Context(), actor, TemplateCreatePermission); createErr != nil {
-			writeMailError(response, err)
+			writeMailError(request.Context(), response, err)
 			return
 		}
 	}
@@ -105,19 +106,19 @@ func (h *mailHTTP) setTemplateEnabled(response http.ResponseWriter, request *htt
 	}
 	id, err := pathID[TemplateID](request, "templateID")
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	var payload struct {
 		Enabled bool `json:"enabled"`
 	}
 	if err := decodeJSONRequest(request, &payload); err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	item, err := service.SetTemplateEnabled(request.Context(), actor, id, payload.Enabled)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, struct {
@@ -136,19 +137,19 @@ func (h *mailHTTP) listTemplates(response http.ResponseWriter, request *http.Req
 	}
 	query, err := pageQuery(request)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	page, err := service.ListTemplates(request.Context(), actor, query)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	items := make([]templateResponse, len(page.Items))
 	for index, item := range page.Items {
 		items[index], err = toTemplateResponse(item, service.StaticAttachmentMediaOptions())
 		if err != nil {
-			writeMailError(response, err)
+			writeMailError(request.Context(), response, err)
 			return
 		}
 	}
@@ -165,17 +166,17 @@ func (h *mailHTTP) getTemplate(response http.ResponseWriter, request *http.Reque
 	}
 	id, err := pathID[TemplateID](request, "templateID")
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	item, err := service.Template(request.Context(), actor, id)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	result, err := toTemplateResponse(item, service.StaticAttachmentMediaOptions())
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, result)
@@ -188,22 +189,22 @@ func (h *mailHTTP) createTemplate(response http.ResponseWriter, request *http.Re
 	}
 	payload, err := decodeTemplatePayload(request)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	item, err := payload.template()
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	created, err := service.CreateTemplate(request.Context(), actor, item)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	result, err := toTemplateResponse(created, service.StaticAttachmentMediaOptions())
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusCreated, result)
@@ -216,28 +217,28 @@ func (h *mailHTTP) updateTemplate(response http.ResponseWriter, request *http.Re
 	}
 	id, err := pathID[TemplateID](request, "templateID")
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	payload, err := decodeTemplatePayload(request)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	item, err := payload.template()
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	item.ID = id
 	updated, err := service.UpdateTemplate(request.Context(), actor, item)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	result, err := toTemplateResponse(updated, service.StaticAttachmentMediaOptions())
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, result)
@@ -253,7 +254,7 @@ func (h *mailHTTP) deleteTemplate(response http.ResponseWriter, request *http.Re
 		err = service.DeleteTemplate(request.Context(), actor, id)
 	}
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -271,12 +272,12 @@ func (h *mailHTTP) preview(response http.ResponseWriter, request *http.Request) 
 	}
 	var input renderRequest
 	if err := decodeJSONRequest(request, &input); err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	result, err := service.Preview(request.Context(), actor, input.TemplateID, input.Values)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, result)
@@ -289,12 +290,12 @@ func (h *mailHTTP) send(response http.ResponseWriter, request *http.Request) {
 	}
 	var input renderRequest
 	if err := decodeJSONRequest(request, &input); err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	result, err := service.QueueManual(request.Context(), actor, ManualSendInput{TemplateID: input.TemplateID, Values: input.Values})
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusAccepted, result)
@@ -307,19 +308,19 @@ func (h *mailHTTP) sendTemplates(response http.ResponseWriter, request *http.Req
 	}
 	query, err := pageQuery(request)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	page, err := service.SendTemplates(request.Context(), actor, query)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	items := make([]templateResponse, len(page.Items))
 	for index, item := range page.Items {
 		items[index], err = toTemplateResponse(item, service.StaticAttachmentMediaOptions())
 		if err != nil {
-			writeMailError(response, err)
+			writeMailError(request.Context(), response, err)
 			return
 		}
 	}
@@ -336,12 +337,12 @@ func (h *mailHTTP) listMessages(response http.ResponseWriter, request *http.Requ
 	}
 	query, err := messageQuery(request)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	page, err := service.ListMessages(request.Context(), actor, query)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, struct {
@@ -357,7 +358,7 @@ func (h *mailHTTP) siteVariables(response http.ResponseWriter, request *http.Req
 	}
 	items, err := service.SiteVariables(request.Context(), actor)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, struct {
@@ -375,12 +376,12 @@ func (h *mailHTTP) getMessage(response http.ResponseWriter, request *http.Reques
 	}
 	id, err := pathID[MessageID](request, "messageID")
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	result, err := service.Message(request.Context(), actor, id)
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, result)
@@ -396,7 +397,7 @@ func (h *mailHTTP) deleteMessage(response http.ResponseWriter, request *http.Req
 		err = service.DeleteMessage(request.Context(), actor, id)
 	}
 	if err != nil {
-		writeMailError(response, err)
+		writeMailError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -518,7 +519,7 @@ func writeJSON(response http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(response).Encode(value)
 }
 
-func writeMailError(response http.ResponseWriter, err error) {
+func writeMailError(ctx context.Context, response http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, security.ErrUnauthenticated):
 		response.Header().Set("WWW-Authenticate", "Bearer")
@@ -532,6 +533,7 @@ func writeMailError(response http.ResponseWriter, err error) {
 	case errors.Is(err, ErrInvalid), errors.Is(err, ErrTemplateDisabled), errors.Is(err, ErrNoRecipients), errors.Is(err, ErrSenderNotAllowed), errors.Is(err, media.ErrAlreadyAttached):
 		httptransport.WriteJSONError(response, http.StatusUnprocessableEntity, "validation_failed", err.Error())
 	default:
+		httptransport.RecordError(ctx, err)
 		httptransport.WriteJSONError(response, http.StatusInternalServerError, "internal_error", "mail operation failed")
 	}
 }

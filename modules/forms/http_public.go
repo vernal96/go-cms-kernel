@@ -40,12 +40,12 @@ type publicFormsHTTP struct{ service *Service }
 func (h *publicFormsHTTP) schema(response http.ResponseWriter, request *http.Request) {
 	detail, err := h.service.PublicForm(request.Context(), chi.URLParam(request, "code"))
 	if err != nil {
-		writePublicError(response, err)
+		writePublicError(request.Context(), response, err)
 		return
 	}
 	schema, err := h.service.publicSchema(request.Context(), detail)
 	if err != nil {
-		writePublicError(response, err)
+		writePublicError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, schema)
@@ -88,20 +88,20 @@ func (h *publicFormsHTTP) submit(response http.ResponseWriter, request *http.Req
 	}
 	if err != nil {
 		if errors.As(err, new(*http.MaxBytesError)) {
-			writePublicError(response, ErrRequestTooLarge)
+			writePublicError(request.Context(), response, ErrRequestTooLarge)
 		} else {
-			writePublicError(response, fmt.Errorf("%w: request payload is invalid", ErrInvalid))
+			writePublicError(request.Context(), response, fmt.Errorf("%w: request payload is invalid", ErrInvalid))
 		}
 		return
 	}
 	actor, exists := httptransport.ActorFromContext(request.Context())
 	if !exists {
-		writePublicError(response, errors.New("request actor is unavailable"))
+		writePublicError(request.Context(), response, errors.New("request actor is unavailable"))
 		return
 	}
 	_, err = h.service.Submit(ctx, actor, SubmitInput{FormCode: chi.URLParam(request, "code"), Values: values, MultipartValues: multipartInput, Uploads: uploads, UserAgent: request.UserAgent(), ClientAddress: clientAddress(request)})
 	if err != nil {
-		writePublicError(response, err)
+		writePublicError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, map[string]bool{"success": true})
@@ -151,7 +151,7 @@ func clientAddress(request *http.Request) string {
 	return value
 }
 
-func writePublicError(response http.ResponseWriter, err error) {
+func writePublicError(ctx context.Context, response http.ResponseWriter, err error) {
 	var fields FieldValidationErrors
 	var validators field.ValidationErrors
 	switch {
@@ -171,10 +171,12 @@ func writePublicError(response http.ResponseWriter, err error) {
 		response.Header().Set("Retry-After", "60")
 		httptransport.WriteJSONError(response, http.StatusTooManyRequests, "rate_limited", "too many submissions")
 	case errors.Is(err, ErrRuntimeDraining):
+		httptransport.RecordError(ctx, err)
 		httptransport.WriteJSONError(response, http.StatusServiceUnavailable, "unavailable", "form submission is temporarily unavailable")
 	case errors.Is(err, ErrInvalid), errors.Is(err, ErrValidation):
 		httptransport.WriteJSONError(response, http.StatusUnprocessableEntity, "validation_failed", "form submission is invalid")
 	default:
+		httptransport.RecordError(ctx, err)
 		httptransport.WriteJSONError(response, http.StatusInternalServerError, "internal_error", "form submission failed")
 	}
 }

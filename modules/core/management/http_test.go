@@ -1,6 +1,7 @@
 package management
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/httplog/v3"
 	"github.com/vernal96/go-cms-kernel"
 	"github.com/vernal96/go-cms-kernel/modules/core/media"
 	"github.com/vernal96/go-cms-kernel/modules/core/resource"
@@ -95,7 +97,9 @@ func TestManagementHTTPListSiteOptionsAndErrors(t *testing.T) {
 				},
 				repository: repository,
 			}
+			var logs bytes.Buffer
 			router := chi.NewRouter()
+			router.Use(httplog.RequestLogger(slog.New(slog.NewJSONHandler(&logs, nil)), &httplog.Options{Schema: httplog.SchemaOTEL}))
 			registerContentRoutes(router, management, nil)
 			request := httptest.NewRequest(http.MethodGet, test.url, nil)
 			request = request.WithContext(httptransport.WithActor(request.Context(), security.User(1)))
@@ -120,6 +124,20 @@ func TestManagementHTTPListSiteOptionsAndErrors(t *testing.T) {
 			if strings.Contains(response.Body.String(), "secret database detail") {
 				t.Fatalf("database error leaked: %s", response.Body.String())
 			}
+			var record map[string]any
+			decoder := json.NewDecoder(&logs)
+			if err := decoder.Decode(&record); err != nil {
+				t.Fatal(err)
+			}
+			if decoder.Decode(&map[string]any{}) != io.EOF {
+				t.Fatal("expected exactly one access record")
+			}
+			if test.repositoryError != nil && (!strings.Contains(record["error.message"].(string), test.repositoryError.Error()) || record["level"] != "ERROR") {
+				t.Fatalf("server error access record = %#v", record)
+			}
+			if test.wantStatus < 500 && record["error.message"] != nil {
+				t.Fatalf("unexpected server error detail = %#v", record)
+			}
 			if test.wantCode != "" {
 				var envelope struct {
 					Error struct {
@@ -140,7 +158,7 @@ func TestManagementHTTPListSiteOptionsAndErrors(t *testing.T) {
 func TestManagementHTTPWritesStructuredFieldErrors(t *testing.T) {
 	t.Parallel()
 	response := httptest.NewRecorder()
-	writeManagementError(response, ValidationError{
+	writeManagementError(context.Background(), response, ValidationError{
 		Message: "request data is invalid",
 		Fields:  []FieldValidationError{{Key: "page_title", Code: "required"}},
 	})
@@ -167,7 +185,7 @@ func TestManagementHTTPWritesStructuredFieldErrors(t *testing.T) {
 func TestManagementHTTPWritesRouteMaintenanceConflict(t *testing.T) {
 	t.Parallel()
 	response := httptest.NewRecorder()
-	writeManagementError(response, resource.ErrRouteMutationRequiresMaintenance)
+	writeManagementError(context.Background(), response, resource.ErrRouteMutationRequiresMaintenance)
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"route_mutation_requires_maintenance"`) {
 		t.Fatalf("response = %d, %s", response.Code, response.Body.String())
 	}
@@ -185,7 +203,7 @@ func TestManagementHTTPWritesStableSiteTransferConflicts(t *testing.T) {
 		{err: resource.ErrInvalidTree, code: "invalid_tree"},
 	} {
 		response := httptest.NewRecorder()
-		writeManagementError(response, test.err)
+		writeManagementError(context.Background(), response, test.err)
 		if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"`+test.code+`"`) {
 			t.Fatalf("%s response = %d, %s", test.code, response.Code, response.Body.String())
 		}
@@ -194,7 +212,7 @@ func TestManagementHTTPWritesStableSiteTransferConflicts(t *testing.T) {
 
 func TestManagementHTTPExplainsInvalidWidgetParams(t *testing.T) {
 	response := httptest.NewRecorder()
-	writeManagementError(response, validationError(errors.Join(
+	writeManagementError(context.Background(), response, validationError(errors.Join(
 		resource.ErrInvalid, widget.ErrInvalidParams,
 		errors.New("template field headline is unavailable"),
 	)))

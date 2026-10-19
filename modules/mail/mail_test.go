@@ -214,7 +214,7 @@ func TestRendererRejectsReusingMediaForMultipleStaticAttachmentTiles(t *testing.
 func TestMailHTTPMapsAlreadyAttachedMediaToValidationError(t *testing.T) {
 	t.Parallel()
 	response := httptest.NewRecorder()
-	writeMailError(response, media.ErrAlreadyAttached)
+	writeMailError(context.Background(), response, media.ErrAlreadyAttached)
 	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("duplicate Media status = %d, want %d", response.Code, http.StatusUnprocessableEntity)
 	}

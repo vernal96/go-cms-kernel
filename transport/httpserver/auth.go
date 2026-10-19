@@ -116,6 +116,7 @@ func (h *loginHandler) ServeHTTP(
 			writeUnauthorized(response, "invalid credentials")
 			return
 		}
+		httptransport.RecordError(request.Context(), err)
 		httptransport.WriteJSONError(
 			response,
 			http.StatusInternalServerError,
@@ -125,6 +126,7 @@ func (h *loginHandler) ServeHTTP(
 		return
 	}
 	if user.ID <= 0 {
+		httptransport.RecordError(request.Context(), errors.New("authenticated user ID is invalid"))
 		httptransport.WriteJSONError(
 			response,
 			http.StatusInternalServerError,
@@ -139,6 +141,7 @@ func (h *loginHandler) ServeHTTP(
 		security.AuthenticatedUser(user.ID, user.SessionVersion),
 	)
 	if err != nil {
+		httptransport.RecordError(request.Context(), err)
 		httptransport.WriteJSONError(
 			response,
 			http.StatusInternalServerError,
@@ -202,6 +205,7 @@ func optionalAuthentication(
 					writeUnauthorized(response, "invalid access token")
 					return
 				}
+				httptransport.RecordError(request.Context(), err)
 				httptransport.WriteJSONError(
 					response,
 					http.StatusInternalServerError,
@@ -282,6 +286,7 @@ func logoutHandler(tokens security.AccessTokens) http.HandlerFunc {
 		}
 		_, value, _ := strings.Cut(r.Header.Get("Authorization"), " ")
 		if err := revoker.RevokeAccessToken(r.Context(), value); err != nil {
+			httptransport.RecordError(r.Context(), err)
 			httptransport.WriteJSONError(w, 503, "unavailable", "session revocation failed")
 			return
 		}

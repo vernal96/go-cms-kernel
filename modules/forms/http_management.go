@@ -121,7 +121,7 @@ func (h *formsHTTP) listForms(response http.ResponseWriter, request *http.Reques
 		page, err = h.service.ListForms(request.Context(), actor, query)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, struct {
@@ -153,7 +153,7 @@ func (h *formsHTTP) createForm(response http.ResponseWriter, request *http.Reque
 		result, err = h.service.CreateForm(request.Context(), actor, payload.form())
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusCreated, result.Form)
@@ -170,7 +170,7 @@ func (h *formsHTTP) getForm(response http.ResponseWriter, request *http.Request)
 		result, err = h.service.FormDetail(request.Context(), actor, id)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, result.Form)
@@ -193,7 +193,7 @@ func (h *formsHTTP) updateForm(response http.ResponseWriter, request *http.Reque
 		result, err = h.service.UpdateForm(request.Context(), actor, item)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, result)
@@ -216,7 +216,7 @@ func (h *formsHTTP) setFormEnabled(response http.ResponseWriter, request *http.R
 		result, err = h.service.SetFormEnabled(request.Context(), actor, id, payload.Enabled)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, result)
@@ -239,14 +239,14 @@ func (h *formsHTTP) editor(response http.ResponseWriter, request *http.Request) 
 		detail, err = h.service.FormDetail(request.Context(), actor, id)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	fields := make([]fieldResponse, len(detail.Fields))
 	for index, item := range detail.Fields {
 		fields[index], err = toFieldResponse(item)
 		if err != nil {
-			writeManagementError(response, err)
+			writeManagementError(request.Context(), response, err)
 			return
 		}
 	}
@@ -298,12 +298,12 @@ func (h *formsHTTP) createField(response http.ResponseWriter, request *http.Requ
 		result, node, err = h.service.CreateField(request.Context(), actor, formID, item, payload.LayoutPlacement)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	converted, err := toFieldResponse(result)
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusCreated, struct {
@@ -335,12 +335,12 @@ func (h *formsHTTP) updateField(response http.ResponseWriter, request *http.Requ
 		item, err = h.service.UpdateField(request.Context(), actor, formID, item)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	converted, err := toFieldResponse(item)
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, converted)
@@ -377,7 +377,7 @@ func (h *formsHTTP) createElement(response http.ResponseWriter, request *http.Re
 		item, node, err = h.service.CreateElement(request.Context(), actor, formID, Element{Code: payload.Code, Type: payload.Type, Config: payload.Config}, payload.LayoutPlacement)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusCreated, struct {
@@ -405,7 +405,7 @@ func (h *formsHTTP) updateElement(response http.ResponseWriter, request *http.Re
 		item, err = h.service.UpdateElement(request.Context(), actor, formID, Element{ID: id, Code: payload.Code, Type: payload.Type, Config: payload.Config})
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, item)
@@ -437,7 +437,7 @@ func (h *formsHTTP) createContainer(response http.ResponseWriter, request *http.
 		item, err = h.service.CreateContainer(request.Context(), actor, formID, LayoutNode{ParentID: payload.ParentID, ContainerType: payload.Type, Position: payload.Position, Config: payload.Config})
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusCreated, item)
@@ -466,7 +466,7 @@ func (h *formsHTTP) replaceLayout(response http.ResponseWriter, request *http.Re
 		items, err = h.service.ReplaceLayout(request.Context(), actor, formID, payload.Nodes)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, struct {
@@ -516,7 +516,7 @@ func (h *formsHTTP) mutateStatus(response http.ResponseWriter, request *http.Req
 		}
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	status := http.StatusCreated
@@ -576,7 +576,7 @@ func (h *formsHTTP) mutateAction(response http.ResponseWriter, request *http.Req
 		}
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	status := http.StatusCreated
@@ -617,14 +617,14 @@ func (h *formsHTTP) listResults(response http.ResponseWriter, request *http.Requ
 		result, columns, err = h.service.ListResults(request.Context(), actor, query)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	columnResponse := make([]fieldResponse, len(columns))
 	for index, item := range columns {
 		columnResponse[index], err = toFieldResponse(item)
 		if err != nil {
-			writeManagementError(response, err)
+			writeManagementError(request.Context(), response, err)
 			return
 		}
 	}
@@ -646,7 +646,7 @@ func (h *formsHTTP) getResult(response http.ResponseWriter, request *http.Reques
 		item, err = h.service.ResultDetail(request.Context(), actor, id)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, item)
@@ -669,7 +669,7 @@ func (h *formsHTTP) changeResultStatus(response http.ResponseWriter, request *ht
 		item, err = h.service.ChangeResultStatus(request.Context(), actor, id, payload.StatusID)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, item)
@@ -691,7 +691,7 @@ func (h *formsHTTP) delete(response http.ResponseWriter, request *http.Request, 
 		err = operation(request.Context(), actor, id)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -711,7 +711,7 @@ func (h *formsHTTP) deleteNested(response http.ResponseWriter, request *http.Req
 		err = operation(request.Context(), actor, formID, id)
 	}
 	if err != nil {
-		writeManagementError(response, err)
+		writeManagementError(request.Context(), response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
@@ -780,7 +780,7 @@ func queryTime(request *http.Request, key string) (*time.Time, error) {
 	return &value, nil
 }
 
-func writeManagementError(response http.ResponseWriter, err error) {
+func writeManagementError(ctx context.Context, response http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, security.ErrUnauthenticated):
 		response.Header().Set("WWW-Authenticate", "Bearer")
@@ -794,6 +794,7 @@ func writeManagementError(response http.ResponseWriter, err error) {
 	case errors.Is(err, ErrInvalid), errors.Is(err, ErrValidation):
 		writeValidationEnvelope(response, err)
 	default:
+		httptransport.RecordError(ctx, err)
 		httptransport.WriteJSONError(response, http.StatusInternalServerError, "internal_error", "Forms operation failed")
 	}
 }

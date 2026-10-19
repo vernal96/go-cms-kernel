@@ -39,6 +39,8 @@ func (h accessLogHandler) Handle(
 	record slog.Record,
 ) error {
 	level := record.Level
+	status := 0
+	hasErrorMessage := false
 	sanitized := slog.NewRecord(
 		record.Time,
 		level,
@@ -48,7 +50,8 @@ func (h accessLogHandler) Handle(
 	record.Attrs(func(attr slog.Attr) bool {
 		if attr.Key == "http.response.status_code" &&
 			attr.Value.Kind() == slog.KindInt64 {
-			switch status := attr.Value.Int64(); {
+			status = int(attr.Value.Int64())
+			switch {
 			case status >= http.StatusInternalServerError:
 				level = slog.LevelError
 			case status >= http.StatusBadRequest:
@@ -58,6 +61,9 @@ func (h accessLogHandler) Handle(
 			}
 			sanitized.Level = level
 		}
+		if attr.Key == "error.message" {
+			hasErrorMessage = true
+		}
 		if attr.Key == "error.message" &&
 			attr.Value.Kind() == slog.KindString &&
 			strings.HasPrefix(attr.Value.String(), "panic:") {
@@ -66,6 +72,13 @@ func (h accessLogHandler) Handle(
 		sanitized.AddAttrs(attr)
 		return true
 	})
+	if status >= http.StatusInternalServerError && !hasErrorMessage {
+		message := http.StatusText(status)
+		if message == "" {
+			message = "server response failed"
+		}
+		sanitized.AddAttrs(slog.String("error.message", message))
+	}
 	if !h.next.Enabled(ctx, level) {
 		return nil
 	}

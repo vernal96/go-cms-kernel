@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.17.1
+
+- Record the underlying server error in the existing HTTP access log entry for API 5xx responses while keeping client error messages safe. Include a status description when no cause is available; continue to redact panic values.
+
 ## 0.17.0
 
 - Add typed Go constructors for every built-in field type and value-returning methods for required, validators, editor, visibility, and public settings. Constructor options are copied so later changes to inputs or derived definitions do not mutate each other.
