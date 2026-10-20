@@ -16,6 +16,7 @@ type scopedManager struct {
 type RuntimeScope struct {
 	Profile string
 	Site    string
+	Targets *RuntimeTargetSet
 }
 
 func NewModuleManager(
@@ -130,7 +131,9 @@ func NewRuntimeModuleManager(
 			dependencyNamespace: dependencyNamespace,
 			coordinator:         coordinator,
 		}
-		if coordinator != nil {
+		if scope.Targets != nil {
+			scope.Targets.add(dependencyNamespace, store)
+		} else if coordinator != nil {
 			coordinator.register(dependencyNamespace, store)
 		}
 	}

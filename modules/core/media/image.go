@@ -40,7 +40,15 @@ type ImageService struct {
 	logger    *slog.Logger
 }
 
-func NewImageService(repository Repository, files file.ManagementService, policies FilePolicies, authorizer security.Authorizer, processor image.Processor, limits image.Limits, logger *slog.Logger) (*ImageService, error) {
+func NewImageService(
+	repository Repository,
+	files file.ManagementService,
+	policies FilePolicies,
+	authorizer security.Authorizer,
+	processor image.Processor,
+	limits image.Limits,
+	logger *slog.Logger,
+) (*ImageService, error) {
 	base, err := NewService(repository, files, policies, authorizer)
 	if err != nil {
 		return nil, err
@@ -132,7 +140,12 @@ func (s *ImageService) Edit(ctx context.Context, actor security.Actor, id ID, ex
 	if result.MIMEType == "image/jpeg" {
 		ext = ".jpg"
 	}
-	child, err := s.files.UploadAvailable(ctx, actor, file.UploadInput{Storage: state.Original.Storage, FolderID: state.Original.FolderID, ParentID: &state.Original.ID, Name: fmt.Sprintf("edited-%d%s", state.Original.ID, ext), Content: bytes.NewReader(result.Bytes)})
+	child, err := s.files.UploadAvailable(ctx, actor, file.UploadInput{
+		Storage: state.Original.Storage, FolderID: state.Original.FolderID,
+		ParentID: &state.Original.ID,
+		Name:     fmt.Sprintf("edited-%d%s", state.Original.ID, ext),
+		Content:  bytes.NewReader(result.Bytes),
+	})
 	if err != nil {
 		return state, err
 	}

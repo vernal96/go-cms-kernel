@@ -95,15 +95,36 @@ func TestListValidatorsBoundsAndOrdering(t *testing.T) {
 		{Key: "v", Label: "V", Type: field.TypeString, Validators: []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": 1}}}},
 		{Key: "v", Label: "V", Type: field.TypeString, Options: field.StringOptions{Multiple: true}, Validators: []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": -1}}}},
 		{Key: "v", Label: "V", Type: field.TypeString, Options: field.StringOptions{Multiple: true}, Validators: []field.ValidatorDefinition{{Type: "max_items", Options: map[string]any{"value": -1}}}},
-		{Key: "v", Label: "V", Type: field.TypeString, Options: field.StringOptions{Multiple: true}, Validators: []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": 3}}, {Type: "max_items", Options: map[string]any{"value": 2}}}},
+		{
+			Key: "v", Label: "V", Type: field.TypeString,
+			Options: field.StringOptions{Multiple: true},
+			Validators: []field.ValidatorDefinition{
+				{Type: "min_items", Options: map[string]any{"value": 3}},
+				{Type: "max_items", Options: map[string]any{"value": 2}},
+			},
+		},
 	} {
 		if _, err := field.Compile([]field.Definition{def}, field.StandardTypes()); err == nil {
 			t.Fatalf("accepted %#v", def)
 		}
 	}
 	for _, def := range []field.Definition{
-		{Key: "v", Label: "V", Type: field.TypeString, Options: field.StringOptions{Multiple: true}, Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 2}}, {Type: "max_length", Options: map[string]any{"value": 5}}}},
-		{Key: "v", Label: "V", Type: field.TypeInteger, Options: field.IntegerOptions{Multiple: true}, Validators: []field.ValidatorDefinition{{Type: "min", Options: map[string]any{"value": 2}}, {Type: "max", Options: map[string]any{"value": 5}}}},
+		{
+			Key: "v", Label: "V", Type: field.TypeString,
+			Options: field.StringOptions{Multiple: true},
+			Validators: []field.ValidatorDefinition{
+				{Type: "min_length", Options: map[string]any{"value": 2}},
+				{Type: "max_length", Options: map[string]any{"value": 5}},
+			},
+		},
+		{
+			Key: "v", Label: "V", Type: field.TypeInteger,
+			Options: field.IntegerOptions{Multiple: true},
+			Validators: []field.ValidatorDefinition{
+				{Type: "min", Options: map[string]any{"value": 2}},
+				{Type: "max", Options: map[string]any{"value": 5}},
+			},
+		},
 	} {
 		schema, err := field.CompilePersistent([]field.Definition{def}, field.StandardTypes())
 		if err != nil {
@@ -135,7 +156,16 @@ func TestListValidatorsBoundsAndOrdering(t *testing.T) {
 			t.Fatalf("optional empty: %#v %v", empty, err)
 		}
 	}
-	schema, err := field.Compile([]field.Definition{{Key: "v", Label: "V", Type: field.TypeSelect, Options: field.SelectOptions{Multiple: true, Choices: []field.Choice{{Value: "a", Label: "A"}}}}}, field.StandardTypes())
+	schema, err := field.Compile(
+		[]field.Definition{{
+			Key: "v", Label: "V", Type: field.TypeSelect,
+			Options: field.SelectOptions{
+				Multiple: true,
+				Choices:  []field.Choice{{Value: "a", Label: "A"}},
+			},
+		}},
+		field.StandardTypes(),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

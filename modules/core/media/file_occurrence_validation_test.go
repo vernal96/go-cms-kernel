@@ -56,7 +56,12 @@ func TestUpdateEnforcesAllFileOccurrencesAndAllowsPDFMetadata(t *testing.T) {
 
 func TestFileOccurrenceRejectsStalePathOrIdentity(t *testing.T) {
 	ref := FileOccurrence{OwnerKind: "site", OwnerID: 1, Target: field.ReferenceMedia, MediaID: 8, Path: []string{"icon"}}
-	for _, references := range [][]field.Reference{nil, {{Target: field.ReferenceMedia, ID: 9, Path: ref.Path}}, {{Target: field.ReferenceMedia, ID: 8, Path: []string{"other"}}}, {{Target: "unsupported", ID: 8, Path: ref.Path}}} {
+	for _, references := range [][]field.Reference{
+		nil,
+		{{Target: field.ReferenceMedia, ID: 9, Path: ref.Path}},
+		{{Target: field.ReferenceMedia, ID: 8, Path: []string{"other"}}},
+		{{Target: "unsupported", ID: 8, Path: ref.Path}},
+	} {
 		if err := ValidateFileOccurrence(ref, references, file.File{}); !errors.Is(err, ErrInvalidReference) {
 			t.Fatalf("stale occurrence accepted: %v", err)
 		}

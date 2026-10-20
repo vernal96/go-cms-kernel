@@ -122,7 +122,17 @@ func TestPostgresEntityHooksResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "hooks", Modules: []kernel.Module{module}, Templates: []template.Definition{{Code: "hook_template", Label: "Hook template", Layout: template.Layout{{Code: "body", Label: "Основная область", Items: []template.Item{template.ResourceWidgets{}}}, {Code: "sidebar", Label: "Боковая область", Items: []template.Item{template.ResourceWidgets{}}}}, Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}}}})
+	blueprint, err := factory.Compile(ctx, kernel.Profile{
+		Code: "hooks", Modules: []kernel.Module{module},
+		Templates: []template.Definition{{
+			Code: "hook_template", Label: "Hook template",
+			Layout: template.Layout{
+				{Code: "body", Label: "Основная область", Items: []template.Item{template.ResourceWidgets{}}},
+				{Code: "sidebar", Label: "Боковая область", Items: []template.Item{template.ResourceWidgets{}}},
+			},
+			Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}},
+		}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +291,12 @@ func TestPostgresEntityHooksResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	editable, err = service.Update(ctx, actor, resource.UpdateInput{ID: editable.ID, ExpectedVersion: editable.Version, ParentID: &root.ID, Type: resourcetype.Page, Template: &templateCode, Title: "updated", Slug: "editable", Fields: map[string]any{"headline": "two"}})
+	editable, err = service.Update(ctx, actor, resource.UpdateInput{
+		ID: editable.ID, ExpectedVersion: editable.Version,
+		ParentID: &root.ID, Type: resourcetype.Page, Template: &templateCode,
+		Title: "updated", Slug: "editable",
+		Fields: map[string]any{"headline": "two"},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

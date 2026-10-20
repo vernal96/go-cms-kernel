@@ -59,16 +59,36 @@ func (declarationTransport) Send(context.Context, mail.Delivery) (mail.DeliveryR
 }
 
 func declarationMailConfig() mail.Config {
-	return mail.Config{SendMaxAttempts: 3, MaxRecipients: 10, MaxMessageSize: 1024, MaxAttachmentSize: 1024, StaticAttachmentMedia: field.MediaOptions{Disk: "private", VirtualPath: "mail/attachments", SettingsCode: "mail_attachment"}}
+	return mail.Config{
+		SendMaxAttempts: 3, MaxRecipients: 10,
+		MaxMessageSize: 1024, MaxAttachmentSize: 1024,
+		StaticAttachmentMedia: field.MediaOptions{
+			Disk: "private", VirtualPath: "mail/attachments",
+			SettingsCode: "mail_attachment",
+		},
+	}
 }
 func declarationFormsConfig() forms.Config {
 	return forms.Config{ActionMaxAttempts: 3, DefaultCaptchaProvider: "development", ElementImage: field.MediaOptions{Disk: "private", VirtualPath: "forms/images", SettingsCode: "forms_image", MIMETypes: []string{"image/*"}}, Public: forms.PublicLimits{
-		MaxRequestSize: 1024, MaxScalarFields: 10, MaxScalarValueSize: 100, MaxUploadFileSize: 100, MaxUploadCount: 2, MaxTotalUploadBytes: 200, SubmissionTimeout: time.Second, RateLimit: 10, RateWindow: time.Minute, RateEntries: 100,
+		MaxRequestSize: 1024, MaxScalarFields: 10,
+		MaxScalarValueSize: 100, MaxUploadFileSize: 100,
+		MaxUploadCount: 2, MaxTotalUploadBytes: 200,
+		SubmissionTimeout: time.Second, RateLimit: 10,
+		RateWindow: time.Minute, RateEntries: 100,
 	}}
 }
 
 func declarationCoreConfig() core.Config {
-	return core.Config{MediaSettings: []media.SettingsDefinition{{Code: "forms_image", Fields: []field.Definition{{Key: "title", Type: field.TypeString, Label: "Title"}}}, {Code: "mail_attachment", Fields: []field.Definition{{Key: "title", Type: field.TypeString, Label: "Title"}}}}}
+	return core.Config{
+		MediaSettings: []media.SettingsDefinition{
+			{Code: "forms_image", Fields: []field.Definition{{
+				Key: "title", Type: field.TypeString, Label: "Title",
+			}}},
+			{Code: "mail_attachment", Fields: []field.Definition{{
+				Key: "title", Type: field.TypeString, Label: "Title",
+			}}},
+		},
+	}
 }
 
 func TestBootValidatesEveryModuleWithoutSites(t *testing.T) {
@@ -147,9 +167,20 @@ func TestBootValidatesEveryModuleWithoutSites(t *testing.T) {
 					&fakeDatabaseFactory{code: forms.ModuleCode, database: declarationFormsDatabase{}},
 					&fakeDatabaseFactory{code: seo.ModuleCode, database: declarationSEODatabase{}},
 				}},
-				Filesystems:        []filesystem.Factory{localstorage.Factory{Config: localstorage.Config{Code: "private", Visibility: filesystem.VisibilityPrivate, Root: t.TempDir(), BaseURL: "http://files.test", SigningKey: strings.Repeat("s", 32)}}},
-				ModuleApplications: []kernel.ModuleApplication{mail.Application{Transport: declarationTransport{}}, forms.Application{Providers: []forms.CaptchaProvider{forms.DevelopmentCaptchaProvider{ExpectedToken: "test"}}}},
-				Profiles:           []kernel.Profile{{Code: "unused", Modules: []kernel.Module{core.New(declarationCoreConfig()), admin.New()}}},
+				Filesystems: []filesystem.Factory{localstorage.Factory{
+					Config: localstorage.Config{
+						Code: "private", Visibility: filesystem.VisibilityPrivate,
+						Root: t.TempDir(), BaseURL: "http://files.test",
+						SigningKey: strings.Repeat("s", 32),
+					},
+				}},
+				ModuleApplications: []kernel.ModuleApplication{
+					mail.Application{Transport: declarationTransport{}},
+					forms.Application{Providers: []forms.CaptchaProvider{
+						forms.DevelopmentCaptchaProvider{ExpectedToken: "test"},
+					}},
+				},
+				Profiles: []kernel.Profile{{Code: "unused", Modules: []kernel.Module{core.New(declarationCoreConfig()), admin.New()}}},
 			}
 			if test.modules != nil {
 				definition.Profiles[0].Modules = append(definition.Profiles[0].Modules, test.modules()...)

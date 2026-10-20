@@ -173,7 +173,19 @@ func (m module) Build(buildCtx context.Context, ctx kernel.ModuleContext) (kerne
 	if err != nil {
 		return nil, err
 	}
-	return &Runtime{service: service, worker: worker, managementHTTP: handler, spool: spool, logger: ctx.Logger(), retention: config.HistoryRetention, cleanupInterval: config.CleanupInterval, cleanupBatchSize: config.CleanupBatchSize, spoolTTL: config.SpoolTTL, spoolCleanupInterval: config.SpoolCleanupInterval, spoolCleanupBatch: config.SpoolCleanupBatch}, nil
+	return &Runtime{
+		service:              service,
+		worker:               worker,
+		managementHTTP:       handler,
+		spool:                spool,
+		logger:               ctx.Logger(),
+		retention:            config.HistoryRetention,
+		cleanupInterval:      config.CleanupInterval,
+		cleanupBatchSize:     config.CleanupBatchSize,
+		spoolTTL:             config.SpoolTTL,
+		spoolCleanupInterval: config.SpoolCleanupInterval,
+		spoolCleanupBatch:    config.SpoolCleanupBatch,
+	}, nil
 }
 
 type Runtime struct {

@@ -146,7 +146,21 @@ func (m module) Build(ctx context.Context, moduleContext kernel.ModuleContext) (
 	if err := actions.Register(mailActionType{mail: mailRuntime.Mail(), fieldTypes: moduleContext.Registry()}); err != nil {
 		return nil, err
 	}
-	service, err := NewService(site.ID(siteIDValue), database.Forms(), moduleContext.Registry(), elements, actions, providers, config.DefaultCaptchaProvider, coreRuntime.Authorization(), coreRuntime.Files(), coreRuntime.MediaService(), spool, config.Public, moduleContext.Logger())
+	service, err := NewService(
+		site.ID(siteIDValue),
+		database.Forms(),
+		moduleContext.Registry(),
+		elements,
+		actions,
+		providers,
+		config.DefaultCaptchaProvider,
+		coreRuntime.Authorization(),
+		coreRuntime.Files(),
+		coreRuntime.MediaService(),
+		spool,
+		config.Public,
+		moduleContext.Logger(),
+	)
 	if err != nil {
 		return nil, err
 	}

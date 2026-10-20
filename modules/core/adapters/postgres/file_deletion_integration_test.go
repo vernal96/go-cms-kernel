@@ -150,7 +150,23 @@ func TestPostgresMediaFileDeletionPrunesNestedReferenceAndResourceHistory(t *tes
 		mediaIDs = append(mediaIDs, m.ID)
 	}
 	path := "/"
-	owner, err := db.Resources().Create(ctx, nil, resource.Resource{SiteID: site.ID(sid), Type: resourcetype.Library, Title: "Library", Path: &path, TypeSettings: map[string]any{"item_url_pattern": "/{slug}"}, FieldValues: []field.StoredValue{{Key: "portals", Kind: field.StorageJSON, Value: []any{map[string]any{"name": "kept", "icons": []any{int64(mediaIDs[0]), int64(mediaIDs[1]), int64(mediaIDs[2])}}}, References: []field.Reference{{Target: field.ReferenceMedia, ID: int64(mediaIDs[0]), Path: []string{"0", "icons", "0"}}, {Target: field.ReferenceMedia, ID: int64(mediaIDs[1]), Path: []string{"0", "icons", "1"}}, {Target: field.ReferenceMedia, ID: int64(mediaIDs[2]), Path: []string{"0", "icons", "2"}}}}}}, nil)
+	owner, err := db.Resources().Create(ctx, nil, resource.Resource{
+		SiteID: site.ID(sid), Type: resourcetype.Library,
+		Title: "Library", Path: &path,
+		TypeSettings: map[string]any{"item_url_pattern": "/{slug}"},
+		FieldValues: []field.StoredValue{{
+			Key: "portals", Kind: field.StorageJSON,
+			Value: []any{map[string]any{
+				"name":  "kept",
+				"icons": []any{int64(mediaIDs[0]), int64(mediaIDs[1]), int64(mediaIDs[2])},
+			}},
+			References: []field.Reference{
+				{Target: field.ReferenceMedia, ID: int64(mediaIDs[0]), Path: []string{"0", "icons", "0"}},
+				{Target: field.ReferenceMedia, ID: int64(mediaIDs[1]), Path: []string{"0", "icons", "1"}},
+				{Target: field.ReferenceMedia, ID: int64(mediaIDs[2]), Path: []string{"0", "icons", "2"}},
+			},
+		}},
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,15 +184,21 @@ func TestPostgresMediaFileDeletionPrunesNestedReferenceAndResourceHistory(t *tes
 		t.Fatal(err)
 	}
 	clearing := db.FileOccurrenceOwners()[0]
-	result, err := db.FileDeletions().DeleteMediaFile(ctx, nil, media.DeleteFileInput{SiteID: sid, MediaID: clicked.ID, ExpectedFileID: clicked.FileID, ExpectedUpdatedAt: clicked.UpdatedAt}, func(ctx context.Context, ref *media.FileOccurrence) (media.PreparedFileOwner, error) {
-		if ref == nil || ref.OwnerID != int64(owner.ID) {
-			t.Fatal("owner discovery", ref)
-		}
-		return media.PreparedFileOwner{Apply: func(ctx context.Context) (*media.ClearedFileReference, error) {
-			version, err := clearing.ClearFileOccurrence(ctx, nil, *ref)
-			return &media.ClearedFileReference{FileOccurrence: *ref, OwnerVersion: version}, err
-		}}, nil
-	})
+	result, err := db.FileDeletions().DeleteMediaFile(
+		ctx, nil,
+		media.DeleteFileInput{
+			SiteID: sid, MediaID: clicked.ID, ExpectedFileID: clicked.FileID,
+			ExpectedUpdatedAt: clicked.UpdatedAt,
+		},
+		func(ctx context.Context, ref *media.FileOccurrence) (media.PreparedFileOwner, error) {
+			if ref == nil || ref.OwnerID != int64(owner.ID) {
+				t.Fatal("owner discovery", ref)
+			}
+			return media.PreparedFileOwner{Apply: func(ctx context.Context) (*media.ClearedFileReference, error) {
+				version, err := clearing.ClearFileOccurrence(ctx, nil, *ref)
+				return &media.ClearedFileReference{FileOccurrence: *ref, OwnerVersion: version}, err
+			}}, nil
+		})
 	if err != nil {
 		t.Fatal(err)
 	}

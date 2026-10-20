@@ -137,7 +137,14 @@ func TestFieldUploadEnforcesPermissionsAndSiteOwnershipBeforeStorage(t *testing.
 	}
 	files, sites, resources, storage := fieldUploadServices(t)
 	resources.resourceRepo = &extensionTestResources{item: resource.Resource{ID: 9, SiteID: 8}}
-	_, err := files.UploadFieldFile(context.Background(), security.User(1), sites, resources, FileFieldTarget{Owner: "resource", SiteID: 7, ResourceID: 9, TemplateCode: "page", FieldPath: []string{"rows", "0", "asset"}}, "asset.png", bytes.NewBufferString("\x89PNG\r\n\x1a\n"))
+	_, err := files.UploadFieldFile(
+		context.Background(), security.User(1), sites, resources,
+		FileFieldTarget{
+			Owner: "resource", SiteID: 7, ResourceID: 9,
+			TemplateCode: "page", FieldPath: []string{"rows", "0", "asset"},
+		},
+		"asset.png", bytes.NewBufferString("\x89PNG\r\n\x1a\n"),
+	)
 	if !errors.Is(err, resource.ErrNotFound) || storage.puts != 0 {
 		t.Fatalf("cross-site upload: %v, puts=%d", err, storage.puts)
 	}

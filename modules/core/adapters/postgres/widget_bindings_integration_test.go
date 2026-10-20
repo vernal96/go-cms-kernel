@@ -100,7 +100,13 @@ func TestPostgresWidgetParamBindingsLifecycle(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			binding, err := service.CreateWidget(ctx, actor, id, resource.CreateWidgetInput{ExpectedVersion: current.Version, Code: "core_hook_widget", Area: "promo", Columns: 12, ParamBindings: widget.ParamBindings{"text": widget.ResourceField("headline")}})
+			binding, err := service.CreateWidget(ctx, actor, id, resource.CreateWidgetInput{
+				ExpectedVersion: current.Version, Code: "core_hook_widget",
+				Area: "promo", Columns: 12,
+				ParamBindings: widget.ParamBindings{
+					"text": widget.ResourceField("headline"),
+				},
+			})
 			if err != nil {
 				t.Fatal(err)
 			}

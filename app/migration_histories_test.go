@@ -20,12 +20,14 @@ func (*collidingMigrationDatabase) MigrationSources() []migrations.Source {
 }
 func TestAppRejectsMigrationHistoryCollision(t *testing.T) {
 	connector := newFakeConnector("main")
-	_, err := appkernel.New(context.Background(), appkernel.Definition{Logger: fakeLoggerFactory{}, EventBus: fakeEventBusFactory{}, PasswordHasher: argon2id.Factory{}, MainDatabase: appkernel.DatabaseDefinition{
-		Connector: &fakeConnectorFactory{connector: connector}, Adapters: []kernel.ModuleDatabaseFactory{
-			&fakeDatabaseFactory{code: core.ModuleCode, database: &fakeCoreDatabase{repository: &fakeSiteRepository{}}},
-			&fakeDatabaseFactory{code: featureModuleCode, database: &collidingMigrationDatabase{}},
-		},
-	}})
+	_, err := appkernel.New(context.Background(), appkernel.Definition{
+		Logger: fakeLoggerFactory{}, EventBus: fakeEventBusFactory{},
+		PasswordHasher: argon2id.Factory{}, MainDatabase: appkernel.DatabaseDefinition{
+			Connector: &fakeConnectorFactory{connector: connector}, Adapters: []kernel.ModuleDatabaseFactory{
+				&fakeDatabaseFactory{code: core.ModuleCode, database: &fakeCoreDatabase{repository: &fakeSiteRepository{}}},
+				&fakeDatabaseFactory{code: featureModuleCode, database: &collidingMigrationDatabase{}},
+			},
+		}})
 	if err == nil || !strings.Contains(err.Error(), "share history") {
 		t.Fatalf("error=%v", err)
 	}

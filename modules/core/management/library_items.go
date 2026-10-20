@@ -114,7 +114,14 @@ func (m *Resources) CreateLibraryItem(ctx context.Context, actor security.Actor,
 	if err := m.requireSite(ctx, actor, siteID, ResourceCreatePermission, SiteAccessEdit); err != nil {
 		return LibraryItemDetails{}, err
 	}
-	item, err := m.libraryItems.Create(ctx, actor, resource.CreateLibraryItemInput{ImageMediaID: input.ImageMediaID, SiteID: siteID, LibraryID: libraryID, Template: input.Template, Title: input.Title, Slug: input.Slug, Annotation: input.Annotation, Content: input.Content, IsPublic: input.IsPublic, IsSearchable: input.IsSearchable, PublishedAt: input.PublishedAt, UnpublishedAt: input.UnpublishedAt, Fields: input.Fields})
+	item, err := m.libraryItems.Create(ctx, actor, resource.CreateLibraryItemInput{
+		ImageMediaID: input.ImageMediaID, SiteID: siteID, LibraryID: libraryID,
+		Template: input.Template, Title: input.Title, Slug: input.Slug,
+		Annotation: input.Annotation, Content: input.Content,
+		IsPublic: input.IsPublic, IsSearchable: input.IsSearchable,
+		PublishedAt: input.PublishedAt, UnpublishedAt: input.UnpublishedAt,
+		Fields: input.Fields,
+	})
 	if err != nil {
 		return LibraryItemDetails{}, validationError(err)
 	}
@@ -155,7 +162,15 @@ func (m *Resources) UpdateLibraryItem(ctx context.Context, actor security.Actor,
 	if input.IsPublic == nil || input.IsSearchable == nil {
 		return LibraryItemDetails{}, ErrValidation
 	}
-	item, err := m.libraryItems.Update(ctx, actor, resource.UpdateLibraryItemInput{ImageMediaID: input.ImageMediaID, ID: itemID, ExpectedVersion: input.ExpectedVersion, Template: input.Template, Title: input.Title, Slug: input.Slug, Annotation: input.Annotation, Content: input.Content, IsPublic: *input.IsPublic, IsSearchable: *input.IsSearchable, PublishedAt: input.PublishedAt, UnpublishedAt: input.UnpublishedAt, Fields: input.Fields})
+	item, err := m.libraryItems.Update(ctx, actor, resource.UpdateLibraryItemInput{
+		ImageMediaID: input.ImageMediaID, ID: itemID,
+		ExpectedVersion: input.ExpectedVersion, Template: input.Template,
+		Title: input.Title, Slug: input.Slug, Annotation: input.Annotation,
+		Content: input.Content, IsPublic: *input.IsPublic,
+		IsSearchable: *input.IsSearchable,
+		PublishedAt:  input.PublishedAt, UnpublishedAt: input.UnpublishedAt,
+		Fields: input.Fields,
+	})
 	if err != nil {
 		return LibraryItemDetails{}, validationError(err)
 	}
@@ -251,5 +266,14 @@ func libraryItemDTO(library resource.Resource, item resource.LibraryItem) Librar
 	for key, value := range item.Fields {
 		fields[key] = value
 	}
-	return LibraryItemDTO{ImageMediaID: item.ImageMediaID, ID: item.ID, Version: item.Version, SiteID: item.SiteID, LibraryID: item.LibraryID, TemplateCode: item.Template, Title: item.Title, Slug: item.Slug, Annotation: item.Annotation, ContentType: item.ContentType, Content: item.Content, IsPublic: item.IsPublic, IsSearchable: item.IsSearchable, PublishedAt: item.PublishedAt, UnpublishedAt: item.UnpublishedAt, Deleted: item.DeletedAt != nil, DeletedAt: item.DeletedAt, Fields: fields, Widgets: resourceWidgets(item.Widgets), EffectiveURL: url}
+	return LibraryItemDTO{
+		ImageMediaID: item.ImageMediaID, ID: item.ID, Version: item.Version,
+		SiteID: item.SiteID, LibraryID: item.LibraryID, TemplateCode: item.Template,
+		Title: item.Title, Slug: item.Slug, Annotation: item.Annotation,
+		ContentType: item.ContentType, Content: item.Content,
+		IsPublic: item.IsPublic, IsSearchable: item.IsSearchable,
+		PublishedAt: item.PublishedAt, UnpublishedAt: item.UnpublishedAt,
+		Deleted: item.DeletedAt != nil, DeletedAt: item.DeletedAt,
+		Fields: fields, Widgets: resourceWidgets(item.Widgets), EffectiveURL: url,
+	}
 }

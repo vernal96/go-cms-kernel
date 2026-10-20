@@ -48,7 +48,13 @@ func TestPostgresRepeaterPersistenceAndReferences(t *testing.T) {
 			fileMedia := makeMedia()
 			schema, err := field.CompilePersistent([]field.Definition{{Key: "slides", Type: field.TypeRepeater, Label: "Slides", Options: field.RepeaterOptions{Fields: []field.Definition{
 				{Key: "gallery", Type: field.TypeMedia, Label: "Gallery", Options: field.MediaOptions{Disk: "public", VirtualPath: "repeater/gallery", SettingsCode: "gallery", Multiple: true}},
-				{Key: "title", Type: field.TypeString, Label: "Title"}, {Key: "image", Type: field.TypeMedia, Label: "Image", Options: field.MediaOptions{Disk: "public", VirtualPath: "repeater/images", SettingsCode: "image"}}, {Key: "file", Type: field.TypeMedia, Label: "File", Options: field.MediaOptions{Disk: "public", VirtualPath: "repeater/files", SettingsCode: "repeater_file"}},
+				{Key: "title", Type: field.TypeString, Label: "Title"},
+				{Key: "image", Type: field.TypeMedia, Label: "Image", Options: field.MediaOptions{
+					Disk: "public", VirtualPath: "repeater/images", SettingsCode: "image",
+				}},
+				{Key: "file", Type: field.TypeMedia, Label: "File", Options: field.MediaOptions{
+					Disk: "public", VirtualPath: "repeater/files", SettingsCode: "repeater_file",
+				}},
 			}}, Validators: []field.ValidatorDefinition{{Type: "max_items", Options: map[string]any{"value": 10}}}}}, field.StandardTypes())
 			if err != nil {
 				t.Fatal(err)
@@ -85,7 +91,11 @@ func TestPostgresRepeaterPersistenceAndReferences(t *testing.T) {
 			var remove func() error
 			if storage == "tree" {
 				childPath := "/repeater"
-				item, err := db.Resources().Create(ctx, nil, resource.Resource{SiteID: siteID, ParentID: &root.ID, Type: resourcetype.Page, Title: "Repeater", Slug: "repeater", Path: &childPath, Fields: values, FieldValues: stored, FileReferences: files}, nil)
+				item, err := db.Resources().Create(ctx, nil, resource.Resource{
+					SiteID: siteID, ParentID: &root.ID, Type: resourcetype.Page,
+					Title: "Repeater", Slug: "repeater", Path: &childPath,
+					Fields: values, FieldValues: stored, FileReferences: files,
+				}, nil)
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -40,7 +40,17 @@ func (r *Repository) appendLibraryItemRevision(ctx context.Context, tx pgx.Tx, i
 	return insertRevision(ctx, tx, item.ID, item.SiteID, item.Version, kind, sourceVersion, raw, actorID)
 }
 
-func insertRevision(ctx context.Context, tx pgx.Tx, resourceID resource.ID, siteID site.ID, version int64, kind resource.RevisionKind, sourceVersion *int64, raw []byte, actorID *security.UserID) error {
+func insertRevision(
+	ctx context.Context,
+	tx pgx.Tx,
+	resourceID resource.ID,
+	siteID site.ID,
+	version int64,
+	kind resource.RevisionKind,
+	sourceVersion *int64,
+	raw []byte,
+	actorID *security.UserID,
+) error {
 	_, err := tx.Exec(ctx, `
 INSERT INTO core.resource_revisions
     (resource_id, site_id, version, kind, source_version, snapshot, created_by, created_by_name)
@@ -318,7 +328,12 @@ func (r *Repository) RestoreLibraryItemRevision(ctx context.Context, actorID *se
 	})
 }
 
-func (r *Repository) restoreLibraryItemRevisionOnce(ctx context.Context, actorID *security.UserID, current, candidate resource.LibraryItem, sourceVersion int64) (_ resource.LibraryItem, resultErr error) {
+func (r *Repository) restoreLibraryItemRevisionOnce(
+	ctx context.Context,
+	actorID *security.UserID,
+	current, candidate resource.LibraryItem,
+	sourceVersion int64,
+) (_ resource.LibraryItem, resultErr error) {
 	tx, err := r.connector.Pool().Begin(ctx)
 	if err != nil {
 		return resource.LibraryItem{}, translateError(err)
@@ -458,7 +473,14 @@ func revisionWidgets(snapshot resource.Snapshot) []widget.Binding {
 	result := make([]widget.Binding, len(snapshot.Widgets))
 	for index, item := range snapshot.Widgets {
 		result[index] = widget.Binding{Code: item.Code, Area: item.Area, Position: item.Position,
-			Presentation: widget.Presentation{View: item.View, Columns: item.Columns, MarginTop: item.MarginTop, MarginBottom: item.MarginBottom, Enabled: item.Enabled}, Params: item.Params, ParamBindings: widget.CloneParamBindings(item.ParamBindings)}
+			Presentation: widget.Presentation{
+				View: item.View, Columns: item.Columns,
+				MarginTop: item.MarginTop, MarginBottom: item.MarginBottom,
+				Enabled: item.Enabled,
+			},
+			Params:        item.Params,
+			ParamBindings: widget.CloneParamBindings(item.ParamBindings),
+		}
 	}
 	return result
 }

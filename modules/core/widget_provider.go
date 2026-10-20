@@ -56,7 +56,11 @@ func buildWidgets(r *Runtime, types []resourcetype.Code, templates []template.De
 		}
 		return coreRuntime.publicFields.TemplateFields(ctx, code, values)
 	}
-	r.widgets = append(widgets.All(), widgets.NewResourceList(query, types, templates, projectFields), widgets.NewLibraryResources(collectionQuery, false, projectLibraryFields), widgets.NewLibraryResources(collectionQuery, true, projectLibraryFields))
+	r.widgets = append(widgets.All(),
+		widgets.NewResourceList(query, types, templates, projectFields),
+		widgets.NewLibraryResources(collectionQuery, false, projectLibraryFields),
+		widgets.NewLibraryResources(collectionQuery, true, projectLibraryFields),
+	)
 	return nil
 }
 

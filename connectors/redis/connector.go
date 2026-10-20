@@ -129,11 +129,21 @@ func (c universalCommands) HIncrBy(ctx context.Context, key, field string, incre
 	return c.client.HIncrBy(ctx, key, field, increment).Err()
 }
 
-func (c universalCommands) EvalStringSlice(ctx context.Context, script string, keys []string, args ...any) ([]string, error) {
+func (c universalCommands) EvalStringSlice(
+	ctx context.Context,
+	script string,
+	keys []string,
+	args ...any,
+) ([]string, error) {
 	return c.client.Eval(ctx, script, keys, args...).StringSlice()
 }
 
-func (c universalCommands) EvalInt(ctx context.Context, script string, keys []string, args ...any) (int64, error) {
+func (c universalCommands) EvalInt(
+	ctx context.Context,
+	script string,
+	keys []string,
+	args ...any,
+) (int64, error) {
 	result, err := c.client.Eval(ctx, script, keys, args...).Int()
 	return int64(result), err
 }
@@ -268,8 +278,11 @@ func universalOptions(config Config) (*goredis.UniversalOptions, error) {
 		PoolTimeout: config.PoolTimeout, PoolSize: config.PoolSize,
 		MinIdleConns: config.MinIdleConns, MaxIdleConns: config.MaxIdleConns,
 		ConnMaxIdleTime: config.ConnMaxIdleTime, ConnMaxLifetime: config.ConnMaxLifetime,
-		TLSEnabled: config.TLSEnabled, TLSServerName: config.TLSServerName,
-		TLSInsecure: config.TLSInsecure,
+		// Cache operations must honor their request context deadlines.
+		ContextTimeoutEnabled: true,
+		TLSEnabled:            config.TLSEnabled,
+		TLSServerName:         config.TLSServerName,
+		TLSInsecure:           config.TLSInsecure,
 	})
 }
 
@@ -425,7 +438,10 @@ func (c *Connector) Set(
 	return set(ctx, key, value, options.TTL)
 }
 
-func (c *Connector) Prepare(ctx context.Context, dependencies []cache.Tag) (cache.PreparedSet, error) {
+func (c *Connector) Prepare(
+	ctx context.Context,
+	dependencies []cache.Tag,
+) (cache.PreparedSet, error) {
 	tags, err := c.tagTokens(ctx, dependencies)
 	if err != nil {
 		return nil, err

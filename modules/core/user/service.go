@@ -91,6 +91,9 @@ func (s *ApplicationService) Create(
 	if err := validatePassword(input.Password); err != nil {
 		return User{}, err
 	}
+	if strings.TrimSpace(input.Email) == "" {
+		return User{}, errors.New("invalid user email")
+	}
 
 	item, err := normalize(Record{User: User{
 		Login:         input.Login,
@@ -359,6 +362,9 @@ func (s *ApplicationService) ChangeCurrentPassword(
 	if err != nil {
 		return User{}, err
 	}
+	if current.PasswordHash == "" {
+		return User{}, ErrInvalidCurrentPassword
+	}
 	valid, _, err := s.hasher.Verify(currentPassword, current.PasswordHash)
 	if err != nil {
 		return User{}, fmt.Errorf("verify current user password: %w", err)
@@ -492,14 +498,18 @@ func (s *ApplicationService) Authenticate(
 		return User{}, ErrInvalidCredentials
 	}
 
+	verificationHash := record.PasswordHash
+	if verificationHash == "" {
+		verificationHash = s.hasher.DummyHash()
+	}
 	valid, needsRehash, err := s.hasher.Verify(
 		input.Password,
-		record.PasswordHash,
+		verificationHash,
 	)
 	if err != nil {
 		return User{}, fmt.Errorf("verify user password: %w", err)
 	}
-	if !valid || record.BlockedAt != nil {
+	if !valid || record.PasswordHash == "" || record.BlockedAt != nil {
 		return User{}, ErrInvalidCredentials
 	}
 
@@ -623,10 +633,11 @@ func normalize(record Record) (Record, error) {
 	if !loginPattern.MatchString(record.Login) {
 		return Record{}, errors.New("invalid user login")
 	}
-	address, err := mail.ParseAddress(record.Email)
-	if err != nil || address.Address != record.Email ||
-		len(record.Email) > 254 {
-		return Record{}, errors.New("invalid user email")
+	if record.Email != "" {
+		address, err := mail.ParseAddress(record.Email)
+		if err != nil || address.Address != record.Email || len(record.Email) > 254 {
+			return Record{}, errors.New("invalid user email")
+		}
 	}
 	if record.Name == "" || utf8.RuneCountInString(record.Name) > 200 {
 		return Record{}, errors.New("invalid user name")

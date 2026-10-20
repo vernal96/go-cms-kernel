@@ -70,7 +70,17 @@ func TestServiceOwnsSiteAndChecksPermission(t *testing.T) {
 func TestSearchHTTPValidationAndErrors(t *testing.T) {
 	engineError := error(nil)
 	calls := 0
-	service, err := NewService(1, engineFunc(func(_ context.Context, _ Query) (Page, error) { calls++; return Page{}, engineError }), authorizerFunc(func(context.Context, security.Actor, permission.Code) error { return nil }), nil)
+	service, err := NewService(
+		1,
+		engineFunc(func(_ context.Context, _ Query) (Page, error) {
+			calls++
+			return Page{}, engineError
+		}),
+		authorizerFunc(func(context.Context, security.Actor, permission.Code) error {
+			return nil
+		}),
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

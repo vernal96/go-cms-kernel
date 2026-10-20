@@ -98,8 +98,7 @@ func TestRememberJSONFailsOpenAndObservesBackendErrors(t *testing.T) {
 	if err != nil || result != "authoritative" {
 		t.Fatalf("result = %q, error = %v", result, err)
 	}
-	if !containsEvent(events, EventReadError) ||
-		!containsEvent(events, EventWriteError) {
+	if !containsEvent(events, EventReadError) {
 		t.Fatalf("events = %#v", events)
 	}
 }

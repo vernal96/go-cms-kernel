@@ -125,7 +125,16 @@ func (s *Service) Submit(ctx context.Context, actor security.Actor, input Submit
 		}
 	}
 	if s.logger != nil {
-		s.logger.InfoContext(ctx, "Forms result accepted", slog.String("event", "forms.result.accepted"), slog.Int64("site_id", int64(s.siteID)), slog.Int64("form_id", int64(prepared.detail.Form.ID)), slog.Int64("result_id", int64(created.Result.ID)), slog.Int("action_count", len(created.Executions)), slog.Int("upload_count", len(spooled)))
+		s.logger.InfoContext(
+			ctx,
+			"Forms result accepted",
+			slog.String("event", "forms.result.accepted"),
+			slog.Int64("site_id", int64(s.siteID)),
+			slog.Int64("form_id", int64(prepared.detail.Form.ID)),
+			slog.Int64("result_id", int64(created.Result.ID)),
+			slog.Int("action_count", len(created.Executions)),
+			slog.Int("upload_count", len(spooled)),
+		)
 		s.logQueuedActions(ctx, created.Executions)
 	}
 	return created, nil

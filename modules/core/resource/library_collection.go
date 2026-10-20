@@ -137,7 +137,11 @@ func (s *LibraryService) ResolvePublished(ctx context.Context, actor security.Ac
 	if err != nil {
 		return ResolvedLibraryItem{}, err
 	}
-	if item.LibraryID != collection.Source.ID || item.SiteID != collection.Source.SiteID || !Published(Resource{DeletedAt: item.DeletedAt, IsPublic: item.IsPublic, PublishedAt: item.PublishedAt, UnpublishedAt: item.UnpublishedAt}, time.Now().UTC()) {
+	if item.LibraryID != collection.Source.ID || item.SiteID != collection.Source.SiteID ||
+		!Published(Resource{
+			DeletedAt: item.DeletedAt, IsPublic: item.IsPublic,
+			PublishedAt: item.PublishedAt, UnpublishedAt: item.UnpublishedAt,
+		}, time.Now().UTC()) {
 		return ResolvedLibraryItem{}, ErrNotFound
 	}
 	return ResolvedLibraryItem{Item: item, Collection: collection}, nil

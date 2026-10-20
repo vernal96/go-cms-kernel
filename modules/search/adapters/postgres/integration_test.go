@@ -114,7 +114,14 @@ func (f *fixture) createItem(t *testing.T, library resource.Resource, title stri
 
 func (f *fixture) find(t *testing.T, siteID site.ID, text string, page, perPage int) search.Page {
 	t.Helper()
-	result, err := f.engine.Search(f.ctx, search.Query{SiteID: siteID, RouteTypes: []resourcetype.Code{resourcetype.Page, resourcetype.Library, resourcetype.Link, resourcetype.ResourceLink}, Input: search.Input{Text: text, Page: page, PerPage: perPage}})
+	result, err := f.engine.Search(f.ctx, search.Query{
+		SiteID: siteID,
+		RouteTypes: []resourcetype.Code{
+			resourcetype.Page, resourcetype.Library,
+			resourcetype.Link, resourcetype.ResourceLink,
+		},
+		Input: search.Input{Text: text, Page: page, PerPage: perPage},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -439,7 +446,12 @@ func TestPostgresSearchSnapshotAndTransactionSettings(t *testing.T) {
 
 	// A single-connection pool makes reuse of transaction settings observable.
 	config := f.connector.Pool().Config().ConnConfig
-	connection, err := connectorpostgres.New(f.ctx, connectorpostgres.Config{Code: "settings-test", Host: config.Host, Port: int(config.Port), Database: config.Database, User: config.User, Password: config.Password, SSLMode: "disable", MaxConns: 1, ConnectTimeout: 5 * time.Second, ConnMaxLifetime: time.Minute})
+	connection, err := connectorpostgres.New(f.ctx, connectorpostgres.Config{
+		Code: "settings-test", Host: config.Host, Port: int(config.Port),
+		Database: config.Database, User: config.User, Password: config.Password,
+		SSLMode: "disable", MaxConns: 1,
+		ConnectTimeout: 5 * time.Second, ConnMaxLifetime: time.Minute,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

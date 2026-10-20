@@ -25,7 +25,18 @@ func (s *Service) publicSchema(ctx context.Context, detail FormDetail) (PublicFo
 		if optionErr != nil {
 			return PublicFormSchema{}, optionErr
 		}
-		fields[index] = publicField{Code: item.Code, Type: item.Type, Label: item.Label, Required: item.Required, Validators: field.CloneValidatorDefinitions(item.Validators), Options: options, Editor: item.Editor, VisibleWhen: cloneVisibleWhen(item.VisibleWhen)}
+		fields[index] = publicField{
+			Code:       item.Code,
+			Type:       item.Type,
+			Label:      item.Label,
+			Required:   item.Required,
+			Validators: field.CloneValidatorDefinitions(item.Validators),
+			Options:    options,
+			Editor:     item.Editor,
+			VisibleWhen: cloneVisibleWhen(
+				item.VisibleWhen,
+			),
+		}
 		if item.Type == FieldTypeCaptcha {
 			fields[index].Captcha, err = s.CaptchaPublicConfig(ctx, item)
 			if err != nil {

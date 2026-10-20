@@ -140,7 +140,16 @@ func (h *contentHTTP) createLibraryItem(response http.ResponseWriter, request *h
 		writeValidation(response, "fields are required")
 		return
 	}
-	result, err := h.resources.CreateLibraryItem(request.Context(), actor(request), siteID, libraryID, LibraryItemCreateInput{ImageMediaID: payload.ImageMediaID, Template: payload.Template, Title: payload.Title, Slug: payload.Slug, Annotation: payload.Annotation, Content: payload.Content, IsPublic: payload.IsPublic, IsSearchable: payload.IsSearchable, PublishedAt: payload.PublishedAt, UnpublishedAt: payload.UnpublishedAt, Fields: payload.Fields})
+	result, err := h.resources.CreateLibraryItem(
+		request.Context(), actor(request), siteID, libraryID,
+		LibraryItemCreateInput{
+			ImageMediaID: payload.ImageMediaID, Template: payload.Template,
+			Title: payload.Title, Slug: payload.Slug, Annotation: payload.Annotation,
+			Content: payload.Content, IsPublic: payload.IsPublic,
+			IsSearchable: payload.IsSearchable, PublishedAt: payload.PublishedAt,
+			UnpublishedAt: payload.UnpublishedAt, Fields: payload.Fields,
+		},
+	)
 	writeResult(request.Context(), response, http.StatusCreated, result, err)
 }
 
@@ -170,7 +179,19 @@ func (h *contentHTTP) updateLibraryItem(response http.ResponseWriter, request *h
 		writeValidation(response, "expected_version is required")
 		return
 	}
-	result, err := h.resources.UpdateLibraryItem(request.Context(), actor(request), siteID, itemID, LibraryItemUpdateInput{ExpectedVersion: payload.ExpectedVersion, LibraryItemCreateInput: LibraryItemCreateInput{ImageMediaID: payload.ImageMediaID, Template: payload.Template, Title: payload.Title, Slug: payload.Slug, Annotation: payload.Annotation, Content: payload.Content, PublishedAt: payload.PublishedAt, UnpublishedAt: payload.UnpublishedAt, Fields: payload.Fields}, IsPublic: payload.IsPublic, IsSearchable: payload.IsSearchable})
+	result, err := h.resources.UpdateLibraryItem(
+		request.Context(), actor(request), siteID, itemID,
+		LibraryItemUpdateInput{
+			ExpectedVersion: payload.ExpectedVersion,
+			LibraryItemCreateInput: LibraryItemCreateInput{
+				ImageMediaID: payload.ImageMediaID, Template: payload.Template,
+				Title: payload.Title, Slug: payload.Slug, Annotation: payload.Annotation,
+				Content: payload.Content, PublishedAt: payload.PublishedAt,
+				UnpublishedAt: payload.UnpublishedAt, Fields: payload.Fields,
+			},
+			IsPublic: payload.IsPublic, IsSearchable: payload.IsSearchable,
+		},
+	)
 	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 

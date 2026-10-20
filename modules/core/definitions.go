@@ -262,7 +262,9 @@ func compileResourceType(value resourcetype.Type, resolver field.TypeResolver) (
 	}
 	seen := make(map[string]struct{}, len(metadata.ContentTypes))
 	for index, option := range metadata.ContentTypes {
-		if option.Code == "" || strings.TrimSpace(option.Code) != option.Code || option.Label == "" || strings.TrimSpace(option.Label) != option.Label || option.Editor == "" || strings.TrimSpace(string(option.Editor)) != string(option.Editor) {
+		if option.Code == "" || strings.TrimSpace(option.Code) != option.Code ||
+			option.Label == "" || strings.TrimSpace(option.Label) != option.Label ||
+			option.Editor == "" || strings.TrimSpace(string(option.Editor)) != string(option.Editor) {
 			return nil, fmt.Errorf("content type at index %d is invalid", index)
 		}
 		if option.Editor != resourcetype.ContentEditorHTML && option.Editor != resourcetype.ContentEditorTextarea {

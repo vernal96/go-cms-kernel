@@ -41,8 +41,37 @@ func newElementCatalog(imageOptions field.MediaOptions, resolvers ...field.TypeR
 	}
 	items := []ElementType{
 		ElementDefinition{Description: ElementTypeMetadata{Code: ElementText, Label: "Текст", Fields: []field.ConfigField{{Key: "content", Label: "Текст", Type: field.TypeTextarea, Required: true}}}},
-		ElementDefinition{Description: ElementTypeMetadata{Code: ElementHeading, Label: "Заголовок", Fields: []field.ConfigField{{Key: "text", Label: "Заголовок", Type: field.TypeString, Required: true}, {Key: "level", Label: "Уровень", Type: field.TypeInteger, Required: true, Default: 2, Validators: []field.ValidatorDefinition{validation.Min(1), validation.Max(6)}}}}},
-		ElementDefinition{Description: ElementTypeMetadata{Code: ElementImage, Label: "Изображение", Fields: []field.ConfigField{{Key: "media_id", Label: "Публичное изображение", Type: field.TypeMedia, Required: true, Options: fileOptionMap(imageOptions)}, {Key: "alt", Label: "Alt", Type: field.TypeString}}}, FieldTypes: resolver},
+		ElementDefinition{
+			Description: ElementTypeMetadata{
+				Code:  ElementHeading,
+				Label: "Заголовок",
+				Fields: []field.ConfigField{
+					{Key: "text", Label: "Заголовок", Type: field.TypeString, Required: true},
+					{
+						Key: "level", Label: "Уровень", Type: field.TypeInteger,
+						Required: true, Default: 2,
+						Validators: []field.ValidatorDefinition{
+							validation.Min(1), validation.Max(6),
+						},
+					},
+				},
+			},
+		},
+		ElementDefinition{
+			Description: ElementTypeMetadata{
+				Code:  ElementImage,
+				Label: "Изображение",
+				Fields: []field.ConfigField{
+					{
+						Key: "media_id", Label: "Публичное изображение",
+						Type: field.TypeMedia, Required: true,
+						Options: fileOptionMap(imageOptions),
+					},
+					{Key: "alt", Label: "Alt", Type: field.TypeString},
+				},
+			},
+			FieldTypes: resolver,
+		},
 		ElementDefinition{Description: ElementTypeMetadata{Code: ElementSubmitButton, Label: "Кнопка отправки", Fields: []field.ConfigField{{Key: "label", Label: "Текст кнопки", Type: field.TypeString, Required: true, Default: "Отправить"}}}},
 	}
 

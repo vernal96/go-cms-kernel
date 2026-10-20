@@ -232,7 +232,18 @@ func (m *Resources) ResourceMetadata(
 		capabilities := metadata.Capabilities
 		types = append(types, ResourceType{
 			Code: code, Label: metadata.Label,
-			Capabilities:   ResourceTypeCapabilities{SupportsTemplate: capabilities.SupportsTemplate, SupportsContent: capabilities.SupportsContent, SupportsWidgets: capabilities.SupportsWidgets, SupportsFields: capabilities.SupportsFields, SupportsExternalURL: capabilities.SupportsExternalURL, SupportsTargetResource: capabilities.SupportsTargetResource, MutableType: capabilities.MutableType, OwnsLibraryItems: capabilities.OwnsLibraryItems, MirrorsLibraryItems: capabilities.MirrorsLibraryItems, DefaultIcon: capabilities.DefaultIcon},
+			Capabilities: ResourceTypeCapabilities{
+				SupportsTemplate:       capabilities.SupportsTemplate,
+				SupportsContent:        capabilities.SupportsContent,
+				SupportsWidgets:        capabilities.SupportsWidgets,
+				SupportsFields:         capabilities.SupportsFields,
+				SupportsExternalURL:    capabilities.SupportsExternalURL,
+				SupportsTargetResource: capabilities.SupportsTargetResource,
+				MutableType:            capabilities.MutableType,
+				OwnsLibraryItems:       capabilities.OwnsLibraryItems,
+				MirrorsLibraryItems:    capabilities.MirrorsLibraryItems,
+				DefaultIcon:            capabilities.DefaultIcon,
+			},
 			SettingsFields: settingsFields, SettingsDefaults: cloneAnyMap(metadata.SettingsDefaults), ContentTypes: contentTypes,
 		})
 	}

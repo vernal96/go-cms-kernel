@@ -345,7 +345,14 @@ func TestTemplateWidgetBindingsCompileComposeAndResolvePerResource(t *testing.T)
 		t.Fatal(err)
 	}
 	bindings := widget.ParamBindings{"text": widget.ResourceField("headline")}
-	definitions := []Definition{{Code: "bound", Label: "Bound", Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}, Layout: Layout{{Code: "body", Label: "Основная область", Items: []Item{Widget{Widget: ref, ParamBindings: bindings}, ResourceWidgets{}}}}}}
+	definitions := []Definition{{
+		Code: "bound", Label: "Bound",
+		Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}},
+		Layout: Layout{{
+			Code: "body", Label: "Основная область",
+			Items: []Item{Widget{Widget: ref, ParamBindings: bindings}, ResourceWidgets{}},
+		}},
+	}}
 	templates, err := Compile(definitions, resolver())
 	if err != nil {
 		t.Fatal(err)

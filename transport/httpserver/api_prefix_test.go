@@ -147,7 +147,10 @@ func TestAPIPrefixKeepsContentPathsAndLibraryResolution(t *testing.T) {
 	requestWithoutHome.Host = "example.com"
 	responseWithoutHome = httptest.NewRecorder()
 	handlerWithoutHome.ServeHTTP(responseWithoutHome, requestWithoutHome)
-	if responseWithoutHome.Code != http.StatusOK || json.Unmarshal(responseWithoutHome.Body.Bytes(), &withoutHome) != nil || len(withoutHome.Resource.Breadcrumbs) != 2 || withoutHome.Resource.Breadcrumbs[0].Link != "/section" {
+	if responseWithoutHome.Code != http.StatusOK ||
+		json.Unmarshal(responseWithoutHome.Body.Bytes(), &withoutHome) != nil ||
+		len(withoutHome.Resource.Breadcrumbs) != 2 ||
+		withoutHome.Resource.Breadcrumbs[0].Link != "/section" {
 		t.Fatalf("ordinary nested chain without home: status=%d breadcrumbs=%#v body=%s", responseWithoutHome.Code, withoutHome.Resource.Breadcrumbs, responseWithoutHome.Body.String())
 	}
 	request := httptest.NewRequest(http.MethodGet, "/api/resources/resolve/missing", nil)

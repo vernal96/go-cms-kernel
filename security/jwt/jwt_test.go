@@ -24,7 +24,7 @@ func testConfig() Config {
 }
 
 func TestServiceIssuesAndVerifiesAccessToken(t *testing.T) {
-	service, err := New(testConfig(), WithClock(func() time.Time {
+	service, err := New(testConfig(), WithSessions(newTestSessions()), WithClock(func() time.Time {
 		return testNow
 	}))
 	if err != nil {
@@ -81,7 +81,7 @@ func TestServiceIssuesAndVerifiesAccessToken(t *testing.T) {
 
 func TestServiceRejectsInvalidClaimsSignaturesAndMethods(t *testing.T) {
 	config := testConfig()
-	service, err := New(config, WithClock(func() time.Time {
+	service, err := New(config, WithSessions(newTestSessions()), WithClock(func() time.Time {
 		return testNow
 	}))
 	if err != nil {
@@ -328,7 +328,7 @@ func TestServiceValidatesConfigurationActorAndContext(t *testing.T) {
 		})
 	}
 
-	service, err := New(valid, WithClock(func() time.Time { return testNow }))
+	service, err := New(valid, WithSessions(newTestSessions()), WithClock(func() time.Time { return testNow }))
 	if err != nil {
 		t.Fatal(err)
 	}

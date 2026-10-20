@@ -62,14 +62,30 @@ func TestMediaFileValidationUsesCurrentSiteResourceAndWidgetSchemas(t *testing.T
 		options := field.MediaOptions{Disk: "public", VirtualPath: "files", SettingsCode: "document", MIMETypes: []string{mime}}
 		rows := []field.Definition{{Key: "rows", Label: "Rows", Type: field.TypeRepeater, Options: field.RepeaterOptions{Fields: []field.Definition{{Key: "icon", Label: "Icon", Type: field.TypeMedia, Options: options}}}}}
 		options.Multiple = true
-		blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "guard", Modules: []kernel.Module{mediaValidationModule{fields: rows}}, Params: rows, Templates: []template.Definition{{Code: "page", Label: "Page", Fields: []field.Definition{{Key: "documents", Label: "Documents", Type: field.TypeMedia, Options: options}}}}})
+		blueprint, err := factory.Compile(ctx, kernel.Profile{
+			Code: "guard", Modules: []kernel.Module{mediaValidationModule{fields: rows}},
+			Params: rows,
+			Templates: []template.Definition{{
+				Code: "page", Label: "Page",
+				Fields: []field.Definition{{
+					Key: "documents", Label: "Documents", Type: field.TypeMedia,
+					Options: options,
+				}},
+			}},
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return blueprint
 	}
 	profiles := &mediaValidationProfiles{blueprint: compile("image/png")}
-	catalog, err := site.NewCatalog(&siteRepositoryStub{items: []site.Site{{ID: 1, ProfileCode: "guard", Domain: "guard.test", Name: "Guard", Locale: "en", Settings: map[string]any{"rows": []any{map[string]any{"icon": int64(1)}}}}}}, profiles, &deletionSiteAccess{})
+	catalog, err := site.NewCatalog(
+		&siteRepositoryStub{items: []site.Site{{
+			ID: 1, ProfileCode: "guard", Domain: "guard.test", Name: "Guard", Locale: "en",
+			Settings: map[string]any{"rows": []any{map[string]any{"icon": int64(1)}}},
+		}}},
+		profiles, &deletionSiteAccess{},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

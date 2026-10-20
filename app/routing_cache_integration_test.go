@@ -48,9 +48,39 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 	code := template.Code("cached")
 	definition := appkernel.Definition{
 		Logger: fakeLoggerFactory{}, EventBus: fakeEventBusFactory{}, PasswordHasher: argon2id.Factory{},
-		MainDatabase: appkernel.DatabaseDefinition{Connector: pg.Factory{Config: pg.Config{Code: "main", Host: host, Port: port, Database: os.Getenv("CMS_TEST_POSTGRES_DB"), User: os.Getenv("CMS_TEST_POSTGRES_USER"), Password: os.Getenv("CMS_TEST_POSTGRES_PASSWORD"), SSLMode: "disable", MaxConns: 4, ConnMaxLifetime: time.Minute, ConnectTimeout: 5 * time.Second}}, Adapters: []kernel.ModuleDatabaseFactory{corepg.DatabaseFactory{}}},
-		Caches:       []cache.Factory{rediscache.Factory{Config: rediscache.Config{Code: "test", Addrs: []string{redisAddr}, Prefix: fmt.Sprintf("routing-test:%d", time.Now().UnixNano())}}},
-		Profiles:     []kernel.Profile{{Code: profile, Modules: []kernel.Module{core.New(core.Config{Caches: []cache.Binding{{Alias: core.DurableCacheAlias, Code: "test"}, {Alias: core.HotCacheAlias, Code: "test"}}}), admin.New()}, Templates: []template.Definition{{Code: code, Label: "Cached", Layout: template.Layout{{Code: "body", Label: "Основная область", Items: []template.Item{template.ResourceWidgets{}}}, {Code: "sidebar", Label: "Боковая область", Items: []template.Item{template.ResourceWidgets{}}}, {Code: "footer", Label: "Footer"}}}}}},
+		MainDatabase: appkernel.DatabaseDefinition{
+			Connector: pg.Factory{Config: pg.Config{
+				Code: "main", Host: host, Port: port,
+				Database: os.Getenv("CMS_TEST_POSTGRES_DB"),
+				User:     os.Getenv("CMS_TEST_POSTGRES_USER"),
+				Password: os.Getenv("CMS_TEST_POSTGRES_PASSWORD"),
+				SSLMode:  "disable", MaxConns: 4,
+				ConnMaxLifetime: time.Minute, ConnectTimeout: 5 * time.Second,
+			}},
+			Adapters: []kernel.ModuleDatabaseFactory{corepg.DatabaseFactory{}},
+		},
+		Caches: []cache.Factory{rediscache.Factory{Config: rediscache.Config{
+			Code: "test", Addrs: []string{redisAddr},
+			Prefix: fmt.Sprintf("routing-test:%d", time.Now().UnixNano()),
+		}}},
+		Profiles: []kernel.Profile{{
+			Code: profile,
+			Modules: []kernel.Module{
+				core.New(core.Config{Caches: []cache.Binding{
+					{Alias: core.DurableCacheAlias, Code: "test"},
+					{Alias: core.HotCacheAlias, Code: "test"},
+				}}),
+				admin.New(),
+			},
+			Templates: []template.Definition{{
+				Code: code, Label: "Cached",
+				Layout: template.Layout{
+					{Code: "body", Label: "Основная область", Items: []template.Item{template.ResourceWidgets{}}},
+					{Code: "sidebar", Label: "Боковая область", Items: []template.Item{template.ResourceWidgets{}}},
+					{Code: "footer", Label: "Footer"},
+				},
+			}},
+		}},
 	}
 	application, err := appkernel.New(ctx, definition)
 	if err != nil {
@@ -66,7 +96,11 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 	actor := security.System()
 	createSite := func(suffix string) *site.Runtime {
 		t.Helper()
-		runtime, err := application.Sites().Create(ctx, actor, site.CreateInput{Name: "Test site", ProfileCode: profile, Domain: fmt.Sprintf("cache-%d-%s.example", time.Now().UnixNano(), suffix), Locale: "en", IsPublic: true})
+		runtime, err := application.Sites().Create(ctx, actor, site.CreateInput{
+			Name: "Test site", ProfileCode: profile,
+			Domain: fmt.Sprintf("cache-%d-%s.example", time.Now().UnixNano(), suffix),
+			Locale: "en", IsPublic: true,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -83,7 +117,11 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 	}
 	oldRuntime, _ := replica.Sites().RuntimeByID(first.Site().ID)
 	siteState := first.Site()
-	closed, err := application.Sites().Update(ctx, actor, site.UpdateInput{Name: "Test site", ID: siteState.ID, ProfileCode: siteState.ProfileCode, Domain: siteState.Domain, Locale: siteState.Locale, Settings: siteState.Settings, IsPublic: false})
+	closed, err := application.Sites().Update(ctx, actor, site.UpdateInput{
+		Name: "Test site", ID: siteState.ID, ProfileCode: siteState.ProfileCode,
+		Domain: siteState.Domain, Locale: siteState.Locale,
+		Settings: siteState.Settings, IsPublic: false,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +138,11 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 	if err := replica.Sites().CheckCurrent(ctx, refreshed); err != nil {
 		t.Fatal(err)
 	}
-	first, err = application.Sites().Update(ctx, actor, site.UpdateInput{Name: "Test site", ID: siteState.ID, ProfileCode: siteState.ProfileCode, Domain: siteState.Domain, Locale: siteState.Locale, Settings: siteState.Settings, IsPublic: true})
+	first, err = application.Sites().Update(ctx, actor, site.UpdateInput{
+		Name: "Test site", ID: siteState.ID, ProfileCode: siteState.ProfileCode,
+		Domain: siteState.Domain, Locale: siteState.Locale,
+		Settings: siteState.Settings, IsPublic: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +230,11 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 	}
 	update := func(item resource.Resource, title, slug string) resource.Resource {
 		t.Helper()
-		result, err := application.Resources().Update(ctx, actor, resource.UpdateInput{ID: item.ID, ExpectedVersion: item.Version, ParentID: item.ParentID, Type: item.Type, Template: item.Template, Title: title, Slug: slug, IsPublic: true, TypeSettings: item.TypeSettings})
+		result, err := application.Resources().Update(ctx, actor, resource.UpdateInput{
+			ID: item.ID, ExpectedVersion: item.Version, ParentID: item.ParentID,
+			Type: item.Type, Template: item.Template, Title: title, Slug: slug,
+			IsPublic: true, TypeSettings: item.TypeSettings,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -288,7 +334,11 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 	}
 	current = load(scheduled.ID)
 	unpublishAt := time.Now().Add(2 * time.Second)
-	_, err = application.Resources().Update(ctx, actor, resource.UpdateInput{ID: current.ID, ExpectedVersion: current.Version, ParentID: current.ParentID, Type: current.Type, Template: current.Template, Title: current.Title, Slug: current.Slug, IsPublic: true, UnpublishedAt: &unpublishAt})
+	_, err = application.Resources().Update(ctx, actor, resource.UpdateInput{
+		ID: current.ID, ExpectedVersion: current.Version, ParentID: current.ParentID,
+		Type: current.Type, Template: current.Template, Title: current.Title,
+		Slug: current.Slug, IsPublic: true, UnpublishedAt: &unpublishAt,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +354,11 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 	// Library publication also gates its cached items.
 	current = load(lib.ID)
 	past := time.Now().Add(-time.Second)
-	_, err = application.Resources().Update(ctx, actor, resource.UpdateInput{ID: current.ID, ExpectedVersion: current.Version, ParentID: current.ParentID, Type: current.Type, Title: current.Title, Slug: current.Slug, IsPublic: true, TypeSettings: current.TypeSettings, UnpublishedAt: &past})
+	_, err = application.Resources().Update(ctx, actor, resource.UpdateInput{
+		ID: current.ID, ExpectedVersion: current.Version, ParentID: current.ParentID,
+		Type: current.Type, Title: current.Title, Slug: current.Slug,
+		IsPublic: true, TypeSettings: current.TypeSettings, UnpublishedAt: &past,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +382,11 @@ func TestRoutingCachePostgresRedisLifecycle(t *testing.T) {
 	}
 	get("/dated/2024/item", 200)
 	newDate := oldDate.AddDate(1, 0, 0)
-	_, err = libraryItems.Update(ctx, actor, resource.UpdateLibraryItemInput{ID: dated.ID, ExpectedVersion: dated.Version, Template: &code, Title: dated.Title, Slug: dated.Slug, IsPublic: true, PublishedAt: &newDate})
+	_, err = libraryItems.Update(ctx, actor, resource.UpdateLibraryItemInput{
+		ID: dated.ID, ExpectedVersion: dated.Version, Template: &code,
+		Title: dated.Title, Slug: dated.Slug, IsPublic: true,
+		PublishedAt: &newDate,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

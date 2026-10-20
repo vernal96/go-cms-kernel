@@ -439,7 +439,22 @@ func (p templatePayload) template() (Template, error) {
 		}
 		variables[index] = definition
 	}
-	return Template{Code: p.Code, Name: p.Name, Enabled: p.Enabled, From: p.From, To: p.To, CC: p.CC, BCC: p.BCC, ReplyTo: p.ReplyTo, Subject: p.Subject, ContentType: p.ContentType, TextBody: p.TextBody, HTMLBody: p.HTMLBody, Attachments: p.Attachments, Variables: variables}, nil
+	return Template{
+		Code:        p.Code,
+		Name:        p.Name,
+		Enabled:     p.Enabled,
+		From:        p.From,
+		To:          p.To,
+		CC:          p.CC,
+		BCC:         p.BCC,
+		ReplyTo:     p.ReplyTo,
+		Subject:     p.Subject,
+		ContentType: p.ContentType,
+		TextBody:    p.TextBody,
+		HTMLBody:    p.HTMLBody,
+		Attachments: p.Attachments,
+		Variables:   variables,
+	}, nil
 }
 
 func (v variableDTO) definition() (field.Definition, error) {
@@ -467,7 +482,14 @@ func toVariableDTO(definition field.Definition) (variableDTO, error) {
 	if err != nil {
 		return variableDTO{}, err
 	}
-	return variableDTO{Key: definition.Key, Type: definition.Type, Label: definition.Label, Required: definition.Required, Validators: field.CloneValidatorDefinitions(definition.Validators), Options: options}, nil
+	return variableDTO{
+		Key:        definition.Key,
+		Type:       definition.Type,
+		Label:      definition.Label,
+		Required:   definition.Required,
+		Validators: field.CloneValidatorDefinitions(definition.Validators),
+		Options:    options,
+	}, nil
 }
 
 func pageQuery(request *http.Request) (PageQuery, error) {

@@ -38,7 +38,18 @@ func TestBoundFileChecksTargetRestrictions(t *testing.T) {
 		t.Fatal(err)
 	}
 	catalog, err := widget.Compile([]widget.Source{{Module: widget.ModuleDescriptor{Code: "test", Label: "Test"}, Widgets: []widget.Widget{widget.Functional{
-		Description: widget.Definition{Reference: widget.NewRef("file"), Label: "File", Description: "File", Fields: []field.Definition{{Key: "image", Label: "Image", Type: field.TypeMedia, Options: field.MediaOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image", MIMETypes: []string{"image/*"}}}}},
+		Description: widget.Definition{
+			Reference:   widget.NewRef("file"),
+			Label:       "File",
+			Description: "File",
+			Fields: []field.Definition{{
+				Key: "image", Label: "Image", Type: field.TypeMedia,
+				Options: field.MediaOptions{
+					Disk: "public", VirtualPath: "assets", SettingsCode: "image",
+					MIMETypes: []string{"image/*"},
+				},
+			}},
+		},
 		Render: func(_ context.Context, _ widget.RenderInput, params map[string]any) (map[string]any, error) {
 			return params, nil
 		},

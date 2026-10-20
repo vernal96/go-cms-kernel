@@ -97,13 +97,7 @@ func (s *Server) Run(ctx context.Context) error {
 			"HTTP server shutdown started",
 			slog.String("event", "http.server.shutdown.started"),
 		)
-		shutdownContext, cancel := context.WithTimeout(
-			context.Background(),
-			s.config.ShutdownTimeout,
-		)
-		defer cancel()
-
-		err := s.server.Shutdown(shutdownContext)
+		err := s.shutdown()
 		if err != nil {
 			s.logger.Error(
 				"HTTP server shutdown failed",
@@ -118,4 +112,15 @@ func (s *Server) Run(ctx context.Context) error {
 		)
 		return nil
 	}
+}
+
+// shutdown bounds graceful draining and closes active connections on timeout so
+// their request contexts are canceled before the application closes services.
+func (s *Server) shutdown() error {
+	ctx, cancel := context.WithTimeout(context.Background(), s.config.ShutdownTimeout)
+	defer cancel()
+	if err := s.server.Shutdown(ctx); err != nil {
+		return errors.Join(err, s.server.Close())
+	}
+	return nil
 }

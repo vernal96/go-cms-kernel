@@ -318,7 +318,13 @@ func TestDashboardRunsIndependentBranchesAndPreservesDependency(t *testing.T) {
 		resourcesStarted <- struct{}{}
 		return nil
 	}}
-	m := &Management{repository: sites, resourceRepo: resources, userRepo: &dashboardUserRepository{run: wait("users")}, groupRepo: &dashboardGroupRepository{run: wait("groups")}, authorizer: managementAuthorizer{}, policy: scopedPolicy{scope: SiteAccessScope{All: true}}}
+	m := &Management{
+		repository: sites, resourceRepo: resources,
+		userRepo:   &dashboardUserRepository{run: wait("users")},
+		groupRepo:  &dashboardGroupRepository{run: wait("groups")},
+		authorizer: managementAuthorizer{},
+		policy:     scopedPolicy{scope: SiteAccessScope{All: true}},
+	}
 	done := make(chan error, 1)
 	go func() { _, err := m.Dashboard(ctx, security.User(1)); done <- err }()
 	seen := map[string]bool{}

@@ -88,7 +88,11 @@ func (s *MediaFileDeletions) Delete(ctx context.Context, actor security.Actor, i
 			var err error
 			result, err = s.repository.DeleteMediaFile(ctx, actor.AuditUserID(), input, func(ctx context.Context, ref *media.FileOccurrence) (media.PreparedFileOwner, error) {
 				if siteRef != nil {
-					if ref == nil || ref.OwnerKind != siteRef.OwnerKind || ref.OwnerID != siteRef.OwnerID || ref.SiteID != siteRef.SiteID || ref.Container != siteRef.Container || ref.MediaID != siteRef.MediaID || ref.Target != siteRef.Target || ref.LibraryID != siteRef.LibraryID || !slices.Equal(ref.Path, siteRef.Path) {
+					if ref == nil ||
+						ref.OwnerKind != siteRef.OwnerKind || ref.OwnerID != siteRef.OwnerID ||
+						ref.SiteID != siteRef.SiteID || ref.Container != siteRef.Container ||
+						ref.MediaID != siteRef.MediaID || ref.Target != siteRef.Target ||
+						ref.LibraryID != siteRef.LibraryID || !slices.Equal(ref.Path, siteRef.Path) {
 						return media.PreparedFileOwner{}, media.ErrFileDeleteConflict
 					}
 					return media.PreparedFileOwner{

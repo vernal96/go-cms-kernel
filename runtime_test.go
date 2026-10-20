@@ -1758,7 +1758,15 @@ func TestProfileScopedValidatorRegistration(t *testing.T) {
 	metadata := field.ValidatorMetadata{Label: "Prefix", Options: []field.ConfigField{{Key: "value", Label: "Original", Type: field.TypeString, Required: true}}, FieldTypes: []field.TypeCode{field.TypeString}}
 	base := registryModule{code: "fields", fieldTypes: field.StandardTypes(), validatorTypes: field.StandardValidatorTypes()}
 	custom := registryModule{code: "extension", validatorTypes: []field.ValidatorType{testPrefixValidatorType{metadata: &metadata}}}
-	profile := kernel.Profile{Code: "with-validator", Modules: []kernel.Module{base, custom}, Params: []field.Definition{{Key: "slug", Type: field.TypeString, Label: "Slug", Validators: []field.ValidatorDefinition{{Type: "example.prefix", Options: map[string]any{"value": "go-"}}}}}}
+	profile := kernel.Profile{
+		Code: "with-validator", Modules: []kernel.Module{base, custom},
+		Params: []field.Definition{{
+			Key: "slug", Type: field.TypeString, Label: "Slug",
+			Validators: []field.ValidatorDefinition{{
+				Type: "example.prefix", Options: map[string]any{"value": "go-"},
+			}},
+		}},
+	}
 	runtime, err := buildProfileRuntime(factory, context.Background(), profile)
 	if err != nil {
 		t.Fatal(err)

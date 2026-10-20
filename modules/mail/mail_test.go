@@ -277,7 +277,18 @@ func TestRendererPreservesRequiredFieldsAndUsesPrivateSiteVariables(t *testing.T
 	required := true
 	params := []field.Definition{{Key: "company", Type: field.TypeString, Label: "Company"}}
 	files := &testFiles{items: map[file.ID]file.File{}, urls: map[file.ID]string{}}
-	renderer, err := NewRenderer(standardFields(), files, testMediaResolver{files}, site.Site{Name: "Test site", ID: 5, ProfileCode: "dev", Domain: "example.com", Locale: "ru-RU", IsPublic: true, Settings: map[string]any{"company": "ACME"}}, params, RendererConfig{})
+	renderer, err := NewRenderer(
+		standardFields(),
+		files,
+		testMediaResolver{files},
+		site.Site{
+			Name: "Test site", ID: 5, ProfileCode: "dev", Domain: "example.com",
+			Locale: "ru-RU", IsPublic: true,
+			Settings: map[string]any{"company": "ACME"},
+		},
+		params,
+		RendererConfig{},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +351,17 @@ func TestAttachmentAuthorizationDistinguishesEditingManualAndTrustedSiteSources(
 	t.Parallel()
 	files := &testFiles{items: map[file.ID]file.File{7: {ID: 7, Name: "contract.pdf", MIMEType: "application/pdf", Size: 3}}, body: map[file.ID]string{7: "pdf"}, urls: map[file.ID]string{}, denyUsers: true}
 	params := []field.Definition{{Key: "contract", Type: field.TypeMedia, Label: "Contract", Options: field.MediaOptions{Disk: "documents", VirtualPath: "mail", SettingsCode: "attachment"}}}
-	renderer, err := NewRenderer(standardFields(), files, testMediaResolver{files}, site.Site{Name: "Test site", ID: 5, ProfileCode: "dev", Domain: "example.com", Locale: "ru-RU", Settings: map[string]any{"contract": int64(7)}}, params, RendererConfig{})
+	renderer, err := NewRenderer(
+		standardFields(),
+		files,
+		testMediaResolver{files},
+		site.Site{
+			Name: "Test site", ID: 5, ProfileCode: "dev", Domain: "example.com",
+			Locale: "ru-RU", Settings: map[string]any{"contract": int64(7)},
+		},
+		params,
+		RendererConfig{},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -516,7 +537,12 @@ func TestPreviewAndQueueShareRendererAndPersistImmutableSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message.Subject != "Updated Alice" || message.Subject == preview.Subject || message.HTMLBody != preview.HTMLBody || message.Status != StatusQueued || message.RequestedBy == nil || *message.RequestedBy != 9 || !strings.HasPrefix(message.RFCMessageID, "<") {
+	if message.Subject != "Updated Alice" ||
+		message.Subject == preview.Subject ||
+		message.HTMLBody != preview.HTMLBody ||
+		message.Status != StatusQueued ||
+		message.RequestedBy == nil || *message.RequestedBy != 9 ||
+		!strings.HasPrefix(message.RFCMessageID, "<") {
 		t.Fatalf("queued = %#v preview=%#v", message, preview)
 	}
 	if message.RequestedByName != "Editor" {
@@ -810,7 +836,12 @@ func TestTemplateResponseUsesStableLowercaseChoiceDTO(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), `"choices":[{"value":"a","label":"A"}]`) || !strings.Contains(string(raw), `"media_id":7`) || strings.Contains(string(raw), `"file_id"`) || !strings.Contains(string(raw), `"attachment_media_options"`) || strings.Contains(string(raw), `"Value"`) || strings.Contains(string(raw), `"transport"`) {
+	if !strings.Contains(string(raw), `"choices":[{"value":"a","label":"A"}]`) ||
+		!strings.Contains(string(raw), `"media_id":7`) ||
+		strings.Contains(string(raw), `"file_id"`) ||
+		!strings.Contains(string(raw), `"attachment_media_options"`) ||
+		strings.Contains(string(raw), `"Value"`) ||
+		strings.Contains(string(raw), `"transport"`) {
 		t.Fatalf("response JSON = %s", raw)
 	}
 }
@@ -1031,7 +1062,17 @@ func TestTransientSpoolSurvivesRetryAndIsDeletedOnTerminalSuccess(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	queued, err := service.QueueByCode(context.Background(), QueueInput{TemplateCode: "welcome", Values: map[string]any{"email": "a@example.net"}, Attachments: []TransientAttachment{{Filename: "resume.pdf", MIMEType: "application/pdf", Size: 6, Body: strings.NewReader("resume")}}})
+	queued, err := service.QueueByCode(
+		context.Background(),
+		QueueInput{
+			TemplateCode: "welcome",
+			Values:       map[string]any{"email": "a@example.net"},
+			Attachments: []TransientAttachment{{
+				Filename: "resume.pdf", MIMEType: "application/pdf", Size: 6,
+				Body: strings.NewReader("resume"),
+			}},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1242,7 +1283,13 @@ func TestActiveMessageBlocksTransitionBeforeSpoolPurge(t *testing.T) {
 	repository := &memoryRepository{template: mailTemplate(), active: &active}
 	service, _ := NewService(5, repository, renderer, allowAuthorizer{}, testUsers{}, spool, Limits{MaxRecipients: 100, MaxMessageSize: 1 << 20, MaxAttachmentSize: 1 << 20}, "example.com")
 	runtime := &Runtime{service: service, spool: spool, spoolCleanupBatch: 1}
-	if _, err := runtime.PrepareRuntimeTransition(context.Background(), kernel.RuntimeTransition{Reason: kernel.RuntimeTransitionSiteDelete, ScopeID: "5", FromProfile: "mail"}); !errors.Is(err, kernel.ErrRuntimeTransitionBlocked) {
+	if _, err := runtime.PrepareRuntimeTransition(
+		context.Background(),
+		kernel.RuntimeTransition{
+			Reason:  kernel.RuntimeTransitionSiteDelete,
+			ScopeID: "5", FromProfile: "mail",
+		},
+	); !errors.Is(err, kernel.ErrRuntimeTransitionBlocked) {
 		t.Fatalf("active transition error = %v", err)
 	}
 	if _, exists := disk.objects[key]; !exists {

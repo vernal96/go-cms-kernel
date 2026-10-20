@@ -263,7 +263,16 @@ func (customFileType) Compile(ctx field.CompileContext, options any) (field.Valu
 }
 func TestRepeaterCollectsCustomReferences(t *testing.T) {
 	types := append(field.StandardTypes(), customFileType{})
-	schema, err := field.CompilePersistent([]field.Definition{repeater(field.Definition{Key: "asset", Type: "example.file", Label: "Asset", Options: field.MediaOptions{Disk: "public", VirtualPath: "assets", SettingsCode: "image", MIMETypes: []string{"image/*"}}})}, types)
+	schema, err := field.CompilePersistent(
+		[]field.Definition{repeater(field.Definition{
+			Key: "asset", Type: "example.file", Label: "Asset",
+			Options: field.MediaOptions{
+				Disk: "public", VirtualPath: "assets", SettingsCode: "image",
+				MIMETypes: []string{"image/*"},
+			},
+		})},
+		types,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

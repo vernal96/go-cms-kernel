@@ -161,7 +161,13 @@ func (i *resourceListInstance) Render(ctx context.Context, input widget.RenderIn
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	query := resource.Query{SiteID: site.ID(input.Site.ID), IDs: i.config.ids, ExcludeIDs: append([]resource.ID(nil), i.config.exclude...), Types: i.config.types, Filters: i.config.filters, Sort: i.config.sorting, Fields: i.config.fields, Limit: i.config.limit, PublicOnly: true}
+	query := resource.Query{
+		SiteID: site.ID(input.Site.ID), IDs: i.config.ids,
+		ExcludeIDs: append([]resource.ID(nil), i.config.exclude...),
+		Types:      i.config.types, Filters: i.config.filters,
+		Sort: i.config.sorting, Fields: i.config.fields,
+		Limit: i.config.limit, PublicOnly: true,
+	}
 	if len(query.IDs) == 0 {
 		query.FilterByParent = true
 		switch i.config.parentMode {

@@ -3,8 +3,10 @@ package cache
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestDependencyInvalidationCrossesAliasesStoresAndModulesWithinSite(t *testing.T) {
@@ -104,6 +106,304 @@ func TestRuntimeCacheTargetRegistrationIsIdempotent(t *testing.T) {
 	if count := len(manager.coordinator.targets); count != 1 {
 		t.Fatalf("registered targets = %d", count)
 	}
+}
+
+func TestRuntimeTargetUpdatesBoundTargetsAndPreserveInvalidation(t *testing.T) {
+	physical := newTaggedStore("filesystem_cache")
+	manager := &Manager{
+		stores:      map[Code]Store{physical.Code(): physical},
+		coordinator: NewCoordinator(),
+	}
+	makeTargets := func(siteID string, store Store) []RuntimeTarget {
+		targets := NewRuntimeTargetSet()
+		_, err := NewRuntimeModuleManager(
+			manager,
+			RuntimeScope{Profile: "dev", Site: siteID, Targets: targets},
+			"core",
+			[]Binding{{Alias: "durable", Code: physical.Code()}},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The collector uses the resolver's configured physical store. Keep the
+		// parameter to make each candidate runtime's physical store explicit.
+		if store.Code() != physical.Code() {
+			t.Fatal("candidate store code does not match configured binding")
+		}
+		return targets.Targets()
+	}
+	countTargets := func() int {
+		manager.coordinator.mu.RLock()
+		defer manager.coordinator.mu.RUnlock()
+		count := 0
+		for _, targets := range manager.coordinator.runtimeScopes {
+			count += len(targets)
+		}
+		return count
+	}
+
+	initial := makeTargets("7", physical)
+	update, err := manager.PrepareRuntimeTargets(map[string][]RuntimeTarget{"7": initial})
+	if err != nil {
+		t.Fatal(err)
+	}
+	update.Publish()
+	if count := countTargets(); count != 1 {
+		t.Fatalf("initial active target count = %d", count)
+	}
+	currentStore := Store(physical)
+
+	for iteration := range 25 {
+		candidate := newTaggedStore(Code(fmt.Sprintf("candidate_%d", iteration)))
+		// Candidate stores are resolved independently from the manager used by
+		// the normal runtime manager; use a one-store resolver for this scope.
+		candidateManager := &Manager{
+			stores:      map[Code]Store{candidate.Code(): candidate},
+			coordinator: manager.coordinator,
+		}
+		targets := NewRuntimeTargetSet()
+		_, err := NewRuntimeModuleManager(
+			candidateManager,
+			RuntimeScope{Profile: "dev", Site: "7", Targets: targets},
+			"core",
+			[]Binding{{Alias: "durable", Code: candidate.Code()}},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		prepared, err := manager.PrepareRuntimeTargets(map[string][]RuntimeTarget{
+			"7": targets.Targets(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if count := countTargets(); count != 2 {
+			t.Fatalf("prepare must retain old and candidate stores, got %d", count)
+		}
+		tag := Tag(scopedValue("sites/7/dependencies", "resource:1"))
+		for index, store := range []Store{currentStore, candidate} {
+			key := fmt.Sprintf("lifecycle:%d:%d", iteration, index)
+			if err := store.Set(
+				context.Background(),
+				key,
+				[]byte("cached"),
+				SetOptions{Tags: []Tag{tag}},
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := manager.Invalidate(context.Background(), "resource:1"); err != nil {
+			t.Fatal(err)
+		}
+		for index, store := range []Store{currentStore, candidate} {
+			key := fmt.Sprintf("lifecycle:%d:%d", iteration, index)
+			if _, err := store.Get(context.Background(), key); !errors.Is(err, ErrMiss) {
+				t.Fatalf("prepared target %d was missed by invalidation: %v", index, err)
+			}
+		}
+		prepared.Abort()
+		if count := countTargets(); count != 1 {
+			t.Fatalf("aborted candidate leaked targets: %d", count)
+		}
+
+		prepared, err = manager.PrepareRuntimeTargets(map[string][]RuntimeTarget{
+			"7": targets.Targets(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := candidate.Set(
+			context.Background(),
+			"published-candidate",
+			[]byte("cached"),
+			SetOptions{Tags: []Tag{tag}},
+		); err != nil {
+			t.Fatal(err)
+		}
+		if err := manager.Invalidate(context.Background(), "resource:1"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := candidate.Get(
+			context.Background(), "published-candidate",
+		); !errors.Is(err, ErrMiss) {
+			t.Fatalf("candidate target missed invalidation before publish: %v", err)
+		}
+		prepared.Publish()
+		if count := countTargets(); count != 1 {
+			t.Fatalf("published rebuild leaked old targets: %d", count)
+		}
+		currentStore = candidate
+	}
+
+	deletion, err := manager.PrepareRuntimeTargets(map[string][]RuntimeTarget{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deletion.Publish()
+	if count := countTargets(); count != 0 {
+		t.Fatalf("deleted site retained cache targets: %d", count)
+	}
+}
+
+func TestFailedRuntimeCandidateDoesNotRegisterTargets(t *testing.T) {
+	store := newTaggedStore("filesystem_cache")
+	manager := &Manager{
+		stores:      map[Code]Store{store.Code(): store},
+		coordinator: NewCoordinator(),
+	}
+	targets := NewRuntimeTargetSet()
+	_, err := NewRuntimeModuleManager(
+		manager,
+		RuntimeScope{Profile: "dev", Site: "failed-site", Targets: targets},
+		"core",
+		[]Binding{{Alias: "durable", Code: store.Code()}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A later module build failure drops this candidate's target set without
+	// changing active registrations.
+	manager.coordinator.mu.RLock()
+	defer manager.coordinator.mu.RUnlock()
+	if len(manager.coordinator.runtimeScopes) != 0 {
+		t.Fatalf("failed candidate registered runtime scopes: %d", len(manager.coordinator.runtimeScopes))
+	}
+}
+
+func TestRuntimeTargetUpdatesSerializeWithConcurrentInvalidation(t *testing.T) {
+	const scope = "sites/7/dependencies"
+	old := &blockingTaggedStore{
+		Store: newTaggedStore("old"), entered: make(chan struct{}), release: make(chan struct{}),
+	}
+	candidate := &blockingTaggedStore{
+		Store: newTaggedStore("candidate"), entered: make(chan struct{}), release: make(chan struct{}),
+	}
+	manager := &Manager{coordinator: NewCoordinator()}
+	active, err := manager.PrepareRuntimeTargets(map[string][]RuntimeTarget{
+		"7": {{Scope: scope, Store: old}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	active.Publish()
+	update, err := manager.PrepareRuntimeTargets(map[string][]RuntimeTarget{
+		"7": {{Scope: scope, Store: candidate}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	invalidationDone := make(chan error, 1)
+	go func() {
+		invalidationDone <- manager.Invalidate(context.Background(), "resource:1")
+	}()
+	select {
+	case <-old.entered:
+	case <-candidate.entered:
+	case <-time.After(time.Second):
+		t.Fatal("invalidation did not reach a staged target")
+	}
+
+	publishDone := make(chan struct{})
+	go func() {
+		update.Publish()
+		close(publishDone)
+	}()
+	select {
+	case <-publishDone:
+		t.Fatal("target publication passed an in-flight invalidation")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(old.release)
+	close(candidate.release)
+	if err := <-invalidationDone; err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-publishDone:
+	case <-time.After(time.Second):
+		t.Fatal("target publication did not resume after invalidation")
+	}
+}
+
+func TestRuntimeTargetAbortSerializesWithConcurrentInvalidation(t *testing.T) {
+	const scope = "sites/7/dependencies"
+	old := &blockingTaggedStore{
+		Store:   newTaggedStore("old-abort"),
+		entered: make(chan struct{}), release: make(chan struct{}),
+	}
+	candidate := &blockingTaggedStore{
+		Store:   newTaggedStore("candidate-abort"),
+		entered: make(chan struct{}), release: make(chan struct{}),
+	}
+	manager := &Manager{coordinator: NewCoordinator()}
+	active, err := manager.PrepareRuntimeTargets(map[string][]RuntimeTarget{
+		"7": {{Scope: scope, Store: old}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	active.Publish()
+	update, err := manager.PrepareRuntimeTargets(map[string][]RuntimeTarget{
+		"7": {{Scope: scope, Store: candidate}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	invalidationDone := make(chan error, 1)
+	go func() {
+		invalidationDone <- manager.Invalidate(context.Background(), "resource:1")
+	}()
+	select {
+	case <-old.entered:
+	case <-candidate.entered:
+	case <-time.After(time.Second):
+		t.Fatal("invalidation did not reach a staged target")
+	}
+
+	abortDone := make(chan struct{})
+	go func() {
+		update.Abort()
+		close(abortDone)
+	}()
+	select {
+	case <-abortDone:
+		t.Fatal("target abort passed an in-flight invalidation")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(old.release)
+	close(candidate.release)
+	if err := <-invalidationDone; err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-abortDone:
+	case <-time.After(time.Second):
+		t.Fatal("target abort did not resume after invalidation")
+	}
+	manager.coordinator.mu.RLock()
+	defer manager.coordinator.mu.RUnlock()
+	if len(manager.coordinator.runtimeScopes["7"]) != 1 {
+		t.Fatalf("aborted candidate target count = %d", len(manager.coordinator.runtimeScopes["7"]))
+	}
+}
+
+type blockingTaggedStore struct {
+	Store
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (s *blockingTaggedStore) InvalidateTag(ctx context.Context, tag Tag) error {
+	s.once.Do(func() { close(s.entered) })
+	select {
+	case <-s.release:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return s.Store.InvalidateTag(ctx, tag)
 }
 
 func TestApplicationInvalidationReachesEveryRegisteredSiteScope(t *testing.T) {

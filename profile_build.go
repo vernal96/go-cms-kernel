@@ -33,6 +33,7 @@ func (b *ProfileBlueprint) Build(
 
 	profile := b.profile
 	registry := b.registry.cloneDefinitions()
+	cacheTargets := cache.NewRuntimeTargetSet()
 	hooks := entityhooks.NewRegistry(entityhooks.Site, scope.SiteID())
 	for _, module := range profile.Modules {
 		dependencies, err := resolveModuleDependencies(module, registry)
@@ -50,6 +51,7 @@ func (b *ProfileBlueprint) Build(
 			cache.RuntimeScope{
 				Profile: string(profile.Code),
 				Site:    scope.SiteID(),
+				Targets: cacheTargets,
 			},
 			string(module.Code()),
 			moduleCacheBindings(module),
@@ -198,11 +200,12 @@ func (b *ProfileBlueprint) Build(
 		)
 	}
 	return &ProfileRuntime{
-		hooks:     hooks,
-		blueprint: b,
-		registry:  registry,
-		widgets:   widgets,
-		templates: templates,
+		hooks:        hooks,
+		blueprint:    b,
+		registry:     registry,
+		widgets:      widgets,
+		templates:    templates,
+		cacheTargets: cacheTargets.Targets(),
 	}, nil
 }
 

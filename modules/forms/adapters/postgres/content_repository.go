@@ -45,7 +45,12 @@ func (r *Repository) CreateForm(ctx context.Context, input forms.CreateFormInput
 		return forms.FormDetail{}, err
 	}
 	layout := make([]forms.LayoutNode, 3)
-	for index, node := range []forms.LayoutNode{{FormID: created.ID, Kind: forms.LayoutField, FieldID: &consent.ID, Position: 0}, {FormID: created.ID, Kind: forms.LayoutField, FieldID: &captcha.ID, Position: 1}, {FormID: created.ID, Kind: forms.LayoutElement, ElementID: &submit.ID, Position: 2}} {
+	defaultLayout := []forms.LayoutNode{
+		{FormID: created.ID, Kind: forms.LayoutField, FieldID: &consent.ID, Position: 0},
+		{FormID: created.ID, Kind: forms.LayoutField, FieldID: &captcha.ID, Position: 1},
+		{FormID: created.ID, Kind: forms.LayoutElement, ElementID: &submit.ID, Position: 2},
+	}
+	for index, node := range defaultLayout {
 		layout[index], err = insertLayout(ctx, tx, node)
 		if err != nil {
 			return forms.FormDetail{}, err
@@ -54,7 +59,14 @@ func (r *Repository) CreateForm(ctx context.Context, input forms.CreateFormInput
 	if err := tx.Commit(ctx); err != nil {
 		return forms.FormDetail{}, err
 	}
-	return forms.FormDetail{Form: created, Fields: []forms.FormField{consent, captcha}, Elements: []forms.Element{submit}, Layout: layout, Statuses: []forms.Status{status}, Actions: []forms.Action{}}, nil
+	return forms.FormDetail{
+		Form:     created,
+		Fields:   []forms.FormField{consent, captcha},
+		Elements: []forms.Element{submit},
+		Layout:   layout,
+		Statuses: []forms.Status{status},
+		Actions:  []forms.Action{},
+	}, nil
 }
 
 func insertField(ctx context.Context, tx pgx.Tx, item forms.FormField) (forms.FormField, error) {
@@ -70,7 +82,23 @@ func insertField(ctx context.Context, tx pgx.Tx, item forms.FormField) (forms.Fo
 	if err != nil {
 		return forms.FormField{}, err
 	}
-	created, err := scanField(tx.QueryRow(ctx, `INSERT INTO forms.fields(form_id,code,type,label,required,validators,options,editor,visible_when,result_label,show_in_results,show_on_site,result_position) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING `+fieldColumns+`;`, item.FormID, item.Code, item.Type, item.Label, item.Required, validators, options, item.Editor, visible, item.ResultLabel, item.ShowInResults, item.ShowOnSite, item.ResultPosition))
+	created, err := scanField(tx.QueryRow(
+		ctx,
+		`INSERT INTO forms.fields(form_id,code,type,label,required,validators,options,editor,visible_when,result_label,show_in_results,show_on_site,result_position) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING `+fieldColumns+`;`,
+		item.FormID,
+		item.Code,
+		item.Type,
+		item.Label,
+		item.Required,
+		validators,
+		options,
+		item.Editor,
+		visible,
+		item.ResultLabel,
+		item.ShowInResults,
+		item.ShowOnSite,
+		item.ResultPosition,
+	))
 	return created, mapWriteError(err)
 }
 
@@ -211,7 +239,13 @@ func shiftSiblingPositions(ctx context.Context, tx pgx.Tx, formID forms.FormID, 
 	return err
 }
 
-func (r *Repository) CreateField(ctx context.Context, siteID site.ID, formID forms.FormID, item forms.FormField, placement forms.LayoutPlacement) (_ forms.FormField, _ forms.LayoutNode, resultErr error) {
+func (r *Repository) CreateField(
+	ctx context.Context,
+	siteID site.ID,
+	formID forms.FormID,
+	item forms.FormField,
+	placement forms.LayoutPlacement,
+) (_ forms.FormField, _ forms.LayoutNode, resultErr error) {
 	tx, err := r.connector.Pool().Begin(ctx)
 	if err != nil {
 		return forms.FormField{}, forms.LayoutNode{}, err
@@ -254,7 +288,25 @@ func (r *Repository) UpdateField(ctx context.Context, siteID site.ID, item forms
 	if err != nil {
 		return forms.FormField{}, err
 	}
-	updated, err := scanField(r.connector.Pool().QueryRow(ctx, `UPDATE forms.fields SET code=$4,type=$5,label=$6,required=$7,validators=$8,options=$9,editor=$10,visible_when=$11,result_label=$12,show_in_results=$13,show_on_site=$14,result_position=$15,updated_at=clock_timestamp() WHERE id=$2 AND form_id=$3 AND EXISTS(SELECT 1 FROM forms.forms WHERE id=$3 AND site_id=$1) RETURNING `+fieldColumns+`;`, siteID, item.ID, item.FormID, item.Code, item.Type, item.Label, item.Required, validators, options, item.Editor, visible, item.ResultLabel, item.ShowInResults, item.ShowOnSite, item.ResultPosition))
+	updated, err := scanField(r.connector.Pool().QueryRow(
+		ctx,
+		`UPDATE forms.fields SET code=$4,type=$5,label=$6,required=$7,validators=$8,options=$9,editor=$10,visible_when=$11,result_label=$12,show_in_results=$13,show_on_site=$14,result_position=$15,updated_at=clock_timestamp() WHERE id=$2 AND form_id=$3 AND EXISTS(SELECT 1 FROM forms.forms WHERE id=$3 AND site_id=$1) RETURNING `+fieldColumns+`;`,
+		siteID,
+		item.ID,
+		item.FormID,
+		item.Code,
+		item.Type,
+		item.Label,
+		item.Required,
+		validators,
+		options,
+		item.Editor,
+		visible,
+		item.ResultLabel,
+		item.ShowInResults,
+		item.ShowOnSite,
+		item.ResultPosition,
+	))
 	return updated, mapWriteError(err)
 }
 
@@ -292,7 +344,14 @@ func (r *Repository) DeleteField(ctx context.Context, siteID site.ID, formID for
 	return resultErr
 }
 
-func (r *Repository) CreateElement(ctx context.Context, siteID site.ID, formID forms.FormID, item forms.Element, placement forms.LayoutPlacement, references []field.Reference) (_ forms.Element, _ forms.LayoutNode, resultErr error) {
+func (r *Repository) CreateElement(
+	ctx context.Context,
+	siteID site.ID,
+	formID forms.FormID,
+	item forms.Element,
+	placement forms.LayoutPlacement,
+	references []field.Reference,
+) (_ forms.Element, _ forms.LayoutNode, resultErr error) {
 	tx, err := r.connector.Pool().Begin(ctx)
 	if err != nil {
 		return forms.Element{}, forms.LayoutNode{}, err

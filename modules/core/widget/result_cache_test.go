@@ -64,7 +64,16 @@ func TestWidgetResultsBatchIdentityInvalidationAndRuntimeIsolation(t *testing.T)
 	ctx := context.Background()
 	store := newResultTestStore(t)
 	first, second := &cacheTestInstance{}, &cacheTestInstance{}
-	jobs := []RenderJob{{Identity: "first", Fingerprint: map[string]any{"value": "a"}, Instance: first, Input: RenderInput{Site: SiteSnapshot{ID: 1}, Resource: ResourceSnapshot{ID: 7}}}, {Identity: "second", Fingerprint: "b", Instance: second}}
+	jobs := []RenderJob{
+		{
+			Identity: "first", Fingerprint: map[string]any{"value": "a"},
+			Instance: first,
+			Input: RenderInput{
+				Site: SiteSnapshot{ID: 1}, Resource: ResourceSnapshot{ID: 7},
+			},
+		},
+		{Identity: "second", Fingerprint: "b", Instance: second},
+	}
 	render := func(generation string) {
 		t.Helper()
 		for _, result := range RenderBatch(ctx, store, generation, jobs) {

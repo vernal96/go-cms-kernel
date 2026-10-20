@@ -27,7 +27,10 @@ func Prepare(ctx context.Context, store Store, tags []Tag) PreparedSet {
 		return set
 	}
 	if len(tags) > 0 {
-		report(ctx, store, Event{Type: EventWriteError, Error: errors.New("cache store does not support prepared dependency writes")})
+		report(ctx, store, Event{
+			Type:  EventWriteError,
+			Error: errors.New("cache store does not support prepared dependency writes"),
+		})
 		return nil
 	}
 	return func(ctx context.Context, key string, value []byte, ttl time.Duration) error {
@@ -35,7 +38,14 @@ func Prepare(ctx context.Context, store Store, tags []Tag) PreparedSet {
 	}
 }
 
-func WritePreparedJSON[T any](ctx context.Context, store Store, set PreparedSet, key string, value T, ttl time.Duration) {
+func WritePreparedJSON[T any](
+	ctx context.Context,
+	store Store,
+	set PreparedSet,
+	key string,
+	value T,
+	ttl time.Duration,
+) {
 	if set == nil {
 		return
 	}
@@ -69,5 +79,42 @@ func (s *scopedStore) Prepare(ctx context.Context, tags []Tag) (PreparedSet, err
 }
 
 func (s *observedStore) Prepare(ctx context.Context, tags []Tag) (PreparedSet, error) {
-	return Prepare(ctx, s.store, tags), nil
+	if err := s.readBackoffError(); err != nil {
+		return nil, nil
+	}
+	operationCtx, cancel := cacheOperationContext(ctx)
+	var prepared PreparedSet
+	var err error
+	if provider, ok := s.store.(PreparedStore); ok {
+		prepared, err = provider.Prepare(operationCtx, tags)
+	} else {
+		prepared = Prepare(operationCtx, s.store, tags)
+	}
+	operationErr := operationCtx.Err()
+	cancel()
+	if err != nil {
+		if s.isBackendFailure(ctx, err) {
+			s.openReadBackoff()
+		}
+		return nil, err
+	}
+	if operationErr != nil {
+		s.openReadBackoff()
+		return nil, operationErr
+	}
+	if prepared == nil {
+		return nil, nil
+	}
+	return func(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+		if err := s.readBackoffError(); err != nil {
+			return nil
+		}
+		operationCtx, cancel := cacheOperationContext(ctx)
+		defer cancel()
+		err := prepared(operationCtx, key, value, ttl)
+		if s.isBackendFailure(ctx, err) {
+			s.openReadBackoff()
+		}
+		return err
+	}, nil
 }

@@ -58,7 +58,14 @@ func (h *managementHTTP) createUser(response http.ResponseWriter, request *http.
 	if !decodeBody(response, request, &payload) {
 		return
 	}
-	result, err := h.management.CreateUser(request.Context(), actor(request), UserCreateInput{Login: payload.Login, Email: payload.Email, Password: payload.Password, Name: payload.Name, LastName: payload.LastName, MiddleName: payload.MiddleName, Phone: payload.Phone, GroupIDs: payload.GroupIDs})
+	result, err := h.management.CreateUser(
+		request.Context(), actor(request),
+		UserCreateInput{
+			Login: payload.Login, Email: payload.Email, Password: payload.Password,
+			Name: payload.Name, LastName: payload.LastName, MiddleName: payload.MiddleName,
+			Phone: payload.Phone, GroupIDs: payload.GroupIDs,
+		},
+	)
 	writeResult(request.Context(), response, http.StatusCreated, result, err)
 }
 
@@ -80,7 +87,14 @@ func (h *managementHTTP) updateUser(response http.ResponseWriter, request *http.
 	if !decodeBody(response, request, &payload) {
 		return
 	}
-	result, err := h.management.UpdateUser(request.Context(), actor(request), id, UserUpdateInput{Login: payload.Login, Email: payload.Email, Name: payload.Name, LastName: payload.LastName, MiddleName: payload.MiddleName, Phone: payload.Phone})
+	result, err := h.management.UpdateUser(
+		request.Context(), actor(request), id,
+		UserUpdateInput{
+			Login: payload.Login, Email: payload.Email, Name: payload.Name,
+			LastName: payload.LastName, MiddleName: payload.MiddleName,
+			Phone: payload.Phone,
+		},
+	)
 	writeResult(request.Context(), response, http.StatusOK, result, err)
 }
 
@@ -187,7 +201,14 @@ func (h *managementHTTP) createGroup(response http.ResponseWriter, request *http
 	if !decodeBody(response, request, &payload) {
 		return
 	}
-	result, err := h.management.CreateGroup(request.Context(), actor(request), GroupCreateInput{Code: payload.Code, Name: payload.Name, PermissionCodes: payload.PermissionCodes, SiteAccess: payload.SiteAccess})
+	result, err := h.management.CreateGroup(
+		request.Context(), actor(request),
+		GroupCreateInput{
+			Code: payload.Code, Name: payload.Name,
+			PermissionCodes: payload.PermissionCodes,
+			SiteAccess:      payload.SiteAccess,
+		},
+	)
 	writeResult(request.Context(), response, http.StatusCreated, result, err)
 }
 

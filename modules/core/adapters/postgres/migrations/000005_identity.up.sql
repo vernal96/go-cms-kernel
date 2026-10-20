@@ -6,13 +6,13 @@ CREATE TABLE core.users
             login = lower(btrim(login))
                 AND login ~ '^[a-z][a-z0-9._-]{2,63}$'
         ),
-    email           TEXT        NOT NULL
+    email           TEXT        NULL
         CHECK (
             email = lower(btrim(email))
                 AND email <> ''
                 AND position('@' IN email) > 1
         ),
-    password_hash   TEXT        NOT NULL
+    password_hash   TEXT        NULL
         CHECK (password_hash = btrim(password_hash) AND password_hash <> ''),
     name            TEXT        NOT NULL CHECK (btrim(name) <> ''),
     last_name       TEXT        NULL
@@ -187,3 +187,13 @@ CREATE TABLE core.auth_sessions (
 );
 CREATE INDEX auth_sessions_expiry ON core.auth_sessions(expires_at);
 CREATE INDEX auth_sessions_user ON core.auth_sessions(user_id);
+
+CREATE TABLE core.external_identities (
+    provider TEXT NOT NULL CHECK (provider <> ''),
+    namespace TEXT NOT NULL CHECK (namespace <> ''),
+    subject TEXT NOT NULL CHECK (subject <> ''),
+    user_id BIGINT NOT NULL REFERENCES core.users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (provider, namespace, subject)
+);
+CREATE INDEX external_identities_user ON core.external_identities(user_id);

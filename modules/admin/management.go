@@ -181,7 +181,15 @@ func (m *Management) Navigation(ctx context.Context, actor security.Actor, selec
 	return Navigation{Items: navigationDTO(items)}, nil
 }
 
-func requireSite(ctx context.Context, authorizer security.Authorizer, policy management.SiteAccessPolicy, actor security.Actor, id site.ID, code permission.Code, action management.SiteAccessAction) error {
+func requireSite(
+	ctx context.Context,
+	authorizer security.Authorizer,
+	policy management.SiteAccessPolicy,
+	actor security.Actor,
+	id site.ID,
+	code permission.Code,
+	action management.SiteAccessAction,
+) error {
 	if id <= 0 {
 		return fmt.Errorf("%w: invalid site id", ErrValidation)
 	}

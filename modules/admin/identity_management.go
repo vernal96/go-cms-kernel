@@ -193,7 +193,11 @@ func (m *Management) User(ctx context.Context, actor security.Actor, id user.ID)
 }
 
 func (m *Management) CreateUser(ctx context.Context, actor security.Actor, input UserCreateInput) (UserDetails, error) {
-	item, err := m.users.Create(ctx, actor, user.CreateInput{Login: input.Login, Email: input.Email, Password: input.Password, Name: input.Name, LastName: input.LastName, MiddleName: input.MiddleName, Phone: input.Phone, GroupIDs: input.GroupIDs})
+	item, err := m.users.Create(ctx, actor, user.CreateInput{
+		Login: input.Login, Email: input.Email, Password: input.Password,
+		Name: input.Name, LastName: input.LastName, MiddleName: input.MiddleName,
+		Phone: input.Phone, GroupIDs: input.GroupIDs,
+	})
 	if err != nil {
 		return UserDetails{}, identityValidationError(err)
 	}
@@ -400,12 +404,28 @@ func (m *Management) groupPermissions(ctx context.Context, actor security.Actor)
 func userDTO(item user.User, actor security.Actor, permissions UserPermissionSet, editGroups bool) UserDTO {
 	actorID, isUser := actor.UserID()
 	isSelf := isUser && actorID == item.ID
-	return UserDTO{ID: item.ID, Login: item.Login, Email: item.Email, Name: item.Name, LastName: item.LastName, MiddleName: item.MiddleName, Phone: item.Phone, LastLoginAt: item.LastLoginAt, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt, Blocked: item.BlockedAt != nil, BlockedAt: item.BlockedAt, Capabilities: UserCapabilities{Update: permissions.Update, ChangePassword: permissions.Update, EditGroups: editGroups, Block: permissions.Block && item.BlockedAt == nil && !isSelf, Unblock: permissions.Update && item.BlockedAt != nil}}
+	return UserDTO{
+		ID: item.ID, Login: item.Login, Email: item.Email, Name: item.Name,
+		LastName: item.LastName, MiddleName: item.MiddleName, Phone: item.Phone,
+		LastLoginAt: item.LastLoginAt, CreatedAt: item.CreatedAt,
+		UpdatedAt: item.UpdatedAt, Blocked: item.BlockedAt != nil,
+		BlockedAt: item.BlockedAt,
+		Capabilities: UserCapabilities{
+			Update: permissions.Update, ChangePassword: permissions.Update,
+			EditGroups: editGroups,
+			Block:      permissions.Block && item.BlockedAt == nil && !isSelf,
+			Unblock:    permissions.Update && item.BlockedAt != nil,
+		},
+	}
 }
 
 func groupDTO(item group.Group, canUpdate, canDelete, privileged bool) GroupDTO {
 	system := item.Code == group.AdminCode
-	return GroupDTO{ID: item.ID, Code: item.Code, Name: item.Name, System: system, Super: item.IsSuper, CanUpdate: canUpdate, CanDelete: canDelete && !system, CanManagePermissions: privileged && !item.IsSuper}
+	return GroupDTO{
+		ID: item.ID, Code: item.Code, Name: item.Name, System: system,
+		Super: item.IsSuper, CanUpdate: canUpdate, CanDelete: canDelete && !system,
+		CanManagePermissions: privileged && !item.IsSuper,
+	}
 }
 
 func groupSiteAccess(items []GroupSiteAccess) []group.SiteAccess {
@@ -417,7 +437,18 @@ func groupSiteAccess(items []GroupSiteAccess) []group.SiteAccess {
 }
 
 func identityValidationError(err error) error {
-	if err == nil || errors.Is(err, user.ErrNotFound) || errors.Is(err, user.ErrConflict) || errors.Is(err, group.ErrNotFound) || errors.Is(err, group.ErrConflict) || errors.Is(err, group.ErrProtected) || errors.Is(err, group.ErrLastAdministrator) || errors.Is(err, user.ErrSelfBlock) || errors.Is(err, user.ErrLastAdministrator) || errors.Is(err, security.ErrForbidden) || errors.Is(err, security.ErrUnauthenticated) || errors.Is(err, access.ErrNotPrivileged) {
+	if err == nil ||
+		errors.Is(err, user.ErrNotFound) ||
+		errors.Is(err, user.ErrConflict) ||
+		errors.Is(err, group.ErrNotFound) ||
+		errors.Is(err, group.ErrConflict) ||
+		errors.Is(err, group.ErrProtected) ||
+		errors.Is(err, group.ErrLastAdministrator) ||
+		errors.Is(err, user.ErrSelfBlock) ||
+		errors.Is(err, user.ErrLastAdministrator) ||
+		errors.Is(err, security.ErrForbidden) ||
+		errors.Is(err, security.ErrUnauthenticated) ||
+		errors.Is(err, access.ErrNotPrivileged) {
 		return err
 	}
 	return fmt.Errorf("%w: request data is invalid", ErrValidation)

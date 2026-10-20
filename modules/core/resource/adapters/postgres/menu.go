@@ -36,7 +36,12 @@ FROM core.resources r JOIN linked l ON l.id=r.id WHERE r.site_id=$1`, siteID, in
 	result := []resource.MenuRecord{}
 	for rows.Next() {
 		var item resource.MenuRecord
-		if err := rows.Scan(&item.ID, &item.ParentID, &item.Type, &item.Title, &item.MenuTitle, &item.Path, &item.ExternalURL, &item.TargetResourceID, &item.Sort, &item.IsPublic, &item.InMenu, &item.PublishedAt, &item.UnpublishedAt, &item.DeletedAt, &item.InTree); err != nil {
+		if err := rows.Scan(
+			&item.ID, &item.ParentID, &item.Type, &item.Title, &item.MenuTitle,
+			&item.Path, &item.ExternalURL, &item.TargetResourceID, &item.Sort,
+			&item.IsPublic, &item.InMenu, &item.PublishedAt, &item.UnpublishedAt,
+			&item.DeletedAt, &item.InTree,
+		); err != nil {
 			return nil, err
 		}
 		result = append(result, item)

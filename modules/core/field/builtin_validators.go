@@ -82,7 +82,11 @@ func (t builtinValidatorType) ValidatorMetadata() ValidatorMetadata {
 		m.FieldTypes = []TypeCode{TypeInteger, TypeFloat}
 	case "digits", "min_digits", "max_digits", "digits_between":
 		m.FieldTypes = []TypeCode{TypeInteger}
-	case "min_length", "max_length", "length", "length_between", "alpha", "alpha_dash", "alpha_numeric", "ascii", "lowercase", "uppercase", "starts_with", "ends_with", "doesnt_start_with", "doesnt_end_with", "regex", "not_regex", "url", "ip", "ipv4", "ipv6", "mac", "uuid", "ulid", "hex_color":
+	case "min_length", "max_length", "length", "length_between", "alpha",
+		"alpha_dash", "alpha_numeric", "ascii", "lowercase", "uppercase",
+		"starts_with", "ends_with", "doesnt_start_with", "doesnt_end_with",
+		"regex", "not_regex", "url", "ip", "ipv4", "ipv6", "mac",
+		"uuid", "ulid", "hex_color":
 		m.FieldTypes = stringsOnly
 	case "min_items", "max_items", "items_between", "items_count", "unique_items":
 		b := true
@@ -92,7 +96,16 @@ func (t builtinValidatorType) ValidatorMetadata() ValidatorMetadata {
 		m.FieldTypes = []TypeCode{TypeInteger, TypeFloat, TypeCheckbox, TypeString, TypeTextarea, TypeEmail, TypePhone, TypeRadio, TypeSelect}
 	case "contains", "doesnt_contain":
 		scalar, list := false, true
-		m.Applicability = []ValidatorApplicability{{FieldTypes: stringsOnly, Multiple: &scalar}, {FieldTypes: []TypeCode{TypeString, TypeTextarea, TypeEmail, TypePhone, TypeInteger, TypeFloat, TypeSelect}, Multiple: &list}}
+		m.Applicability = []ValidatorApplicability{
+			{FieldTypes: stringsOnly, Multiple: &scalar},
+			{
+				FieldTypes: []TypeCode{
+					TypeString, TypeTextarea, TypeEmail, TypePhone,
+					TypeInteger, TypeFloat, TypeSelect,
+				},
+				Multiple: &list,
+			},
+		}
 	case "accepted", "declined":
 		m.FieldTypes = []TypeCode{TypeCheckbox}
 	}
@@ -109,8 +122,15 @@ var builtinSpecs = []builtinValidatorType{
 	{"contains", "Содержит", "values"}, {"doesnt_contain", "Не содержит", "values"},
 	{"regex", "Регулярное выражение", "text"}, {"not_regex", "Не соответствует выражению", "text"},
 	{"in", "В списке", "values"}, {"not_in", "Вне списка", "values"},
-	{"min_items", "Минимум элементов", "count"}, {"max_items", "Максимум элементов", "count"}, {"items_between", "Диапазон элементов", "range_count"}, {"items_count", "Число элементов", "count"}, {"unique_items", "Уникальные элементы", "none"},
-	{"url", "URL", "none"}, {"ip", "IP адрес", "none"}, {"ipv4", "IPv4", "none"}, {"ipv6", "IPv6", "none"}, {"mac", "MAC адрес", "none"}, {"uuid", "UUID", "none"}, {"ulid", "ULID", "none"}, {"hex_color", "HEX цвет", "none"},
+	{"min_items", "Минимум элементов", "count"},
+	{"max_items", "Максимум элементов", "count"},
+	{"items_between", "Диапазон элементов", "range_count"},
+	{"items_count", "Число элементов", "count"},
+	{"unique_items", "Уникальные элементы", "none"},
+	{"url", "URL", "none"}, {"ip", "IP адрес", "none"},
+	{"ipv4", "IPv4", "none"}, {"ipv6", "IPv6", "none"},
+	{"mac", "MAC адрес", "none"}, {"uuid", "UUID", "none"},
+	{"ulid", "ULID", "none"}, {"hex_color", "HEX цвет", "none"},
 	{"accepted", "Принято", "none"}, {"declined", "Отклонено", "none"},
 }
 
@@ -155,7 +175,12 @@ func validateBuiltinCompatibility(code ValidatorCode, ctx ValidatorContext) erro
 	boolRule := code == "accepted" || code == "declined"
 	membership := code == "in" || code == "not_in"
 	contains := code == "contains" || code == "doesnt_contain"
-	if (numeric && !isNumber) || (digits && storage != StorageInteger) || (length && !isString) || (items && !isList) || (boolRule && storage != StorageBoolean) || (membership && !(isNumber || isString || storage == StorageBoolean)) || (!numeric && !length && !items && !boolRule && !membership && !contains && !isString) {
+	if (numeric && !isNumber) ||
+		(digits && storage != StorageInteger) ||
+		(length && !isString) || (items && !isList) ||
+		(boolRule && storage != StorageBoolean) ||
+		(membership && !(isNumber || isString || storage == StorageBoolean)) ||
+		(!numeric && !length && !items && !boolRule && !membership && !contains && !isString) {
 		return fmt.Errorf("validator %q is incompatible with field %q", code, ctx.FieldType)
 	}
 	if contains && !isString && !isList {

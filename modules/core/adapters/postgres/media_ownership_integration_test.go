@@ -98,10 +98,16 @@ func TestPostgresMediaHasOneActiveSelection(t *testing.T) {
 		t.Fatalf("unindexed active file reference ignored: %v", err)
 	}
 	path := "/"
-	if _, err := db.Resources().Create(ctx, nil, resource.Resource{SiteID: site.ID(sid), Type: resourcetype.Page, Title: "Image", Path: &path, ImageMediaID: &medias[0].ID}, func(context.Context, media.ID) error { return nil }); !errors.Is(err, media.ErrAlreadyAttached) {
+	if _, err := db.Resources().Create(ctx, nil, resource.Resource{
+		SiteID: site.ID(sid), Type: resourcetype.Page,
+		Title: "Image", Path: &path, ImageMediaID: &medias[0].ID,
+	}, func(context.Context, media.ID) error { return nil }); !errors.Is(err, media.ErrAlreadyAttached) {
 		t.Fatalf("resource image reused saved field Media: %v", err)
 	}
-	image, err := db.Resources().Create(ctx, nil, resource.Resource{SiteID: site.ID(sid), Type: resourcetype.Page, Title: "Image", Path: &path, ImageMediaID: &medias[2].ID}, func(context.Context, media.ID) error { return nil })
+	image, err := db.Resources().Create(ctx, nil, resource.Resource{
+		SiteID: site.ID(sid), Type: resourcetype.Page,
+		Title: "Image", Path: &path, ImageMediaID: &medias[2].ID,
+	}, func(context.Context, media.ID) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +151,16 @@ func TestPostgresConcurrentMediaClaimsHaveOneWinner(t *testing.T) {
 				return
 			}
 			defer tx.Rollback(context.WithoutCancel(ctx))
-			err = mediaoccurrence.Replace(ctx, tx, media.FileOccurrence{OwnerKind: kind, OwnerID: sid, SiteID: sid, Container: "config"}, []field.Reference{{Target: field.ReferenceMedia, ID: int64(m.ID), Path: []string{"asset"}}})
+			err = mediaoccurrence.Replace(
+				ctx, tx,
+				media.FileOccurrence{
+					OwnerKind: kind, OwnerID: sid, SiteID: sid, Container: "config",
+				},
+				[]field.Reference{{
+					Target: field.ReferenceMedia,
+					ID:     int64(m.ID), Path: []string{"asset"},
+				}},
+			)
 			if err == nil {
 				err = tx.Commit(ctx)
 			}

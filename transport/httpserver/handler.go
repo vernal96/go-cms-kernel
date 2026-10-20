@@ -138,6 +138,12 @@ func NewHandler(
 	}
 	root.Use(optionalAuthentication(config.accessTokens))
 	root.Use(requestActorLogAttributes)
+	root.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+			ctx := httptransport.WithAccessTokenIssuer(request.Context(), config.accessTokens)
+			next.ServeHTTP(response, request.WithContext(ctx))
+		})
+	})
 	login, err := newLoginHandler(application.Users(), config.accessTokens)
 	if err != nil {
 		return nil, err
@@ -349,7 +355,15 @@ func siteManagementPath(path string) (site.ID, string, string, bool) {
 	return site.ID(value), segments[offset+2], remainder, true
 }
 
-func (h *siteManagementHTTP) serve(response http.ResponseWriter, request *http.Request, next http.Handler, snapshot *siteHandlerSnapshot, siteID site.ID, feature string, remainder string) {
+func (h *siteManagementHTTP) serve(
+	response http.ResponseWriter,
+	request *http.Request,
+	next http.Handler,
+	snapshot *siteHandlerSnapshot,
+	siteID site.ID,
+	feature string,
+	remainder string,
+) {
 	actor, exists := httptransport.ActorFromContext(request.Context())
 	if !exists || !actor.IsUser() {
 		httptransport.WriteJSONError(response, http.StatusUnauthorized, "unauthenticated", "authentication required")

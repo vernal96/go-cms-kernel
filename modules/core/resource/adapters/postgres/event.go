@@ -15,7 +15,16 @@ import (
 func (r *Repository) hookSource() *hookspostgres.Source {
 	return hookspostgres.NewSource(r.connector.Pool(), "core:"+string(r.connector.Code()), "core")
 }
-func (r *Repository) appendResourceEvent(ctx context.Context, tx pgx.Tx, name string, resourceID resource.ID, siteID site.ID, storage resource.StorageKind, version int64, actorID *security.UserID) error {
+func (r *Repository) appendResourceEvent(
+	ctx context.Context,
+	tx pgx.Tx,
+	name string,
+	resourceID resource.ID,
+	siteID site.ID,
+	storage resource.StorageKind,
+	version int64,
+	actorID *security.UserID,
+) error {
 	state, err := r.eventState(ctx, tx, resourceID)
 	if err != nil {
 		return err

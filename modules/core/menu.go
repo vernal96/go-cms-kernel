@@ -149,7 +149,12 @@ func (r *Runtime) menu(ctx context.Context, runtime *site.Runtime, input resourc
 	})
 }
 
-func (r *Runtime) cachedMenu(ctx context.Context, siteID site.ID, input resource.MenuInput, build func(context.Context, time.Time) (resource.MenuResult, *time.Time, error)) (resource.MenuResult, error) {
+func (r *Runtime) cachedMenu(
+	ctx context.Context,
+	siteID site.ID,
+	input resource.MenuInput,
+	build func(context.Context, time.Time) (resource.MenuResult, *time.Time, error),
+) (resource.MenuResult, error) {
 	parent := "root"
 	if input.ParentID != nil {
 		parent = strconv.FormatInt(int64(*input.ParentID), 10)

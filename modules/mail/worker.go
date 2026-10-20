@@ -37,7 +37,16 @@ func NewWorker(siteID site.ID, repository Repository, files AttachmentOpener, sp
 	return newWorker(siteID, repository, files, spool, transport, &runtimeLifecycle{}, maxAttempts, logger)
 }
 
-func newWorker(siteID site.ID, repository Repository, files AttachmentOpener, spool *AttachmentSpool, transport Transport, lifecycle *runtimeLifecycle, maxAttempts int, logger *slog.Logger) (*Worker, error) {
+func newWorker(
+	siteID site.ID,
+	repository Repository,
+	files AttachmentOpener,
+	spool *AttachmentSpool,
+	transport Transport,
+	lifecycle *runtimeLifecycle,
+	maxAttempts int,
+	logger *slog.Logger,
+) (*Worker, error) {
 	if siteID <= 0 || repository == nil || files == nil || transport == nil || lifecycle == nil || maxAttempts < 1 {
 		return nil, errors.New("mail worker dependencies are nil")
 	}
@@ -145,7 +154,11 @@ func validateImmutableMessage(message Message) error {
 	if message.ID <= 0 || message.SiteID <= 0 || message.Status != StatusSending {
 		return errors.New("mail immutable message identity or state is invalid")
 	}
-	if len(message.RFCMessageID) > 998 || !strings.HasPrefix(message.RFCMessageID, "<") || !strings.HasSuffix(message.RFCMessageID, ">") || strings.Count(message.RFCMessageID, "@") != 1 || hasHeaderControl(message.RFCMessageID) {
+	if len(message.RFCMessageID) > 998 ||
+		!strings.HasPrefix(message.RFCMessageID, "<") ||
+		!strings.HasSuffix(message.RFCMessageID, ">") ||
+		strings.Count(message.RFCMessageID, "@") != 1 ||
+		hasHeaderControl(message.RFCMessageID) {
 		return errors.New("mail immutable Message-ID is invalid")
 	}
 	if hasHeaderControl(message.Subject) || validateImmutableAddress(message.From) != nil {

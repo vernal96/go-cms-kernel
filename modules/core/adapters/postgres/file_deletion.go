@@ -32,7 +32,12 @@ func (d *Database) FileOccurrenceOwners() []media.FileOccurrenceOwner {
 	return []media.FileOccurrenceOwner{d.resources.(*resourcepostgres.Repository)}
 }
 
-func (r *fileDeletionRepository) DeleteMediaFile(ctx context.Context, actor *security.UserID, input media.DeleteFileInput, prepare media.PrepareFileOwner) (result media.FileDeletion, resultErr error) {
+func (r *fileDeletionRepository) DeleteMediaFile(
+	ctx context.Context,
+	actor *security.UserID,
+	input media.DeleteFileInput,
+	prepare media.PrepareFileOwner,
+) (result media.FileDeletion, resultErr error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return result, err

@@ -92,7 +92,7 @@ INSERT INTO core.users
     created_by,
     updated_by
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+VALUES ($1, NULLIF($2, ''), $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
 RETURNING
     id, login, email, password_hash, session_version, name,
     last_name, middle_name, phone, avatar_media_id, color_scheme, accent_color,
@@ -405,7 +405,7 @@ FOR UPDATE;
 UPDATE core.users
 SET
     login = $2,
-    email = $3,
+    email = NULLIF($3, ''),
     name = $4,
     last_name = $5,
     middle_name = $6,
@@ -751,11 +751,12 @@ type rowScanner interface {
 
 func scanRecord(scanner rowScanner) (user.Record, error) {
 	var record user.Record
+	var email, passwordHash *string
 	err := scanner.Scan(
 		&record.ID,
 		&record.Login,
-		&record.Email,
-		&record.PasswordHash,
+		&email,
+		&passwordHash,
 		&record.SessionVersion,
 		&record.Name,
 		&record.LastName,
@@ -772,6 +773,12 @@ func scanRecord(scanner rowScanner) (user.Record, error) {
 		&record.UpdatedBy,
 		&record.BlockedBy,
 	)
+	if email != nil {
+		record.Email = *email
+	}
+	if passwordHash != nil {
+		record.PasswordHash = *passwordHash
+	}
 	return record, err
 }
 

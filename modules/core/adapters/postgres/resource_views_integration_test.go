@@ -22,7 +22,11 @@ func TestPostgresResourceViewsIdempotentConcurrentBatchesAndContentIsolation(t *
 	t.Cleanup(func() {
 		_, _ = connector.Pool().Exec(context.Background(), `DELETE FROM core.sites WHERE id=$1`, createdSite.ID)
 	})
-	item, err := database.Resources().Create(ctx, nil, resource.Resource{SiteID: createdSite.ID, Type: resourcetype.Page, Title: "Viewable", Slug: "views", Path: viewsPath("/views"), IsPublic: true, Fields: map[string]any{}, TypeSettings: map[string]any{}}, nil)
+	item, err := database.Resources().Create(ctx, nil, resource.Resource{
+		SiteID: createdSite.ID, Type: resourcetype.Page,
+		Title: "Viewable", Slug: "views", Path: viewsPath("/views"),
+		IsPublic: true, Fields: map[string]any{}, TypeSettings: map[string]any{},
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

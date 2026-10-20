@@ -99,7 +99,14 @@ func (h *publicFormsHTTP) submit(response http.ResponseWriter, request *http.Req
 		writePublicError(request.Context(), response, errors.New("request actor is unavailable"))
 		return
 	}
-	_, err = h.service.Submit(ctx, actor, SubmitInput{FormCode: chi.URLParam(request, "code"), Values: values, MultipartValues: multipartInput, Uploads: uploads, UserAgent: request.UserAgent(), ClientAddress: clientAddress(request)})
+	_, err = h.service.Submit(ctx, actor, SubmitInput{
+		FormCode:        chi.URLParam(request, "code"),
+		Values:          values,
+		MultipartValues: multipartInput,
+		Uploads:         uploads,
+		UserAgent:       request.UserAgent(),
+		ClientAddress:   clientAddress(request),
+	})
 	if err != nil {
 		writePublicError(request.Context(), response, err)
 		return

@@ -26,7 +26,21 @@ func TestPreparedFileRemovalPublishesOnlyAfterPersistenceAndKeepsRequiredFieldRe
 	if err != nil {
 		t.Fatal(err)
 	}
-	blueprint, err := factory.Compile(ctx, kernel.Profile{Code: "delete", Modules: []kernel.Module{settingsModule{transitionModule{code: "fields", recorder: &transitionRecorder{}}}}, Params: []field.Definition{{Key: "rows", Type: field.TypeRepeater, Label: "Rows", Options: field.RepeaterOptions{Fields: []field.Definition{{Key: "icon", Type: field.TypeMedia, Label: "Icon", Required: true, Options: field.MediaOptions{Disk: "public", VirtualPath: "icons", SettingsCode: "icon"}}}}}}})
+	blueprint, err := factory.Compile(ctx, kernel.Profile{
+		Code: "delete",
+		Modules: []kernel.Module{settingsModule{transitionModule{
+			code: "fields", recorder: &transitionRecorder{},
+		}}},
+		Params: []field.Definition{{
+			Key: "rows", Type: field.TypeRepeater, Label: "Rows",
+			Options: field.RepeaterOptions{Fields: []field.Definition{{
+				Key: "icon", Type: field.TypeMedia, Label: "Icon", Required: true,
+				Options: field.MediaOptions{
+					Disk: "public", VirtualPath: "icons", SettingsCode: "icon",
+				},
+			}}},
+		}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

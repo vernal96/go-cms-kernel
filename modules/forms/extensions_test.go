@@ -17,7 +17,17 @@ func TestElementRegistrationIsScopedSealedAndExposedByHTTP(t *testing.T) {
 	service, _ := publicHTTPService(t, repository)
 	service.repository = extensionRepository{repository}
 	runtime := &Runtime{service: service, actions: service.actions}
-	element := ElementDefinition{Description: ElementTypeMetadata{Code: "example.notice", Label: "Notice", EditorCode: "example.notice-editor", Fields: []field.ConfigField{{Key: "text", Label: "Text", Type: field.TypeString, Required: true}, {Key: "count", Label: "Count", Type: field.TypeInteger}}}}
+	element := ElementDefinition{
+		Description: ElementTypeMetadata{
+			Code:       "example.notice",
+			Label:      "Notice",
+			EditorCode: "example.notice-editor",
+			Fields: []field.ConfigField{
+				{Key: "text", Label: "Text", Type: field.TypeString, Required: true},
+				{Key: "count", Label: "Count", Type: field.TypeInteger},
+			},
+		},
+	}
 	if err := runtime.RegisterElementType(element); err != nil {
 		t.Fatal(err)
 	}

@@ -32,7 +32,10 @@ func TestElementImageUsesConfiguredFileOptionsAndMediaURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	decoded, err := field.DecodeOptions[field.MediaOptions](encoded)
-	if err != nil || decoded.Disk != options.Disk || decoded.VirtualPath != options.VirtualPath || decoded.SettingsCode != options.SettingsCode || len(decoded.MIMETypes) != 1 || decoded.MIMETypes[0] != "image/png" {
+	if err != nil || decoded.Disk != options.Disk ||
+		decoded.VirtualPath != options.VirtualPath ||
+		decoded.SettingsCode != options.SettingsCode ||
+		len(decoded.MIMETypes) != 1 || decoded.MIMETypes[0] != "image/png" {
 		t.Fatalf("image file options = %#v, err=%v", decoded, err)
 	}
 	fileService := &filesStub{}

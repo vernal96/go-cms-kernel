@@ -129,7 +129,13 @@ FROM core.outbox_messages WHERE message_id=$1;`, firstID).Scan(&publishedUsesDat
 		t.Fatal(err)
 	}
 	bus := &lockingProbeBus{pool: connector.Pool(), published: make(chan error, 1)}
-	publisher, err := outbox.NewPublisher(bus, []outbox.Source{source}, slog.New(slog.NewTextHandler(io.Discard, nil)), outbox.PublisherConfig{PollInterval: 5 * time.Millisecond, BatchSize: 1, LeaseDuration: time.Second})
+	publisher, err := outbox.NewPublisher(
+		bus, []outbox.Source{source}, slog.New(slog.NewTextHandler(io.Discard, nil)),
+		outbox.PublisherConfig{
+			PollInterval: 5 * time.Millisecond, BatchSize: 1,
+			LeaseDuration: time.Second,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +245,14 @@ func openOutboxIntegrationDatabase(t *testing.T) (*connectorpostgres.Connector, 
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	connector, err := connectorpostgres.New(ctx, connectorpostgres.Config{Code: "outbox-integration", Host: host, Port: port, Database: os.Getenv("CMS_TEST_POSTGRES_DB"), User: os.Getenv("CMS_TEST_POSTGRES_USER"), Password: os.Getenv("CMS_TEST_POSTGRES_PASSWORD"), SSLMode: sslMode, MaxConns: 4, ConnectTimeout: 5 * time.Second, ConnMaxLifetime: time.Minute})
+	connector, err := connectorpostgres.New(ctx, connectorpostgres.Config{
+		Code: "outbox-integration", Host: host, Port: port,
+		Database: os.Getenv("CMS_TEST_POSTGRES_DB"),
+		User:     os.Getenv("CMS_TEST_POSTGRES_USER"),
+		Password: os.Getenv("CMS_TEST_POSTGRES_PASSWORD"),
+		SSLMode:  sslMode, MaxConns: 4, ConnectTimeout: 5 * time.Second,
+		ConnMaxLifetime: time.Minute,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -74,6 +74,8 @@ type Connector struct {
 	random  io.Reader
 }
 
+const flushScanPageSize = 256
+
 func New(
 	ctx context.Context,
 	config Config,
@@ -345,25 +347,32 @@ func (c *Connector) Prune(ctx context.Context) error {
 	})
 }
 
-func (c *Connector) Flush(ctx context.Context) error {
-	walker, ok := c.disk.(filesystem.PrefixWalker)
+func (c *Connector) Flush(ctx context.Context) (resultErr error) {
+	scanner, ok := c.disk.(filesystem.PrefixScannerProvider)
 	if !ok {
 		return filesystem.ErrUnsupported
 	}
-	var keys []string
-	if err := walker.WalkPrefix(ctx, c.prefix, func(key string) error {
-		keys = append(keys, key)
-		return nil
-	}); err != nil {
+	scan, err := scanner.OpenPrefixScan(ctx, c.prefix)
+	if err != nil {
 		return err
 	}
-	var result []error
-	for _, key := range keys {
-		if err := c.disk.Delete(ctx, key); err != nil {
-			result = append(result, err)
+	defer func() {
+		resultErr = errors.Join(resultErr, scan.Close())
+	}()
+	for {
+		page, err := scan.Next(ctx, flushScanPageSize)
+		if err != nil {
+			return err
+		}
+		for _, key := range page.Keys {
+			if err := c.disk.Delete(ctx, key); err != nil {
+				return fmt.Errorf("flush filesystem cache object %q: %w", key, err)
+			}
+		}
+		if page.Done {
+			return nil
 		}
 	}
-	return errors.Join(result...)
 }
 
 func (c *Connector) validEntry(
@@ -422,7 +431,10 @@ func (c *Connector) tagToken(
 ) (cacheentry.Token, error) {
 	raw, err := c.read(ctx, c.tagKey(tag))
 	if errors.Is(err, cache.ErrMiss) {
-		return cacheentry.Token{}, nil
+		if err := c.InvalidateTag(ctx, tag); err != nil {
+			return cacheentry.Token{}, err
+		}
+		raw, err = c.read(ctx, c.tagKey(tag))
 	}
 	if err != nil {
 		return cacheentry.Token{}, err

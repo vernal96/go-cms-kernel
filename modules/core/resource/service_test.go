@@ -2604,7 +2604,13 @@ func TestBoundWidgetDoesNotBlockResourceSaveForMissingRequiredValue(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.CreateWidget(ctx, actor, current.ID, CreateWidgetInput{ExpectedVersion: current.Version, Code: "test_summary", Area: "body", Columns: 12, ParamBindings: widget.ParamBindings{"title": widget.ResourceProperty("menu_title")}})
+	_, err = service.CreateWidget(ctx, actor, current.ID, CreateWidgetInput{
+		ExpectedVersion: current.Version, Code: "test_summary",
+		Area: "body", Columns: 12,
+		ParamBindings: widget.ParamBindings{
+			"title": widget.ResourceProperty("menu_title"),
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

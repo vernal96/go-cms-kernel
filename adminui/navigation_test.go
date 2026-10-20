@@ -52,9 +52,33 @@ func TestCompileRejectsMalformedAndDuplicateNavigation(t *testing.T) {
 		{name: "empty code", items: []adminui.NavigationItem{{Label: "Item", Route: "feature.item", Scope: adminui.NavigationSite}}, want: "invalid code"},
 		{name: "empty label", items: []adminui.NavigationItem{{Code: "item", Route: "feature.item", Scope: adminui.NavigationSite}}, want: "label is empty"},
 		{name: "missing leaf route", items: []adminui.NavigationItem{{Code: "item", Label: "Item", Scope: adminui.NavigationSite}}, want: "invalid route"},
-		{name: "route on group", items: []adminui.NavigationItem{{Code: "group", Label: "Group", Route: "feature.group", Scope: adminui.NavigationSite, Children: []adminui.NavigationItem{{Code: "child", Label: "Child", Route: "feature.child", Scope: adminui.NavigationSite}}}}, want: "must not declare a route"},
+		{
+			name: "route on group",
+			items: []adminui.NavigationItem{{
+				Code: "group", Label: "Group", Route: "feature.group",
+				Scope: adminui.NavigationSite,
+				Children: []adminui.NavigationItem{{
+					Code: "child", Label: "Child", Route: "feature.child",
+					Scope: adminui.NavigationSite,
+				}},
+			}},
+			want: "must not declare a route",
+		},
 		{name: "wrong scope", items: []adminui.NavigationItem{{Code: "item", Label: "Item", Route: "feature.item", Scope: adminui.NavigationGlobal}}, want: "expected \"site\""},
-		{name: "duplicate nested code", items: []adminui.NavigationItem{{Code: "item", Label: "Item", Route: "feature.item", Scope: adminui.NavigationSite}, {Code: "group", Label: "Group", Scope: adminui.NavigationSite, Children: []adminui.NavigationItem{{Code: "item", Label: "Again", Route: "feature.again", Scope: adminui.NavigationSite}}}}, want: "already contributed"},
+		{
+			name: "duplicate nested code",
+			items: []adminui.NavigationItem{
+				{Code: "item", Label: "Item", Route: "feature.item", Scope: adminui.NavigationSite},
+				{
+					Code: "group", Label: "Group", Scope: adminui.NavigationSite,
+					Children: []adminui.NavigationItem{{
+						Code: "item", Label: "Again", Route: "feature.again",
+						Scope: adminui.NavigationSite,
+					}},
+				},
+			},
+			want: "already contributed",
+		},
 	}
 
 	for _, test := range tests {

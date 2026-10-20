@@ -15,11 +15,12 @@ import (
 )
 
 type ProfileRuntime struct {
-	hooks     *entityhooks.Registry
-	blueprint *ProfileBlueprint
-	registry  Registry
-	widgets   *widget.Catalog
-	templates *template.Catalog
+	hooks        *entityhooks.Registry
+	blueprint    *ProfileBlueprint
+	registry     Registry
+	widgets      *widget.Catalog
+	templates    *template.Catalog
+	cacheTargets []cache.RuntimeTarget
 }
 
 type ProfileBlueprint struct {
@@ -92,6 +93,15 @@ func (r *ProfileRuntime) Modules() []ModuleRuntime {
 		return nil
 	}
 	return r.registry.Modules()
+}
+
+// CacheTargets returns the physical cache stores collected for this site
+// runtime. The targets remain inactive until the runtime is published.
+func (r *ProfileRuntime) CacheTargets() []cache.RuntimeTarget {
+	if r == nil {
+		return nil
+	}
+	return append([]cache.RuntimeTarget(nil), r.cacheTargets...)
 }
 
 func (r *ProfileRuntime) ParamSchema() *field.Schema {

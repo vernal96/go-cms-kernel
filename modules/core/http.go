@@ -191,7 +191,17 @@ func (h *terminalResourceHandler) ServeHTTP(
 				ctx := WithSiteRuntime(request.Context(), resolved.Collection.Runtime)
 				request = request.WithContext(context.WithValue(ctx, publicResourcePathContextKey, path))
 			}
-			item = resource.Resource{ID: libraryItem.ID, SiteID: libraryItem.SiteID, Type: resourcetype.Page, Template: libraryItem.Template, ContentType: libraryItem.ContentType, Title: libraryItem.Title, Slug: libraryItem.Slug, Path: &itemPath, Annotation: libraryItem.Annotation, Content: libraryItem.Content, ImageMediaID: libraryItem.ImageMediaID, IsPublic: libraryItem.IsPublic, IsSearchable: libraryItem.IsSearchable, PublishedAt: libraryItem.PublishedAt, UnpublishedAt: libraryItem.UnpublishedAt, Fields: libraryItem.Fields, Widgets: libraryItem.Widgets, CreatedAt: libraryItem.CreatedAt, UpdatedAt: libraryItem.UpdatedAt}
+			item = resource.Resource{
+				ID: libraryItem.ID, SiteID: libraryItem.SiteID, Type: resourcetype.Page,
+				Template: libraryItem.Template, ContentType: libraryItem.ContentType,
+				Title: libraryItem.Title, Slug: libraryItem.Slug, Path: &itemPath,
+				Annotation: libraryItem.Annotation, Content: libraryItem.Content,
+				ImageMediaID: libraryItem.ImageMediaID, IsPublic: libraryItem.IsPublic,
+				IsSearchable: libraryItem.IsSearchable, PublishedAt: libraryItem.PublishedAt,
+				UnpublishedAt: libraryItem.UnpublishedAt, Fields: libraryItem.Fields,
+				Widgets: libraryItem.Widgets, CreatedAt: libraryItem.CreatedAt,
+				UpdatedAt: libraryItem.UpdatedAt,
+			}
 			err = nil
 		} else {
 			err = itemErr
@@ -372,7 +382,13 @@ func (h pageResourceHandler) ServeHTTP(
 		if publicPath, mirrored := ctx.Value(publicResourcePathContextKey).(string); mirrored {
 			itemLink = publicPath
 		}
-		if itemLink != "" && resource.PublishedBreadcrumb(resource.BreadcrumbCandidate{IsPublic: item.IsPublic, PublishedAt: item.PublishedAt, UnpublishedAt: item.UnpublishedAt, DeletedAt: item.DeletedAt}, now) {
+		if itemLink != "" && resource.PublishedBreadcrumb(
+			resource.BreadcrumbCandidate{
+				IsPublic: item.IsPublic, PublishedAt: item.PublishedAt,
+				UnpublishedAt: item.UnpublishedAt, DeletedAt: item.DeletedAt,
+			},
+			now,
+		) {
 			result.Resource.Breadcrumbs = append(result.Resource.Breadcrumbs, pageResourceBreadcrumb{Title: strings.TrimSpace(item.Title), Link: itemLink})
 		}
 	}
@@ -430,7 +446,13 @@ func (h pageResourceHandler) renderWidgets(ctx context.Context, siteRuntime *sit
 			continue
 		}
 		binding := widget.Binding{ID: placement.BindingID, Code: placement.Code, Area: placement.Area, Position: placement.Position, Presentation: placement.Presentation, Params: placement.Params}
-		rendered := pageWidgetResponse{Key: placement.Key, Code: placement.Code, View: widget.PublicView(placement.Presentation.View), Columns: placement.Presentation.Columns, MarginTop: placement.Presentation.MarginTop, MarginBottom: placement.Presentation.MarginBottom}
+		rendered := pageWidgetResponse{
+			Key: placement.Key, Code: placement.Code,
+			View:         widget.PublicView(placement.Presentation.View),
+			Columns:      placement.Presentation.Columns,
+			MarginTop:    placement.Presentation.MarginTop,
+			MarginBottom: placement.Presentation.MarginBottom,
+		}
 		runtime, exists := siteRuntime.Profile().Widget(placement.Code)
 		if !exists {
 			rendered.Error = h.widgetError(ctx, item, binding, widgetUnavailableError, fmt.Errorf("widget %q is unavailable", binding.Code))
@@ -457,7 +479,15 @@ func (h pageResourceHandler) renderWidgets(ctx context.Context, siteRuntime *sit
 				Bindings widget.ParamBindings
 				Values   widget.ResourceValues
 			}{placement.Params, placement.ParamBindings, item.WidgetValues()},
-			Input: widget.RenderInput{Key: placement.Key, Cursor: query.Get("cursor." + placement.Key), Site: widget.SiteSnapshot{ID: int64(item.SiteID), Domain: siteRuntime.Site().Domain, Locale: siteRuntime.Site().Locale}, Resource: widgetResourceSnapshot(item)},
+			Input: widget.RenderInput{
+				Key:    placement.Key,
+				Cursor: query.Get("cursor." + placement.Key),
+				Site: widget.SiteSnapshot{
+					ID: int64(item.SiteID), Domain: siteRuntime.Site().Domain,
+					Locale: siteRuntime.Site().Locale,
+				},
+				Resource: widgetResourceSnapshot(item),
+			},
 		})
 		indexes = append(indexes, len(result))
 		bindings = append(bindings, binding)

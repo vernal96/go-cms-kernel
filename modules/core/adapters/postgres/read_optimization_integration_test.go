@@ -89,7 +89,12 @@ func TestPostgresAllowedSingleQueryAndFreshPolicy(t *testing.T) {
 		_, _ = conn.Pool().Exec(context.Background(), `DELETE FROM core.sites WHERE id=ANY($1)`, []int64{int64(siteOne), int64(siteTwo)})
 	})
 	for i, code := range []permission.Code{read, update} {
-		item, err := db.Groups().Create(ctx, nil, group.Group{Code: fmt.Sprintf("batch-%s-%d", suffix, i), Name: "Batch"}, []permission.Code{code, admin.AccessPermission}, []group.SiteAccess{{SiteID: siteOne, CanView: true, CanEdit: true}})
+		item, err := db.Groups().Create(
+			ctx, nil,
+			group.Group{Code: fmt.Sprintf("batch-%s-%d", suffix, i), Name: "Batch"},
+			[]permission.Code{code, admin.AccessPermission},
+			[]group.SiteAccess{{SiteID: siteOne, CanView: true, CanEdit: true}},
+		)
 		if err != nil {
 			t.Fatal(err)
 		}

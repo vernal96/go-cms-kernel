@@ -2,7 +2,7 @@
 
 `forms` предоставляет конструктор форм, публичную отправку, результаты, статусы и действия. Модуль зависит от `core` и `mail`; в Starter не включён.
 
-Разделы: [сущности](entities.md), [API](api.md), [виджеты](widgets.md), [типы полей](fields.md), [фоновые действия](background.md).
+Разделы: [сущности](entities.md), [API](api.md), [виджеты](widgets.md), [типы полей](fields.md), [типы действий](actions.md), [фоновые действия](background.md).
 
 Для регистрации собственных типов действий и элементов из зависимого модуля см. [Contributions модулей](../../contributions.md#runtime-contributions-forms).
 

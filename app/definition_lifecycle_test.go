@@ -61,7 +61,17 @@ func TestAppReusesDefinitionsFromNewThroughBootAndSiteReload(t *testing.T) {
 		Logger: fakeLoggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: fakeEventBusFactory{},
 		MainDatabase: appkernel.DatabaseDefinition{
 			Connector: &fakeConnectorFactory{connector: newFakeConnector("main")},
-			Adapters:  []kernel.ModuleDatabaseFactory{&fakeDatabaseFactory{code: core.ModuleCode, database: &fakeCoreDatabase{repository: &fakeSiteRepository{sites: []site.Site{{ID: 1, ProfileCode: "dev", Name: "Test", Domain: "example.test", Locale: "en"}}}}}},
+			Adapters: []kernel.ModuleDatabaseFactory{
+				&fakeDatabaseFactory{
+					code: core.ModuleCode,
+					database: &fakeCoreDatabase{repository: &fakeSiteRepository{
+						sites: []site.Site{{
+							ID: 1, ProfileCode: "dev", Name: "Test",
+							Domain: "example.test", Locale: "en",
+						}},
+					}},
+				},
+			},
 		},
 		Profiles: []kernel.Profile{{Code: "dev", Modules: []kernel.Module{core.New(core.Config{}), admin.New(), countingDefinitionModule{calls: &calls}}}},
 	})

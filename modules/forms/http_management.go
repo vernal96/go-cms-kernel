@@ -272,7 +272,19 @@ func (h *formsHTTP) editor(response http.ResponseWriter, request *http.Request) 
 			actionTypes = append(actionTypes, ActionTypeMetadata{Code: action.ActionType, Label: action.ActionType, Available: false})
 		}
 	}
-	writeJSON(response, http.StatusOK, editorResponse{Form: detail.Form, Fields: fields, Elements: detail.Elements, Layout: detail.Layout, Statuses: detail.Statuses, Actions: detail.Actions, FieldTypes: h.service.AvailableFieldMetadata(), ValidatorTypes: h.service.AvailableValidatorMetadata(), ElementTypes: h.service.AvailableElementTypes(), ContainerTypes: AvailableContainerTypes(), ActionTypes: actionTypes})
+	writeJSON(response, http.StatusOK, editorResponse{
+		Form:           detail.Form,
+		Fields:         fields,
+		Elements:       detail.Elements,
+		Layout:         detail.Layout,
+		Statuses:       detail.Statuses,
+		Actions:        detail.Actions,
+		FieldTypes:     h.service.AvailableFieldMetadata(),
+		ValidatorTypes: h.service.AvailableValidatorMetadata(),
+		ElementTypes:   h.service.AvailableElementTypes(),
+		ContainerTypes: AvailableContainerTypes(),
+		ActionTypes:    actionTypes,
+	})
 }
 
 func (h *formsHTTP) createField(response http.ResponseWriter, request *http.Request) {
@@ -722,7 +734,20 @@ func (p fieldPayload) field() (FormField, error) {
 	if err != nil {
 		return FormField{}, err
 	}
-	return FormField{Code: p.Code, Type: p.Type, Label: p.Label, Required: p.Required, Validators: field.CloneValidatorDefinitions(p.Validators), Options: options, Editor: p.Editor, VisibleWhen: cloneVisibleWhen(p.VisibleWhen), ResultLabel: p.ResultLabel, ShowInResults: p.ShowInResults, ShowOnSite: p.ShowOnSite, ResultPosition: p.ResultPosition}, nil
+	return FormField{
+		Code:           p.Code,
+		Type:           p.Type,
+		Label:          p.Label,
+		Required:       p.Required,
+		Validators:     field.CloneValidatorDefinitions(p.Validators),
+		Options:        options,
+		Editor:         p.Editor,
+		VisibleWhen:    cloneVisibleWhen(p.VisibleWhen),
+		ResultLabel:    p.ResultLabel,
+		ShowInResults:  p.ShowInResults,
+		ShowOnSite:     p.ShowOnSite,
+		ResultPosition: p.ResultPosition,
+	}, nil
 }
 
 func toFieldResponse(item FormField) (fieldResponse, error) {
@@ -730,7 +755,26 @@ func toFieldResponse(item FormField) (fieldResponse, error) {
 	if err != nil {
 		return fieldResponse{}, err
 	}
-	return fieldResponse{ID: item.ID, FormID: item.FormID, fieldPayload: fieldPayload{Code: item.Code, Type: item.Type, Label: item.Label, Required: item.Required, Validators: field.CloneValidatorDefinitions(item.Validators), Options: options, Editor: item.Editor, VisibleWhen: cloneVisibleWhen(item.VisibleWhen), ResultLabel: item.ResultLabel, ShowInResults: item.ShowInResults, ShowOnSite: item.ShowOnSite, ResultPosition: item.ResultPosition}, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt}, nil
+	return fieldResponse{
+		ID:     item.ID,
+		FormID: item.FormID,
+		fieldPayload: fieldPayload{
+			Code:           item.Code,
+			Type:           item.Type,
+			Label:          item.Label,
+			Required:       item.Required,
+			Validators:     field.CloneValidatorDefinitions(item.Validators),
+			Options:        options,
+			Editor:         item.Editor,
+			VisibleWhen:    cloneVisibleWhen(item.VisibleWhen),
+			ResultLabel:    item.ResultLabel,
+			ShowInResults:  item.ShowInResults,
+			ShowOnSite:     item.ShowOnSite,
+			ResultPosition: item.ResultPosition,
+		},
+		CreatedAt: item.CreatedAt,
+		UpdatedAt: item.UpdatedAt,
+	}, nil
 }
 
 func pageQuery(request *http.Request) (PageQuery, error) {

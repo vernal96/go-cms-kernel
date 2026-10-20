@@ -184,7 +184,10 @@ func PrepareMutation(ctx context.Context, before *EventState, candidate EventSta
 			key = BeforeCreate
 		}
 		if err := entityhooks.Before(ctx, runtime.Profile().EntityHooks(), key, &change, func(value *Change) error {
-			if value.Operation != m.operation || !reflect.DeepEqual(value.Actor, m.actor) || !reflect.DeepEqual(value.Before, cloneEventState(before)) || !reflect.DeepEqual(value.Candidate, *cloneEventState(&candidate)) {
+			if value.Operation != m.operation ||
+				!reflect.DeepEqual(value.Actor, m.actor) ||
+				!reflect.DeepEqual(value.Before, cloneEventState(before)) ||
+				!reflect.DeepEqual(value.Candidate, *cloneEventState(&candidate)) {
 				return fmt.Errorf("%w: hook changed read-only mutation metadata", ErrInvalid)
 			}
 			return validateHookChanges(m.operation, data, value.Data)

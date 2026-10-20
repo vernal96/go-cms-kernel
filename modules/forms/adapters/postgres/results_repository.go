@@ -18,7 +18,22 @@ import (
 
 func scanResult(row rowScanner) (forms.Result, error) {
 	var item forms.Result
-	err := row.Scan(&item.ID, &item.SiteID, &item.FormID, &item.FormCode, &item.FormName, &item.StatusID, &item.StatusCode, &item.StatusName, &item.StatusColor, &item.UserID, &item.UserAgent, &item.ClientAddress, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(
+		&item.ID,
+		&item.SiteID,
+		&item.FormID,
+		&item.FormCode,
+		&item.FormName,
+		&item.StatusID,
+		&item.StatusCode,
+		&item.StatusName,
+		&item.StatusColor,
+		&item.UserID,
+		&item.UserAgent,
+		&item.ClientAddress,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	)
 	return item, err
 }
 
@@ -31,7 +46,16 @@ func (r *Repository) CreateResult(ctx context.Context, record forms.SubmissionRe
 	var createdID forms.ResultID
 	err = tx.QueryRow(ctx, `INSERT INTO forms.results(site_id,form_id,form_code,form_name,status_id,user_id,user_agent,client_address)
 SELECT $1,f.id,$3,$4,s.id,$6,$7,$8 FROM forms.forms f JOIN forms.statuses s ON s.form_id=f.id AND s.id=$5 WHERE f.site_id=$1 AND f.id=$2 AND f.enabled
-RETURNING id;`, record.Result.SiteID, record.Result.FormID, record.Result.FormCode, record.Result.FormName, record.Result.StatusID, record.Result.UserID, record.Result.UserAgent, record.Result.ClientAddress).Scan(&createdID)
+RETURNING id;`,
+		record.Result.SiteID,
+		record.Result.FormID,
+		record.Result.FormCode,
+		record.Result.FormName,
+		record.Result.StatusID,
+		record.Result.UserID,
+		record.Result.UserAgent,
+		record.Result.ClientAddress,
+	).Scan(&createdID)
 	if err != nil {
 		return forms.ResultDetail{}, mapWriteError(err)
 	}
@@ -77,7 +101,18 @@ RETURNING id;`, record.Result.SiteID, record.Result.FormID, record.Result.FormCo
 	return forms.ResultDetail{Result: created, Values: values, Uploads: uploads, Executions: executions}, nil
 }
 
-func resultValueColumns(item forms.ResultValue) (stringValue *string, integerValue *int64, floatValue *float64, booleanValue *bool, timestampValue *time.Time, referenceValue *int64, jsonValue []byte, err error) {
+func resultValueColumns(
+	item forms.ResultValue,
+) (
+	stringValue *string,
+	integerValue *int64,
+	floatValue *float64,
+	booleanValue *bool,
+	timestampValue *time.Time,
+	referenceValue *int64,
+	jsonValue []byte,
+	err error,
+) {
 	switch item.StorageKind {
 	case field.StorageString:
 		value, ok := item.Value.(string)
@@ -148,7 +183,45 @@ func insertResultValue(ctx context.Context, tx pgx.Tx, item forms.ResultValue) (
 	var floatOut *float64
 	var boolOut *bool
 	var timeOut *time.Time
-	err = tx.QueryRow(ctx, `INSERT INTO forms.result_values(result_id,field_id,field_code,field_label,result_label,field_type,storage_kind,position,is_multi,string_value,integer_value,float_value,boolean_value,timestamp_value,reference_value,json_value,file_references) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id,result_id,field_id,field_code,field_label,result_label,field_type,storage_kind,position,is_multi,string_value,integer_value,float_value,boolean_value,timestamp_value,reference_value,json_value;`, item.ResultID, item.FieldID, item.FieldCode, item.FieldLabel, item.ResultLabel, item.FieldType, item.StorageKind, item.Position, item.Multiple, stringValue, integerValue, floatValue, booleanValue, timestampValue, referenceValue, jsonValue, snapshots).Scan(&created.ID, &created.ResultID, &created.FieldID, &created.FieldCode, &created.FieldLabel, &created.ResultLabel, &created.FieldType, &created.StorageKind, &created.Position, &created.Multiple, &stringOut, &integerOut, &floatOut, &boolOut, &timeOut, &referenceOut, &raw)
+	err = tx.QueryRow(
+		ctx,
+		`INSERT INTO forms.result_values(result_id,field_id,field_code,field_label,result_label,field_type,storage_kind,position,is_multi,string_value,integer_value,float_value,boolean_value,timestamp_value,reference_value,json_value,file_references) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id,result_id,field_id,field_code,field_label,result_label,field_type,storage_kind,position,is_multi,string_value,integer_value,float_value,boolean_value,timestamp_value,reference_value,json_value;`,
+		item.ResultID,
+		item.FieldID,
+		item.FieldCode,
+		item.FieldLabel,
+		item.ResultLabel,
+		item.FieldType,
+		item.StorageKind,
+		item.Position,
+		item.Multiple,
+		stringValue,
+		integerValue,
+		floatValue,
+		booleanValue,
+		timestampValue,
+		referenceValue,
+		jsonValue,
+		snapshots,
+	).Scan(
+		&created.ID,
+		&created.ResultID,
+		&created.FieldID,
+		&created.FieldCode,
+		&created.FieldLabel,
+		&created.ResultLabel,
+		&created.FieldType,
+		&created.StorageKind,
+		&created.Position,
+		&created.Multiple,
+		&stringOut,
+		&integerOut,
+		&floatOut,
+		&boolOut,
+		&timeOut,
+		&referenceOut,
+		&raw,
+	)
 	if err != nil {
 		return forms.ResultValue{}, mapWriteError(err)
 	}
@@ -185,7 +258,16 @@ func resultValueReferences(item forms.ResultValue) []field.Reference {
 	return references
 }
 
-func decodedStoredValue(kind field.StorageKind, stringValue *string, integerValue *int64, floatValue *float64, booleanValue *bool, timestampValue *time.Time, referenceValue *int64, raw []byte) (any, error) {
+func decodedStoredValue(
+	kind field.StorageKind,
+	stringValue *string,
+	integerValue *int64,
+	floatValue *float64,
+	booleanValue *bool,
+	timestampValue *time.Time,
+	referenceValue *int64,
+	raw []byte,
+) (any, error) {
 	switch kind {
 	case field.StorageString:
 		if stringValue != nil {
@@ -222,7 +304,31 @@ func decodedStoredValue(kind field.StorageKind, stringValue *string, integerValu
 
 func insertResultUpload(ctx context.Context, tx pgx.Tx, item forms.ResultUpload) (forms.ResultUpload, error) {
 	var created forms.ResultUpload
-	err := tx.QueryRow(ctx, `INSERT INTO forms.result_uploads(result_id,field_id,field_code,position,filename,mime_type,size,checksum,spool_reference) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,result_id,field_id,field_code,position,filename,mime_type,size,checksum,spool_reference,spool_deleted_at;`, item.ResultID, item.FieldID, item.FieldCode, item.Position, item.Filename, item.MIMEType, item.Size, item.Checksum, item.SpoolReference).Scan(&created.ID, &created.ResultID, &created.FieldID, &created.FieldCode, &created.Position, &created.Filename, &created.MIMEType, &created.Size, &created.Checksum, &created.SpoolReference, &created.SpoolDeletedAt)
+	err := tx.QueryRow(
+		ctx,
+		`INSERT INTO forms.result_uploads(result_id,field_id,field_code,position,filename,mime_type,size,checksum,spool_reference) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,result_id,field_id,field_code,position,filename,mime_type,size,checksum,spool_reference,spool_deleted_at;`,
+		item.ResultID,
+		item.FieldID,
+		item.FieldCode,
+		item.Position,
+		item.Filename,
+		item.MIMEType,
+		item.Size,
+		item.Checksum,
+		item.SpoolReference,
+	).Scan(
+		&created.ID,
+		&created.ResultID,
+		&created.FieldID,
+		&created.FieldCode,
+		&created.Position,
+		&created.Filename,
+		&created.MIMEType,
+		&created.Size,
+		&created.Checksum,
+		&created.SpoolReference,
+		&created.SpoolDeletedAt,
+	)
 	return created, mapWriteError(err)
 }
 
@@ -257,7 +363,36 @@ func insertExecutionAndOutbox(ctx context.Context, tx pgx.Tx, result forms.Resul
 	}
 	var execution forms.ActionExecution
 	var scannedTrigger []byte
-	err = tx.QueryRow(ctx, `INSERT INTO forms.action_executions(site_id,result_id,action_id,action_code,action_name,action_type,trigger,config,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending') RETURNING `+executionColumns+`;`, result.SiteID, result.ID, action.ID, action.Code, action.Name, action.ActionType, triggerJSON, action.Config).Scan(&execution.ID, &execution.SiteID, &execution.ResultID, &execution.ActionID, &execution.ActionCode, &execution.ActionName, &execution.ActionType, &scannedTrigger, &execution.Config, &execution.Status, &execution.AttemptCount, &execution.SafeError, &execution.ExternalReference, &execution.StartedAt, &execution.FinishedAt, &execution.CreatedAt, &execution.UpdatedAt)
+	err = tx.QueryRow(
+		ctx,
+		`INSERT INTO forms.action_executions(site_id,result_id,action_id,action_code,action_name,action_type,trigger,config,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending') RETURNING `+executionColumns+`;`,
+		result.SiteID,
+		result.ID,
+		action.ID,
+		action.Code,
+		action.Name,
+		action.ActionType,
+		triggerJSON,
+		action.Config,
+	).Scan(
+		&execution.ID,
+		&execution.SiteID,
+		&execution.ResultID,
+		&execution.ActionID,
+		&execution.ActionCode,
+		&execution.ActionName,
+		&execution.ActionType,
+		&scannedTrigger,
+		&execution.Config,
+		&execution.Status,
+		&execution.AttemptCount,
+		&execution.SafeError,
+		&execution.ExternalReference,
+		&execution.StartedAt,
+		&execution.FinishedAt,
+		&execution.CreatedAt,
+		&execution.UpdatedAt,
+	)
 	if err != nil {
 		return forms.ActionExecution{}, err
 	}
@@ -293,7 +428,23 @@ func (r *Repository) ListResults(ctx context.Context, siteID site.ID, query form
 	for rows.Next() {
 		var item forms.ResultSummary
 		var total int
-		if err := rows.Scan(&item.ID, &item.SiteID, &item.FormID, &item.FormCode, &item.FormName, &item.StatusID, &item.StatusCode, &item.StatusName, &item.StatusColor, &item.UserID, &item.UserAgent, &item.ClientAddress, &item.CreatedAt, &item.UpdatedAt, &total); err != nil {
+		if err := rows.Scan(
+			&item.ID,
+			&item.SiteID,
+			&item.FormID,
+			&item.FormCode,
+			&item.FormName,
+			&item.StatusID,
+			&item.StatusCode,
+			&item.StatusName,
+			&item.StatusColor,
+			&item.UserID,
+			&item.UserAgent,
+			&item.ClientAddress,
+			&item.CreatedAt,
+			&item.UpdatedAt,
+			&total,
+		); err != nil {
 			return forms.ResultSummaryPage{}, err
 		}
 		item.Values = map[string]any{}
@@ -338,7 +489,25 @@ func scanResultValue(row rowScanner) (forms.ResultValue, error) {
 	var booleanValue *bool
 	var timestampValue *time.Time
 	var raw []byte
-	err := row.Scan(&item.ID, &item.ResultID, &item.FieldID, &item.FieldCode, &item.FieldLabel, &item.ResultLabel, &item.FieldType, &item.StorageKind, &item.Position, &item.Multiple, &stringValue, &integerValue, &floatValue, &booleanValue, &timestampValue, &referenceValue, &raw)
+	err := row.Scan(
+		&item.ID,
+		&item.ResultID,
+		&item.FieldID,
+		&item.FieldCode,
+		&item.FieldLabel,
+		&item.ResultLabel,
+		&item.FieldType,
+		&item.StorageKind,
+		&item.Position,
+		&item.Multiple,
+		&stringValue,
+		&integerValue,
+		&floatValue,
+		&booleanValue,
+		&timestampValue,
+		&referenceValue,
+		&raw,
+	)
 	if err != nil {
 		return forms.ResultValue{}, err
 	}
@@ -389,7 +558,25 @@ func listResultUploads(ctx context.Context, q querier, resultID forms.ResultID) 
 func scanExecution(row rowScanner) (forms.ActionExecution, error) {
 	var item forms.ActionExecution
 	var trigger []byte
-	err := row.Scan(&item.ID, &item.SiteID, &item.ResultID, &item.ActionID, &item.ActionCode, &item.ActionName, &item.ActionType, &trigger, &item.Config, &item.Status, &item.AttemptCount, &item.SafeError, &item.ExternalReference, &item.StartedAt, &item.FinishedAt, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(
+		&item.ID,
+		&item.SiteID,
+		&item.ResultID,
+		&item.ActionID,
+		&item.ActionCode,
+		&item.ActionName,
+		&item.ActionType,
+		&trigger,
+		&item.Config,
+		&item.Status,
+		&item.AttemptCount,
+		&item.SafeError,
+		&item.ExternalReference,
+		&item.StartedAt,
+		&item.FinishedAt,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	)
 	if err == nil {
 		err = json.Unmarshal(trigger, &item.Trigger)
 	}

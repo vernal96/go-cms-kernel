@@ -314,7 +314,14 @@ func revisionWidgets(items []WidgetSnapshot) []widget.Binding {
 	result := make([]widget.Binding, len(items))
 	for index, item := range items {
 		result[index] = widget.Binding{Code: item.Code, Area: item.Area, Position: item.Position,
-			Presentation: widget.Presentation{View: item.View, Columns: item.Columns, MarginTop: item.MarginTop, MarginBottom: item.MarginBottom, Enabled: item.Enabled}, Params: cloneMap(item.Params), ParamBindings: widget.CloneParamBindings(item.ParamBindings)}
+			Presentation: widget.Presentation{
+				View: item.View, Columns: item.Columns,
+				MarginTop: item.MarginTop, MarginBottom: item.MarginBottom,
+				Enabled: item.Enabled,
+			},
+			Params:        cloneMap(item.Params),
+			ParamBindings: widget.CloneParamBindings(item.ParamBindings),
+		}
 	}
 	return result
 }

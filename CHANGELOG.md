@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.19.0
+
+- Add site-scoped OAuth/OIDC sign-in with explicit account linking, safe first-login registration, and replaceable provider registration. Include Google, Yandex, VK, and Mail.ru adapters; projects can register additional providers without changing the kernel.
+- Persist one-time authorization flows and external identities in PostgreSQL. Bind callbacks to the exact request origin and redirect URI, reject replay and disabled providers, and keep administrative access governed by existing permissions.
+- Bound cache operations during Redis and filesystem-backed cache outages, skip repeated calls to a failing store briefly, and continue reads from their source. Keep physical file retrieval failures visible.
+- Harden Argon2 parameter validation, require a session store for JWT authentication, and close the HTTP server on graceful-shutdown timeout. Document Forms action extensions and split long Go expressions into logical lines.
+
 ## 0.18.0
 
 - Return public Media fields as `{id, url, mime_type, size, settings}` in site settings and resource and library widget data, including multiple and nested fields. Local storage uses a relative delivery URL; S3/CDN uses its configured absolute public URL. Unavailable files yield `null` without changing array positions.

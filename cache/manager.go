@@ -101,6 +101,38 @@ func (m *Manager) Invalidate(ctx context.Context, tags ...Tag) error {
 	return m.coordinator.Invalidate(ctx, tags...)
 }
 
+// PrepareRuntimeTargets stages cache stores for candidate site runtimes. The
+// returned update retains old and new targets until Publish or restores the
+// previous registration set on Abort.
+func (m *Manager) PrepareRuntimeTargets(
+	targets map[string][]RuntimeTarget,
+) (RuntimeTargetUpdate, error) {
+	if m == nil || m.closed.Load() || m.coordinator == nil {
+		return RuntimeTargetUpdate{}, nil
+	}
+	prepared := make(map[string]map[dependencyTarget]Store, len(targets))
+	for siteID, siteTargets := range targets {
+		if siteID == "" {
+			return RuntimeTargetUpdate{}, errors.New("runtime cache site scope is empty")
+		}
+		for _, target := range siteTargets {
+			if isNilStore(target.Store) || target.Store.Code() == "" ||
+				target.Scope != "sites/"+siteID+"/dependencies" {
+				return RuntimeTargetUpdate{}, fmt.Errorf(
+					"runtime cache target does not match site scope %q",
+					siteID,
+				)
+			}
+			key := dependencyTarget{scope: target.Scope, code: target.Store.Code()}
+			if prepared[siteID] == nil {
+				prepared[siteID] = make(map[dependencyTarget]Store)
+			}
+			prepared[siteID][key] = target.Store
+		}
+	}
+	return m.coordinator.prepareRuntimeTargets(prepared), nil
+}
+
 func (m *Manager) Prune(ctx context.Context) error {
 	if m == nil || m.closed.Load() {
 		return nil

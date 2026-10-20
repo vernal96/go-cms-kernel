@@ -78,7 +78,10 @@ func (s *widgetCache) InvalidateTag(_ context.Context, tag cache.Tag) error {
 func (*widgetCache) Close() error { return nil }
 
 func TestResourceListExplicitIDsStillApplyExclusionsAndCache(t *testing.T) {
-	repository := &listRepository{page: resource.Page{Items: []resource.Resource{{ID: 10, SiteID: 7, Title: "One", Type: resourcetype.Page, Slug: "one", Fields: map[string]any{}}, {ID: 20, SiteID: 7, Title: "Two", Type: resourcetype.Page, Slug: "two", Fields: map[string]any{}}}}}
+	repository := &listRepository{page: resource.Page{Items: []resource.Resource{
+		{ID: 10, SiteID: 7, Title: "One", Type: resourcetype.Page, Slug: "one", Fields: map[string]any{}},
+		{ID: 20, SiteID: 7, Title: "Two", Type: resourcetype.Page, Slug: "two", Fields: map[string]any{}},
+	}}}
 	service, err := resource.NewQueryService(repository)
 	if err != nil {
 		t.Fatal(err)

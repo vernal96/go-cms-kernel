@@ -129,7 +129,24 @@ func formDetail(ctx context.Context, q querier, siteID site.ID, id forms.FormID,
 func scanField(row rowScanner) (forms.FormField, error) {
 	var item forms.FormField
 	var validators, options, visible []byte
-	err := row.Scan(&item.ID, &item.FormID, &item.Code, &item.Type, &item.Label, &item.Required, &validators, &options, &item.Editor, &visible, &item.ResultLabel, &item.ShowInResults, &item.ShowOnSite, &item.ResultPosition, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(
+		&item.ID,
+		&item.FormID,
+		&item.Code,
+		&item.Type,
+		&item.Label,
+		&item.Required,
+		&validators,
+		&options,
+		&item.Editor,
+		&visible,
+		&item.ResultLabel,
+		&item.ShowInResults,
+		&item.ShowOnSite,
+		&item.ResultPosition,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	)
 	if err != nil {
 		return forms.FormField{}, err
 	}

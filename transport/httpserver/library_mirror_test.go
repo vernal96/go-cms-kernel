@@ -83,18 +83,89 @@ func TestLibraryMirrorHTTPSourceProfileWidgetsSEOAndPublication(t *testing.T) {
 		20: {ID: 20, SiteID: 2, Type: resourcetype.LibraryMirror, Template: &mountTemplate, Title: "Own mirror", Content: "Own content", Path: stringPointer("/mirror"), IsPublic: true, TypeSettings: map[string]any{"source_library_id": int64(10)}},
 	}}, item: resource.LibraryItem{ID: 100, SiteID: 1, LibraryID: 10, Template: &sourceTemplate, Title: "Story", Slug: "story", IsPublic: true, Content: `<a href="https://source.test/raw">original HTML</a>`}}
 	repo.byPath = map[string]resource.Resource{"/mirror": repo.byID[20]}
-	sites := &publicationSiteRepository{items: []site.Site{{Name: "Test site", ID: 1, ProfileCode: "source", Domain: "source.test", Locale: "ru-RU", IsPublic: true}, {Name: "Test site", ID: 2, ProfileCode: "destination", Domain: "mirror.test", Locale: "en-US", IsPublic: true}}}
+	sites := &publicationSiteRepository{items: []site.Site{
+		{Name: "Test site", ID: 1, ProfileCode: "source", Domain: "source.test", Locale: "ru-RU", IsPublic: true},
+		{Name: "Test site", ID: 2, ProfileCode: "destination", Domain: "mirror.test", Locale: "en-US", IsPublic: true},
+	}}
 	var order []string
 	probe := widget.NewRef("probe")
-	module := transportModule{code: "source_widgets", resourceType: transportResourceType{code: "probe_type"}, order: &order, widgets: []widget.Widget{handlerWidget{definition: widget.Definition{Reference: probe, Label: "Probe", Description: "Source runtime probe"}, new: func(map[string]any) (widget.Instance, error) {
-		return handlerWidgetInstance{render: func(_ context.Context, input widget.RenderInput) (map[string]any, error) {
-			return map[string]any{"domain": input.Site.Domain, "site_id": input.Site.ID, "title": input.Resource.Title, "cursor": input.Cursor}, nil
-		}}, nil
-	}}}}
-	app, err := appkernel.New(ctx, appkernel.Definition{ResourceViews: []resourceviews.Definition{{Code: "views", Factory: views}}, Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{}, MainDatabase: appkernel.DatabaseDefinition{Connector: connectorFactory{}, Adapters: []kernel.ModuleDatabaseFactory{viewsHTTPDatabaseFactory{databaseFactory: databaseFactory{sites: sites, resources: repo, access: deniedAccessRepository{}}, views: views}, mirrorSEODatabase{}}}, Profiles: []kernel.Profile{
-		{Code: "source", Modules: []kernel.Module{core.New(core.Config{ResourceViews: &resourceviews.Config{Accumulator: "views"}}), admin.New(), module, seo.New(seo.Config{DefaultCanonicalTemplate: "https://{{ site.domain }}{{ resource.path }}"})}, Templates: []template.Definition{{Code: sourceTemplate, Label: "Source", Layout: template.Layout{{Code: "main", Label: "Main", Items: []template.Item{template.Widget{Widget: corewidgets.Content}, template.Widget{Widget: probe}, template.ResourceWidgets{}}}}}}},
-		{Code: "destination", Modules: []kernel.Module{core.New(core.Config{ResourceViews: &resourceviews.Config{Accumulator: "views"}}), admin.New()}, Templates: []template.Definition{{Code: mountTemplate, Label: "Mount", Layout: template.Layout{{Code: "main", Label: "Main", Items: []template.Item{template.Widget{Widget: corewidgets.Content}, template.Widget{Widget: corewidgets.LibraryMirrorResources, Params: map[string]any{"per_page": int64(1)}}, template.Widget{Widget: corewidgets.LibraryMirrorResources, Params: map[string]any{"per_page": int64(2)}}}}}}}},
-	}})
+	module := transportModule{
+		code: "source_widgets", resourceType: transportResourceType{code: "probe_type"},
+		order: &order,
+		widgets: []widget.Widget{handlerWidget{
+			definition: widget.Definition{
+				Reference: probe, Label: "Probe", Description: "Source runtime probe",
+			},
+			new: func(map[string]any) (widget.Instance, error) {
+				return handlerWidgetInstance{render: func(_ context.Context, input widget.RenderInput) (map[string]any, error) {
+					return map[string]any{"domain": input.Site.Domain, "site_id": input.Site.ID, "title": input.Resource.Title, "cursor": input.Cursor}, nil
+				}}, nil
+			},
+		}},
+	}
+	app, err := appkernel.New(ctx, appkernel.Definition{
+		ResourceViews: []resourceviews.Definition{{Code: "views", Factory: views}},
+		Logger:        loggerFactory{}, PasswordHasher: argon2id.Factory{},
+		SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{},
+		MainDatabase: appkernel.DatabaseDefinition{
+			Connector: connectorFactory{},
+			Adapters: []kernel.ModuleDatabaseFactory{
+				viewsHTTPDatabaseFactory{
+					databaseFactory: databaseFactory{
+						sites: sites, resources: repo,
+						access: deniedAccessRepository{},
+					},
+					views: views,
+				},
+				mirrorSEODatabase{},
+			},
+		},
+		Profiles: []kernel.Profile{
+			{
+				Code: "source",
+				Modules: []kernel.Module{
+					core.New(core.Config{ResourceViews: &resourceviews.Config{Accumulator: "views"}}),
+					admin.New(), module,
+					seo.New(seo.Config{DefaultCanonicalTemplate: "https://{{ site.domain }}{{ resource.path }}"}),
+				},
+				Templates: []template.Definition{{
+					Code: sourceTemplate, Label: "Source",
+					Layout: template.Layout{{
+						Code: "main", Label: "Main",
+						Items: []template.Item{
+							template.Widget{Widget: corewidgets.Content},
+							template.Widget{Widget: probe},
+							template.ResourceWidgets{},
+						},
+					}},
+				}},
+			},
+			{
+				Code: "destination",
+				Modules: []kernel.Module{
+					core.New(core.Config{ResourceViews: &resourceviews.Config{Accumulator: "views"}}),
+					admin.New(),
+				},
+				Templates: []template.Definition{{
+					Code: mountTemplate, Label: "Mount",
+					Layout: template.Layout{{
+						Code: "main", Label: "Main",
+						Items: []template.Item{
+							template.Widget{Widget: corewidgets.Content},
+							template.Widget{
+								Widget: corewidgets.LibraryMirrorResources,
+								Params: map[string]any{"per_page": int64(1)},
+							},
+							template.Widget{
+								Widget: corewidgets.LibraryMirrorResources,
+								Params: map[string]any{"per_page": int64(2)},
+							},
+						},
+					}},
+				}},
+			},
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,12 +271,26 @@ func TestLibraryMirrorHTTPSourceProfileWidgetsSEOAndPublication(t *testing.T) {
 	repo.queries = nil
 	res = request("/mirror?" + url.QueryEscape(firstKey) + "=" + url.QueryEscape(cursor))
 	sort.Slice(repo.queries, func(i, j int) bool { return repo.queries[i].Limit < repo.queries[j].Limit })
-	if res.Code != 200 || len(repo.queries) != 2 || repo.queries[0].Cursor != cursor || repo.queries[1].Cursor != "" || repo.queries[0].SiteID != 1 || repo.queries[0].LibraryID != 10 || !strings.Contains(res.Body.String(), `"url":"/mirror/story"`) {
+	if res.Code != 200 || len(repo.queries) != 2 ||
+		repo.queries[0].Cursor != cursor || repo.queries[1].Cursor != "" ||
+		repo.queries[0].SiteID != 1 || repo.queries[0].LibraryID != 10 ||
+		!strings.Contains(res.Body.String(), `"url":"/mirror/story"`) {
 		t.Fatalf("independent cursors: %+v %s", repo.queries, res.Body.String())
 	}
 	future := time.Now().Add(time.Hour)
 	past := time.Now().Add(-time.Hour)
-	for _, mutate := range []func(){func() { r := repo.byID[10]; r.IsPublic = false; repo.byID[10] = r }, func() { r := repo.byID[20]; r.IsPublic = false; repo.byID[20] = r; repo.byPath["/mirror"] = r }, func() { repo.item.IsPublic = false }, func() { repo.item.PublishedAt = &future }, func() { repo.item.UnpublishedAt = &past }} {
+	for _, mutate := range []func(){
+		func() { r := repo.byID[10]; r.IsPublic = false; repo.byID[10] = r },
+		func() {
+			r := repo.byID[20]
+			r.IsPublic = false
+			repo.byID[20] = r
+			repo.byPath["/mirror"] = r
+		},
+		func() { repo.item.IsPublic = false },
+		func() { repo.item.PublishedAt = &future },
+		func() { repo.item.UnpublishedAt = &past },
+	} {
 		source, mount, item := repo.byID[10], repo.byID[20], repo.item
 		mutate()
 		res = request("/mirror/story")

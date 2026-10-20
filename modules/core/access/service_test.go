@@ -171,7 +171,13 @@ func TestAuthorizationSubjects(t *testing.T) {
 }
 
 func TestAdministratorRequiresExactMembership(t *testing.T) {
-	repository := &memoryRepository{subjects: map[security.UserID]Subject{1: {Exists: true, Active: true, IsSuper: true}, 2: {Exists: true, Active: true, HasGroups: true}}, administrators: map[security.UserID]bool{2: true}}
+	repository := &memoryRepository{
+		subjects: map[security.UserID]Subject{
+			1: {Exists: true, Active: true, IsSuper: true},
+			2: {Exists: true, Active: true, HasGroups: true},
+		},
+		administrators: map[security.UserID]bool{2: true},
+	}
 	service, _ := newTestService(t, repository)
 	if allowed, err := service.IsAdministrator(context.Background(), security.User(1)); err != nil || allowed {
 		t.Fatalf("non-admin super allowed=%v err=%v", allowed, err)

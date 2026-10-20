@@ -16,9 +16,38 @@ const (
 
 func fieldTypes() []field.Type {
 	return []field.Type{
-		field.DescribedType{Type: captchaFieldType{}, Presentation: field.Metadata{Label: "CAPTCHA", Options: []field.ConfigField{{Key: "provider", Label: "CAPTCHA-провайдер", Type: field.TypeString}}}},
-		field.DescribedType{Type: consentFieldType{}, Presentation: field.Metadata{Label: "Согласие", Editor: "checkbox", Options: []field.ConfigField{{Key: "text", Label: "Текст согласия", Type: field.TypeTextarea}, {Key: "url", Label: "Ссылка на документ", Type: field.TypeString}}}},
-		field.DescribedType{Type: uploadFieldType{}, Presentation: field.Metadata{Label: "Загрузка файлов", Options: []field.ConfigField{{Key: "mime_types", Label: "Разрешённые MIME-типы", Type: field.TypeJSON, Editor: "core.string-list"}, {Key: "max_file_size", Label: "Максимум байт на файл", Type: field.TypeInteger}, {Key: "multiple", Label: "Несколько файлов", Type: field.TypeCheckbox}, {Key: "max_files", Label: "Максимум файлов", Type: field.TypeInteger}}}},
+		field.DescribedType{
+			Type: captchaFieldType{},
+			Presentation: field.Metadata{
+				Label: "CAPTCHA",
+				Options: []field.ConfigField{
+					{Key: "provider", Label: "CAPTCHA-провайдер", Type: field.TypeString},
+				},
+			},
+		},
+		field.DescribedType{
+			Type: consentFieldType{},
+			Presentation: field.Metadata{
+				Label:  "Согласие",
+				Editor: "checkbox",
+				Options: []field.ConfigField{
+					{Key: "text", Label: "Текст согласия", Type: field.TypeTextarea},
+					{Key: "url", Label: "Ссылка на документ", Type: field.TypeString},
+				},
+			},
+		},
+		field.DescribedType{
+			Type: uploadFieldType{},
+			Presentation: field.Metadata{
+				Label: "Загрузка файлов",
+				Options: []field.ConfigField{
+					{Key: "mime_types", Label: "Разрешённые MIME-типы", Type: field.TypeJSON, Editor: "core.string-list"},
+					{Key: "max_file_size", Label: "Максимум байт на файл", Type: field.TypeInteger},
+					{Key: "multiple", Label: "Несколько файлов", Type: field.TypeCheckbox},
+					{Key: "max_files", Label: "Максимум файлов", Type: field.TypeInteger},
+				},
+			},
+		},
 	}
 }
 

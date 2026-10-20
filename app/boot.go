@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/vernal96/go-cms-kernel"
+	"github.com/vernal96/go-cms-kernel/cache"
 	"github.com/vernal96/go-cms-kernel/job"
 	"github.com/vernal96/go-cms-kernel/migrations"
 	"github.com/vernal96/go-cms-kernel/modules/admin"
@@ -151,6 +152,9 @@ func (a *App) boot(ctx context.Context) error {
 	}
 	catalog := coreServices.Sites
 	resourceService := coreServices.Resources
+	if err := a.prepareRuntimeCacheTargets(ctx, catalog); err != nil {
+		return fmt.Errorf("prepare runtime cache targets: %w", err)
+	}
 	siteManagementRepository, ok := a.coreDatabase.Sites().(site.ManagementRepository)
 	if !ok {
 		return errors.New("site management repository is unavailable")
@@ -250,6 +254,32 @@ func (a *App) boot(ctx context.Context) error {
 
 	a.booted.Store(true)
 	return nil
+}
+
+func (a *App) prepareRuntimeCacheTargets(
+	ctx context.Context,
+	catalog *site.Catalog,
+) error {
+	return catalog.AddRuntimePreparer(ctx, func(
+		_ context.Context,
+		plan site.RuntimePlan,
+	) (site.RuntimePreparation, error) {
+		targets := make(map[string][]cache.RuntimeTarget)
+		for _, runtime := range plan.Next() {
+			if runtime == nil || runtime.Profile() == nil {
+				return site.RuntimePreparation{}, errors.New(
+					"site runtime has no profile runtime",
+				)
+			}
+			siteID := fmt.Sprint(runtime.Site().ID)
+			targets[siteID] = runtime.Profile().CacheTargets()
+		}
+		update, err := a.caches.PrepareRuntimeTargets(targets)
+		if err != nil {
+			return site.RuntimePreparation{}, err
+		}
+		return site.RuntimePreparation{Publish: update.Publish, Abort: update.Abort}, nil
+	})
 }
 
 func jobRunnerFromProfiles(profiles []kernel.Profile, catalog *site.Catalog) (*job.Runner, error) {

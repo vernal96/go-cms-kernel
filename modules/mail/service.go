@@ -106,7 +106,17 @@ func NewService(siteID site.ID, repository Repository, renderer *Renderer, autho
 	if err != nil {
 		return nil, err
 	}
-	return &Service{siteID: siteID, repository: repository, renderer: renderer, lifecycle: &runtimeLifecycle{}, authorizer: authorizer, users: users, spool: spool, limits: limits, messageIDDomain: messageIDDomain}, nil
+	return &Service{
+		siteID:          siteID,
+		repository:      repository,
+		renderer:        renderer,
+		lifecycle:       &runtimeLifecycle{},
+		authorizer:      authorizer,
+		users:           users,
+		spool:           spool,
+		limits:          limits,
+		messageIDDomain: messageIDDomain,
+	}, nil
 }
 
 func (s *Service) ListTemplates(ctx context.Context, actor security.Actor, query PageQuery) (TemplatePage, error) {
@@ -439,8 +449,13 @@ func (s *Service) queueActive(ctx context.Context, template Template, values map
 		RFCMessageID: fmt.Sprintf("<%s@%s>", id, s.messageIDDomain),
 		From:         rendered.From, To: rendered.To, CC: rendered.CC, BCC: rendered.BCC, ReplyTo: rendered.ReplyTo,
 		Subject: rendered.Subject, ContentType: rendered.ContentType, TextBody: rendered.TextBody, HTMLBody: rendered.HTMLBody,
-		Attachments: rendered.Attachments, Status: StatusQueued, Origin: origin.Kind, OriginSource: strings.TrimSpace(origin.Source), OriginEvent: strings.TrimSpace(origin.Event), OriginReference: strings.TrimSpace(origin.Reference),
-		RequestedAt: now, RequestedBy: origin.RequestedBy, RequestedByName: strings.TrimSpace(origin.RequestedName),
+		Attachments:     rendered.Attachments,
+		Status:          StatusQueued,
+		Origin:          origin.Kind,
+		OriginSource:    strings.TrimSpace(origin.Source),
+		OriginEvent:     strings.TrimSpace(origin.Event),
+		OriginReference: strings.TrimSpace(origin.Reference),
+		RequestedAt:     now, RequestedBy: origin.RequestedBy, RequestedByName: strings.TrimSpace(origin.RequestedName),
 	}
 	item, err := job.NewScoped(SendJobName, 1, fmt.Sprint(s.siteID), struct {
 		MessageID MessageID `json:"message_id"`
@@ -462,7 +477,17 @@ func (s *Service) queueActive(ctx context.Context, template Template, values map
 		return Message{}, err
 	}
 	if s.logger != nil {
-		s.logger.InfoContext(ctx, "mail message queued", slog.String("event", "mail.message.queued"), slog.Int64("message_id", int64(queued.ID)), slog.Int64("site_id", int64(queued.SiteID)), slog.String("template_code", queued.TemplateCode), slog.String("origin", string(queued.Origin)), slog.Int("recipient_count", len(queued.To)+len(queued.CC)+len(queued.BCC)), slog.Int("attachment_count", len(queued.Attachments)))
+		s.logger.InfoContext(
+			ctx,
+			"mail message queued",
+			slog.String("event", "mail.message.queued"),
+			slog.Int64("message_id", int64(queued.ID)),
+			slog.Int64("site_id", int64(queued.SiteID)),
+			slog.String("template_code", queued.TemplateCode),
+			slog.String("origin", string(queued.Origin)),
+			slog.Int("recipient_count", len(queued.To)+len(queued.CC)+len(queued.BCC)),
+			slog.Int("attachment_count", len(queued.Attachments)),
+		)
 	}
 	return queued, nil
 }

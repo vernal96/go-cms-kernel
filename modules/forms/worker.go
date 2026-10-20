@@ -135,7 +135,18 @@ func (w *Worker) log(ctx context.Context, execution ActionExecution, event, code
 	if w.logger == nil {
 		return
 	}
-	w.logger.InfoContext(ctx, "Forms action execution completed", slog.String("event", event), slog.Int64("site_id", int64(w.siteID)), slog.Int64("result_id", int64(execution.ResultID)), slog.Int64("action_execution_id", int64(execution.ID)), slog.String("action_code", execution.ActionCode), slog.Int("attempt", execution.AttemptCount), slog.String("error_code", code), slog.Bool("retryable", retryable))
+	w.logger.InfoContext(
+		ctx,
+		"Forms action execution completed",
+		slog.String("event", event),
+		slog.Int64("site_id", int64(w.siteID)),
+		slog.Int64("result_id", int64(execution.ResultID)),
+		slog.Int64("action_execution_id", int64(execution.ID)),
+		slog.String("action_code", execution.ActionCode),
+		slog.Int("attempt", execution.AttemptCount),
+		slog.String("error_code", code),
+		slog.Bool("retryable", retryable),
+	)
 }
 
 type executionUploads struct {

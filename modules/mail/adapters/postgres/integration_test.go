@@ -133,9 +133,16 @@ func TestPostgresMailCRUDOutboxAttemptsRetentionAndSiteIsolation(t *testing.T) {
 		if _, err := connector.Pool().Exec(ctx, `INSERT INTO core.media_field_occurrences(owner_kind,owner_id,site_id,container,value_path,media_id,reference_target) VALUES('resource',$1,$2,'other',ARRAY['asset'],$3,'media')`, int64(item.ID)+9000000, siteIDs[0], selected.ID); err != nil {
 			t.Fatal(err)
 		}
-		_, err = coreDatabase.FileDeletions().DeleteMediaFile(ctx, nil, media.DeleteFileInput{SiteID: int64(siteIDs[0]), MediaID: selected.ID, ExpectedFileID: storedFile.ID, ExpectedUpdatedAt: selected.UpdatedAt}, func(context.Context, *media.FileOccurrence) (media.PreparedFileOwner, error) {
-			return media.PreparedFileOwner{}, errors.New("owner must not be prepared with another reference")
-		})
+		_, err = coreDatabase.FileDeletions().DeleteMediaFile(
+			ctx,
+			nil,
+			media.DeleteFileInput{
+				SiteID: int64(siteIDs[0]), MediaID: selected.ID,
+				ExpectedFileID: storedFile.ID, ExpectedUpdatedAt: selected.UpdatedAt,
+			},
+			func(context.Context, *media.FileOccurrence) (media.PreparedFileOwner, error) {
+				return media.PreparedFileOwner{}, errors.New("owner must not be prepared with another reference")
+			})
 		if !errors.Is(err, media.ErrFileInUse) {
 			t.Fatalf("other owner did not block physical deletion: %v", err)
 		}
@@ -239,7 +246,10 @@ func TestPostgresMailCRUDOutboxAttemptsRetentionAndSiteIsolation(t *testing.T) {
 	if err != nil || resolvedSecond.ID != otherTemplate.ID || resolvedSecond.ID == template.ID {
 		t.Fatalf("site B template by code = %#v, %v", resolvedSecond, err)
 	}
-	if _, err := repository.CreateTemplate(ctx, mail.Template{SiteID: siteIDs[0], Code: "invoice", Name: "Duplicate", Enabled: true, From: mail.AddressTemplate{}, ContentType: mail.ContentText}); !errors.Is(err, mail.ErrConflict) {
+	if _, err := repository.CreateTemplate(ctx, mail.Template{
+		SiteID: siteIDs[0], Code: "invoice", Name: "Duplicate",
+		Enabled: true, From: mail.AddressTemplate{}, ContentType: mail.ContentText,
+	}); !errors.Is(err, mail.ErrConflict) {
 		t.Fatalf("duplicate template error = %v", err)
 	}
 	if _, err := repository.TemplateByID(ctx, siteIDs[1], template.ID); !errors.Is(err, mail.ErrNotFound) {

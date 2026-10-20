@@ -49,7 +49,10 @@ func (m *Resources) ResourceLookup(ctx context.Context, actor security.Actor, si
 	query := strings.ToLower(strings.TrimSpace(search))
 	options := make([]ResourceOption, 0, len(items))
 	for _, item := range items {
-		if query != "" && !strings.Contains(strings.ToLower(item.Title), query) && !strings.Contains(strings.ToLower(item.MenuTitle), query) && (item.Path == nil || !strings.Contains(strings.ToLower(*item.Path), query)) {
+		if query != "" &&
+			!strings.Contains(strings.ToLower(item.Title), query) &&
+			!strings.Contains(strings.ToLower(item.MenuTitle), query) &&
+			(item.Path == nil || !strings.Contains(strings.ToLower(*item.Path), query)) {
 			continue
 		}
 		title := strings.TrimSpace(item.MenuTitle)

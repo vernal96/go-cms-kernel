@@ -81,7 +81,12 @@ INSERT INTO core.library_items AS item (
     annotation, content, image_media_id, is_public, is_searchable,
     published_at, unpublished_at, created_at, created_by, updated_by
 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$17)
-RETURNING `+libraryItemColumns+`;`, item.ID, item.SiteID, item.LibraryID, partitionAt, item.Template, item.ContentType, item.Title, item.Slug, item.Annotation, item.Content, item.ImageMediaID, item.IsPublic, item.IsSearchable, item.PublishedAt, item.UnpublishedAt, item.CreatedAt, actorID))
+RETURNING `+libraryItemColumns+`;`,
+		item.ID, item.SiteID, item.LibraryID, partitionAt, item.Template,
+		item.ContentType, item.Title, item.Slug, item.Annotation, item.Content,
+		item.ImageMediaID, item.IsPublic, item.IsSearchable, item.PublishedAt,
+		item.UnpublishedAt, item.CreatedAt, actorID,
+	))
 	if err != nil {
 		return resource.LibraryItem{}, translateError(err)
 	}
@@ -227,7 +232,12 @@ UPDATE core.library_items AS item SET
     is_searchable=$11, published_at=$12, unpublished_at=$13,
     updated_at=now(), updated_by=$14
 WHERE id=$1 AND library_id=$15
-RETURNING `+libraryItemColumns+`;`, item.ID, partitionAt, item.Template, item.ContentType, item.Title, item.Slug, item.Annotation, item.Content, item.ImageMediaID, item.IsPublic, item.IsSearchable, item.PublishedAt, item.UnpublishedAt, actorID, locked.LibraryID))
+RETURNING `+libraryItemColumns+`;`,
+		item.ID, partitionAt, item.Template, item.ContentType, item.Title, item.Slug,
+		item.Annotation, item.Content, item.ImageMediaID, item.IsPublic,
+		item.IsSearchable, item.PublishedAt, item.UnpublishedAt, actorID,
+		locked.LibraryID,
+	))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return resource.LibraryItem{}, resource.ErrNotFound
 	}
@@ -378,13 +388,25 @@ func (r *Repository) DeleteLibraryItem(ctx context.Context, id resource.ID) erro
 	return tx.Commit(ctx)
 }
 
-func (r *Repository) MoveLibraryItem(ctx context.Context, actorID *security.UserID, id, targetLibraryID resource.ID, expectedVersion int64, recordRevision bool) (_ resource.LibraryItem, resultErr error) {
+func (r *Repository) MoveLibraryItem(
+	ctx context.Context,
+	actorID *security.UserID,
+	id, targetLibraryID resource.ID,
+	expectedVersion int64,
+	recordRevision bool,
+) (_ resource.LibraryItem, resultErr error) {
 	return retryLibraryItemTransaction(ctx, func() (resource.LibraryItem, error) {
 		return r.moveLibraryItemOnce(ctx, actorID, id, targetLibraryID, expectedVersion, recordRevision)
 	})
 }
 
-func (r *Repository) moveLibraryItemOnce(ctx context.Context, actorID *security.UserID, id, targetLibraryID resource.ID, expectedVersion int64, recordRevision bool) (_ resource.LibraryItem, resultErr error) {
+func (r *Repository) moveLibraryItemOnce(
+	ctx context.Context,
+	actorID *security.UserID,
+	id, targetLibraryID resource.ID,
+	expectedVersion int64,
+	recordRevision bool,
+) (_ resource.LibraryItem, resultErr error) {
 	tx, err := r.connector.Pool().Begin(ctx)
 	if err != nil {
 		return resource.LibraryItem{}, err

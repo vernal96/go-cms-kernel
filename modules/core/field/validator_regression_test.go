@@ -93,7 +93,14 @@ func TestValidatorScopeRejectsInvalidContracts(t *testing.T) {
 	}{{"", true}, {"unknown", true}, {field.ValidatorScopeItems, false}} {
 		t.Run(fmt.Sprintf("%s/multiple=%v", tc.scope, tc.multiple), func(t *testing.T) {
 			resolver := validatorResolver{Types: field.StandardTypes(), extra: scopedValidatorType{scope: tc.scope}}
-			_, err := field.Compile([]field.Definition{{Key: "v", Type: field.TypeString, Label: "V", Options: field.StringOptions{Multiple: tc.multiple}, Validators: []field.ValidatorDefinition{{Type: "example.scoped"}}}}, resolver)
+			_, err := field.Compile(
+				[]field.Definition{{
+					Key: "v", Type: field.TypeString, Label: "V",
+					Options:    field.StringOptions{Multiple: tc.multiple},
+					Validators: []field.ValidatorDefinition{{Type: "example.scoped"}},
+				}},
+				resolver,
+			)
 			if err == nil {
 				t.Fatal("invalid scope accepted")
 			}

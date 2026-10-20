@@ -42,7 +42,19 @@ func TestMailStaticAttachmentOccurrenceValidationChecksSavedIdentityDiskAndMIME(
 	if err := runtime.ValidateMediaFileOccurrence(context.Background(), ref, target); err == nil {
 		t.Fatal("media update bypassed the static attachment disk constraint")
 	}
-	if err := runtime.ValidateMediaFileOccurrence(context.Background(), media.FileOccurrence{OwnerKind: staticAttachmentOwnerKind, OwnerID: 3, SiteID: 6, Container: "attachments", Path: ref.Path, MediaID: 7, Target: field.ReferenceMedia}, file.File{Storage: "documents", MIMEType: "application/pdf"}); !errors.Is(err, media.ErrInvalidReference) {
+	if err := runtime.ValidateMediaFileOccurrence(
+		context.Background(),
+		media.FileOccurrence{
+			OwnerKind: staticAttachmentOwnerKind,
+			OwnerID:   3,
+			SiteID:    6,
+			Container: "attachments",
+			Path:      ref.Path,
+			MediaID:   7,
+			Target:    field.ReferenceMedia,
+		},
+		file.File{Storage: "documents", MIMEType: "application/pdf"},
+	); !errors.Is(err, media.ErrInvalidReference) {
 		t.Fatalf("cross-site occurrence error = %v", err)
 	}
 }

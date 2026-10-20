@@ -17,6 +17,7 @@ const (
 	EventCreated          = "user.created"
 	EventUpdated          = "user.updated"
 	OperationCreate       = "create"
+	OperationExternal     = "external"
 	OperationUpdate       = "update"
 	OperationProfile      = "profile"
 	OperationPreferences  = "preferences"
@@ -74,10 +75,26 @@ var (
 
 func profileData(item User) ProfileData {
 	item = Clone(item)
-	return ProfileData{Login: item.Login, Email: item.Email, Name: item.Name, LastName: item.LastName, MiddleName: item.MiddleName, Phone: item.Phone, AvatarMediaID: item.AvatarMediaID, ColorScheme: item.ColorScheme, AccentColor: item.AccentColor}
+	return ProfileData{
+		Login:         item.Login,
+		Email:         item.Email,
+		Name:          item.Name,
+		LastName:      item.LastName,
+		MiddleName:    item.MiddleName,
+		Phone:         item.Phone,
+		AvatarMediaID: item.AvatarMediaID,
+		ColorScheme:   item.ColorScheme,
+		AccentColor:   item.AccentColor,
+	}
 }
 func EventSnapshot(item User, groups []group.ID) EventState {
-	return EventState{ID: item.ID, Data: profileData(item), GroupIDs: append([]group.ID(nil), groups...), BlockedAt: cloneTime(item.BlockedAt), UpdatedAt: item.UpdatedAt}
+	return EventState{
+		ID:        item.ID,
+		Data:      profileData(item),
+		GroupIDs:  append([]group.ID(nil), groups...),
+		BlockedAt: cloneTime(item.BlockedAt),
+		UpdatedAt: item.UpdatedAt,
+	}
 }
 func applyData(item Record, data ProfileData) Record {
 	item.Login = data.Login
@@ -98,7 +115,12 @@ type mutationPolicy struct {
 	password string
 }
 
-func (s *ApplicationService) beginMutation(ctx context.Context, actor security.Actor, operation, password string) (context.Context, func(), error) {
+func (s *ApplicationService) beginMutation(
+	ctx context.Context,
+	actor security.Actor,
+	operation string,
+	password string,
+) (context.Context, func(), error) {
 	ctx, release, err := entityhooks.Begin(ctx, s.hooks, actor, operation)
 	if err != nil {
 		return nil, nil, err
@@ -118,7 +140,14 @@ func PrepareMutation(ctx context.Context, before *EventState, next Record, group
 	if policy != nil {
 		password = policy.password
 	}
-	change := Change{Operation: invocation.Operation, Actor: invocation.Actor, ID: next.ID, Data: profileData(next.User), GroupIDs: append([]group.ID(nil), groups...), Password: password}
+	change := Change{
+		Operation: invocation.Operation,
+		Actor:     invocation.Actor,
+		ID:        next.ID,
+		Data:      profileData(next.User),
+		GroupIDs:  append([]group.ID(nil), groups...),
+		Password:  password,
+	}
 	if before != nil {
 		copy := *before
 		copy.Data = profileData(applyData(Record{}, before.Data).User)
@@ -131,7 +160,10 @@ func PrepareMutation(ctx context.Context, before *EventState, next Record, group
 		key = BeforeCreate
 	}
 	if err := entityhooks.Before(ctx, invocation.Registry, key, &change, func(value *Change) error {
-		if value.Operation != invocation.Operation || value.ID != next.ID || !reflect.DeepEqual(value.Actor, invocation.Actor) || !reflect.DeepEqual(value.Before, before) {
+		if value.Operation != invocation.Operation ||
+			value.ID != next.ID ||
+			!reflect.DeepEqual(value.Actor, invocation.Actor) ||
+			!reflect.DeepEqual(value.Before, before) {
 			return fmt.Errorf("user hook changed read-only mutation metadata")
 		}
 		return nil
@@ -140,7 +172,7 @@ func PrepareMutation(ctx context.Context, before *EventState, next Record, group
 	}
 	a, b := profileData(next.User), change.Data
 	switch invocation.Operation {
-	case OperationCreate:
+	case OperationCreate, OperationExternal:
 	case OperationUpdate:
 		a.Login = b.Login
 		a.Email = b.Email
@@ -163,7 +195,8 @@ func PrepareMutation(ctx context.Context, before *EventState, next Record, group
 	default:
 		return Record{}, nil, fmt.Errorf("unsupported user hook operation %q", invocation.Operation)
 	}
-	if invocation.Operation != OperationCreate && !reflect.DeepEqual(a, b) {
+	if invocation.Operation != OperationCreate && invocation.Operation != OperationExternal &&
+		!reflect.DeepEqual(a, b) {
 		return Record{}, nil, fmt.Errorf("user hook changed fields outside %s", invocation.Operation)
 	}
 	if invocation.Operation != OperationCreate && invocation.Operation != OperationGroups && !reflect.DeepEqual(groups, change.GroupIDs) {

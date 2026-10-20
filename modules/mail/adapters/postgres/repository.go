@@ -84,7 +84,24 @@ func (r *Repository) CreateTemplate(ctx context.Context, item mail.Template) (_ 
 	created, err := scanTemplate(tx.QueryRow(ctx, `
 INSERT INTO mail.templates(site_id,code,name,enabled,from_address,to_addresses,cc_addresses,bcc_addresses,reply_to,subject,content_type,text_body,html_body,attachments,variables,created_by,updated_by)
 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)
-RETURNING `+templateColumns+`;`, item.SiteID, item.Code, item.Name, item.Enabled, values.from, values.to, values.cc, values.bcc, values.replyTo, item.Subject, item.ContentType, item.TextBody, item.HTMLBody, values.attachments, values.variables, item.CreatedBy))
+RETURNING `+templateColumns+`;`,
+		item.SiteID,
+		item.Code,
+		item.Name,
+		item.Enabled,
+		values.from,
+		values.to,
+		values.cc,
+		values.bcc,
+		values.replyTo,
+		item.Subject,
+		item.ContentType,
+		item.TextBody,
+		item.HTMLBody,
+		values.attachments,
+		values.variables,
+		item.CreatedBy,
+	))
 	if err != nil {
 		return mail.Template{}, mapWriteError(err)
 	}
@@ -109,7 +126,25 @@ func (r *Repository) UpdateTemplate(ctx context.Context, item mail.Template) (_ 
 	defer rollback(tx, &resultErr)
 	updated, err := scanTemplate(tx.QueryRow(ctx, `
 UPDATE mail.templates SET code=$3,name=$4,enabled=$5,from_address=$6,to_addresses=$7,cc_addresses=$8,bcc_addresses=$9,reply_to=$10,subject=$11,content_type=$12,text_body=$13,html_body=$14,attachments=$15,variables=$16,updated_at=clock_timestamp(),updated_by=$17
-WHERE site_id=$1 AND id=$2 RETURNING `+templateColumns+`;`, item.SiteID, item.ID, item.Code, item.Name, item.Enabled, values.from, values.to, values.cc, values.bcc, values.replyTo, item.Subject, item.ContentType, item.TextBody, item.HTMLBody, values.attachments, values.variables, item.UpdatedBy))
+WHERE site_id=$1 AND id=$2 RETURNING `+templateColumns+`;`,
+		item.SiteID,
+		item.ID,
+		item.Code,
+		item.Name,
+		item.Enabled,
+		values.from,
+		values.to,
+		values.cc,
+		values.bcc,
+		values.replyTo,
+		item.Subject,
+		item.ContentType,
+		item.TextBody,
+		item.HTMLBody,
+		values.attachments,
+		values.variables,
+		item.UpdatedBy,
+	))
 	if err != nil {
 		return mail.Template{}, mapWriteError(err)
 	}
@@ -180,7 +215,28 @@ type rowScanner interface{ Scan(...any) error }
 func scanTemplate(row rowScanner) (mail.Template, error) {
 	var item mail.Template
 	var from, to, cc, bcc, replyTo, attachments, variables []byte
-	err := row.Scan(&item.ID, &item.SiteID, &item.Code, &item.Name, &item.Enabled, &from, &to, &cc, &bcc, &replyTo, &item.Subject, &item.ContentType, &item.TextBody, &item.HTMLBody, &attachments, &variables, &item.CreatedAt, &item.UpdatedAt, &item.CreatedBy, &item.UpdatedBy)
+	err := row.Scan(
+		&item.ID,
+		&item.SiteID,
+		&item.Code,
+		&item.Name,
+		&item.Enabled,
+		&from,
+		&to,
+		&cc,
+		&bcc,
+		&replyTo,
+		&item.Subject,
+		&item.ContentType,
+		&item.TextBody,
+		&item.HTMLBody,
+		&attachments,
+		&variables,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+		&item.CreatedBy,
+		&item.UpdatedBy,
+	)
 	if err != nil {
 		return mail.Template{}, err
 	}
@@ -209,7 +265,29 @@ func scanTemplateWithTotal(row rowScanner) (mail.Template, int, error) {
 	var item mail.Template
 	var from, to, cc, bcc, replyTo, attachments, variables []byte
 	var total int
-	err := row.Scan(&item.ID, &item.SiteID, &item.Code, &item.Name, &item.Enabled, &from, &to, &cc, &bcc, &replyTo, &item.Subject, &item.ContentType, &item.TextBody, &item.HTMLBody, &attachments, &variables, &item.CreatedAt, &item.UpdatedAt, &item.CreatedBy, &item.UpdatedBy, &total)
+	err := row.Scan(
+		&item.ID,
+		&item.SiteID,
+		&item.Code,
+		&item.Name,
+		&item.Enabled,
+		&from,
+		&to,
+		&cc,
+		&bcc,
+		&replyTo,
+		&item.Subject,
+		&item.ContentType,
+		&item.TextBody,
+		&item.HTMLBody,
+		&attachments,
+		&variables,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+		&item.CreatedBy,
+		&item.UpdatedBy,
+		&total,
+	)
 	if err != nil {
 		return mail.Template{}, 0, err
 	}
@@ -261,7 +339,30 @@ func (r *Repository) CreateMessageAndJob(ctx context.Context, item mail.Message,
 	created, err := scanMessage(tx.QueryRow(ctx, `
 INSERT INTO mail.messages(site_id,template_id,template_code,template_name,rfc_message_id,from_address,to_addresses,cc_addresses,bcc_addresses,reply_to,subject,content_type,text_body,html_body,attachments,status,origin,origin_source,origin_event,origin_reference,requested_at,requested_by,requested_by_name)
 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'queued',$16,$17,$18,$19,$20,$21,$22)
-RETURNING `+messageColumns+`;`, item.SiteID, item.TemplateID, item.TemplateCode, item.TemplateName, item.RFCMessageID, values.from, values.to, values.cc, values.bcc, values.replyTo, item.Subject, item.ContentType, item.TextBody, item.HTMLBody, values.attachments, item.Origin, item.OriginSource, item.OriginEvent, item.OriginReference, item.RequestedAt, item.RequestedBy, item.RequestedByName))
+RETURNING `+messageColumns+`;`,
+		item.SiteID,
+		item.TemplateID,
+		item.TemplateCode,
+		item.TemplateName,
+		item.RFCMessageID,
+		values.from,
+		values.to,
+		values.cc,
+		values.bcc,
+		values.replyTo,
+		item.Subject,
+		item.ContentType,
+		item.TextBody,
+		item.HTMLBody,
+		values.attachments,
+		item.Origin,
+		item.OriginSource,
+		item.OriginEvent,
+		item.OriginReference,
+		item.RequestedAt,
+		item.RequestedBy,
+		item.RequestedByName,
+	))
 	if err != nil {
 		return mail.Message{}, mapWriteError(err)
 	}
@@ -353,7 +454,27 @@ func scanMessageSummary(row rowScanner) (mail.MessageSummary, int, error) {
 	var item mail.MessageSummary
 	var to, cc, bcc, latestAttempt []byte
 	var total int
-	err := row.Scan(&item.ID, &item.TemplateCode, &item.TemplateName, &item.Subject, &to, &cc, &bcc, &item.Status, &item.Origin, &item.OriginSource, &item.OriginEvent, &item.OriginReference, &item.RequestedAt, &item.RequestedBy, &item.RequestedByName, &item.AcceptedAt, &total, &item.AttemptCount, &latestAttempt)
+	err := row.Scan(
+		&item.ID,
+		&item.TemplateCode,
+		&item.TemplateName,
+		&item.Subject,
+		&to,
+		&cc,
+		&bcc,
+		&item.Status,
+		&item.Origin,
+		&item.OriginSource,
+		&item.OriginEvent,
+		&item.OriginReference,
+		&item.RequestedAt,
+		&item.RequestedBy,
+		&item.RequestedByName,
+		&item.AcceptedAt,
+		&total,
+		&item.AttemptCount,
+		&latestAttempt,
+	)
 	if err != nil {
 		return mail.MessageSummary{}, 0, err
 	}
@@ -465,7 +586,23 @@ func (r *Repository) ClaimMessage(ctx context.Context, siteID site.ID, id mail.M
 		return mail.Message{}, mail.DeliveryAttempt{}, false, err
 	}
 	var attempt mail.DeliveryAttempt
-	err = tx.QueryRow(ctx, `INSERT INTO mail.delivery_attempts(message_id,attempt_number,status) SELECT $1,coalesce(max(attempt_number),0)+1,'sending' FROM mail.delivery_attempts WHERE message_id=$1 RETURNING id,message_id,attempt_number,driver,started_at,finished_at,status,remote_message_id,response_code,safe_error,created_at;`, id).Scan(&attempt.ID, &attempt.MessageID, &attempt.AttemptNumber, &attempt.Driver, &attempt.StartedAt, &attempt.FinishedAt, &attempt.Status, &attempt.RemoteMessageID, &attempt.ResponseCode, &attempt.SafeError, &attempt.CreatedAt)
+	err = tx.QueryRow(
+		ctx,
+		`INSERT INTO mail.delivery_attempts(message_id,attempt_number,status) SELECT $1,coalesce(max(attempt_number),0)+1,'sending' FROM mail.delivery_attempts WHERE message_id=$1 RETURNING id,message_id,attempt_number,driver,started_at,finished_at,status,remote_message_id,response_code,safe_error,created_at;`,
+		id,
+	).Scan(
+		&attempt.ID,
+		&attempt.MessageID,
+		&attempt.AttemptNumber,
+		&attempt.Driver,
+		&attempt.StartedAt,
+		&attempt.FinishedAt,
+		&attempt.Status,
+		&attempt.RemoteMessageID,
+		&attempt.ResponseCode,
+		&attempt.SafeError,
+		&attempt.CreatedAt,
+	)
 	if err != nil {
 		return mail.Message{}, mail.DeliveryAttempt{}, false, err
 	}
@@ -557,7 +694,35 @@ func (r *Repository) ActiveSpoolKeys(ctx context.Context, siteID site.ID, keys [
 func scanMessage(row rowScanner) (mail.Message, error) {
 	var item mail.Message
 	var from, to, cc, bcc, replyTo, attachments []byte
-	err := row.Scan(&item.ID, &item.SiteID, &item.TemplateID, &item.TemplateCode, &item.TemplateName, &item.RFCMessageID, &from, &to, &cc, &bcc, &replyTo, &item.Subject, &item.ContentType, &item.TextBody, &item.HTMLBody, &attachments, &item.Status, &item.Origin, &item.OriginSource, &item.OriginEvent, &item.OriginReference, &item.RequestedAt, &item.RequestedBy, &item.RequestedByName, &item.AcceptedAt, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(
+		&item.ID,
+		&item.SiteID,
+		&item.TemplateID,
+		&item.TemplateCode,
+		&item.TemplateName,
+		&item.RFCMessageID,
+		&from,
+		&to,
+		&cc,
+		&bcc,
+		&replyTo,
+		&item.Subject,
+		&item.ContentType,
+		&item.TextBody,
+		&item.HTMLBody,
+		&attachments,
+		&item.Status,
+		&item.Origin,
+		&item.OriginSource,
+		&item.OriginEvent,
+		&item.OriginReference,
+		&item.RequestedAt,
+		&item.RequestedBy,
+		&item.RequestedByName,
+		&item.AcceptedAt,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	)
 	if err != nil {
 		return mail.Message{}, err
 	}
@@ -592,7 +757,19 @@ func decodeMessageScanned(item mail.Message, from, to, cc, bcc, replyTo, attachm
 
 func scanAttempt(row rowScanner) (mail.DeliveryAttempt, error) {
 	var item mail.DeliveryAttempt
-	err := row.Scan(&item.ID, &item.MessageID, &item.AttemptNumber, &item.Driver, &item.StartedAt, &item.FinishedAt, &item.Status, &item.RemoteMessageID, &item.ResponseCode, &item.SafeError, &item.CreatedAt)
+	err := row.Scan(
+		&item.ID,
+		&item.MessageID,
+		&item.AttemptNumber,
+		&item.Driver,
+		&item.StartedAt,
+		&item.FinishedAt,
+		&item.Status,
+		&item.RemoteMessageID,
+		&item.ResponseCode,
+		&item.SafeError,
+		&item.CreatedAt,
+	)
 	return item, err
 }
 

@@ -62,11 +62,25 @@ func publicHTTPService(t *testing.T, repository *repositoryStub) (*Service, *Upl
 		t.Fatal(err)
 	}
 	captcha := &captchaStub{}
-	service, err := NewService(5, repository, formsFieldResolver(), elements, newActionRegistry(), map[string]CaptchaProvider{"test": captcha}, "test", allowAuthorizer{}, &filesStub{}, &mediaStub{}, spool, PublicLimits{
-		MaxRequestSize: 1 << 20, MaxScalarFields: 20, MaxScalarValueSize: 1 << 10,
-		MaxUploadFileSize: 1 << 20, MaxUploadCount: 4, MaxTotalUploadBytes: 1 << 20,
-		SubmissionTimeout: time.Second, RateLimit: 20, RateWindow: time.Minute, RateEntries: 100,
-	}, nil)
+	service, err := NewService(
+		5,
+		repository,
+		formsFieldResolver(),
+		elements,
+		newActionRegistry(),
+		map[string]CaptchaProvider{"test": captcha},
+		"test",
+		allowAuthorizer{},
+		&filesStub{},
+		&mediaStub{},
+		spool,
+		PublicLimits{
+			MaxRequestSize: 1 << 20, MaxScalarFields: 20, MaxScalarValueSize: 1 << 10,
+			MaxUploadFileSize: 1 << 20, MaxUploadCount: 4, MaxTotalUploadBytes: 1 << 20,
+			SubmissionTimeout: time.Second, RateLimit: 20, RateWindow: time.Minute, RateEntries: 100,
+		},
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +98,13 @@ func publicHTTPFormDetail() FormDetail {
 			{ID: uploadID, FormID: 9, Code: "documents", Type: FieldTypeUpload, Label: "Документы", Required: true, Options: UploadOptions{MIMETypes: []string{"text/plain"}}},
 		},
 		Elements: []Element{{ID: submitID, FormID: 9, Code: MandatorySubmitCode, Type: ElementSubmitButton, Config: []byte(`{"label":"Отправить"}`)}},
-		Layout:   []LayoutNode{{ID: 1, Kind: LayoutField, FieldID: &consentID}, {ID: 2, Kind: LayoutField, FieldID: &captchaID, Position: 1}, {ID: 3, Kind: LayoutField, FieldID: &emailID, Position: 2}, {ID: 4, Kind: LayoutField, FieldID: &uploadID, Position: 3}, {ID: 5, Kind: LayoutElement, ElementID: &submitID, Position: 4}},
+		Layout: []LayoutNode{
+			{ID: 1, Kind: LayoutField, FieldID: &consentID},
+			{ID: 2, Kind: LayoutField, FieldID: &captchaID, Position: 1},
+			{ID: 3, Kind: LayoutField, FieldID: &emailID, Position: 2},
+			{ID: 4, Kind: LayoutField, FieldID: &uploadID, Position: 3},
+			{ID: 5, Kind: LayoutElement, ElementID: &submitID, Position: 4},
+		},
 		Statuses: []Status{{ID: 1, FormID: 9, Code: DefaultStatusCode, Name: "Новый", IsDefault: true}},
 	}
 }
@@ -183,7 +203,10 @@ func TestPublicAndManagementErrorsUseSafeDistinctMappings(t *testing.T) {
 	var structured struct {
 		Fields map[string][]field.ValidationError `json:"fields"`
 	}
-	if err := json.Unmarshal(response.Body.Bytes(), &structured); err != nil || response.Code != http.StatusUnprocessableEntity || len(structured.Fields["items[2].title"]) != 1 || structured.Fields["items[2].title"][0].Params["value"] != float64(100) {
+	if err := json.Unmarshal(response.Body.Bytes(), &structured); err != nil ||
+		response.Code != http.StatusUnprocessableEntity ||
+		len(structured.Fields["items[2].title"]) != 1 ||
+		structured.Fields["items[2].title"][0].Params["value"] != float64(100) {
 		t.Fatalf("structured validation response = %d %s: %v", response.Code, response.Body.String(), err)
 	}
 

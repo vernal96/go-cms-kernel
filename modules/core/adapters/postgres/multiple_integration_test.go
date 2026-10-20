@@ -79,7 +79,12 @@ func TestPostgresMultipleFields(t *testing.T) {
 			}
 			duplicateValues, duplicateStored, duplicateFiles := normalize([]any{int64(first), int64(first)})
 			duplicatePath := "/duplicate"
-			if _, err := db.Resources().Create(ctx, nil, resource.Resource{SiteID: sid, ParentID: &root.ID, Type: resourcetype.Page, Title: "Duplicate", Slug: "duplicate", Path: &duplicatePath, Fields: duplicateValues, FieldValues: duplicateStored, FileReferences: duplicateFiles}, nil); !errors.Is(err, media.ErrAlreadyAttached) {
+			if _, err := db.Resources().Create(ctx, nil, resource.Resource{
+				SiteID: sid, ParentID: &root.ID, Type: resourcetype.Page,
+				Title: "Duplicate", Slug: "duplicate", Path: &duplicatePath,
+				Fields: duplicateValues, FieldValues: duplicateStored,
+				FileReferences: duplicateFiles,
+			}, nil); !errors.Is(err, media.ErrAlreadyAttached) {
 				t.Fatalf("same Media in two resource positions accepted: %v", err)
 			}
 			var id resource.ID
@@ -87,7 +92,11 @@ func TestPostgresMultipleFields(t *testing.T) {
 			var read func() map[string]any
 			if kind == "tree" {
 				path := "/list"
-				item, err := db.Resources().Create(ctx, nil, resource.Resource{SiteID: sid, ParentID: &root.ID, Type: resourcetype.Page, Title: "List", Slug: "list", Path: &path, Fields: values, FieldValues: stored, FileReferences: files}, nil)
+				item, err := db.Resources().Create(ctx, nil, resource.Resource{
+					SiteID: sid, ParentID: &root.ID, Type: resourcetype.Page,
+					Title: "List", Slug: "list", Path: &path,
+					Fields: values, FieldValues: stored, FileReferences: files,
+				}, nil)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -160,7 +169,11 @@ func TestPostgresMultipleFields(t *testing.T) {
 			}
 			assertImages(initial)
 			foreignPath := "/foreign"
-			if _, err := db.Resources().Create(ctx, nil, resource.Resource{SiteID: sid, ParentID: &root.ID, Type: resourcetype.Page, Title: "Foreign", Slug: "foreign", Path: &foreignPath, Fields: values, FieldValues: stored, FileReferences: files}, nil); !errors.Is(err, media.ErrAlreadyAttached) {
+			if _, err := db.Resources().Create(ctx, nil, resource.Resource{
+				SiteID: sid, ParentID: &root.ID, Type: resourcetype.Page,
+				Title: "Foreign", Slug: "foreign", Path: &foreignPath,
+				Fields: values, FieldValues: stored, FileReferences: files,
+			}, nil); !errors.Is(err, media.ErrAlreadyAttached) {
 				t.Fatalf("foreign media owner accepted: %v", err)
 			}
 

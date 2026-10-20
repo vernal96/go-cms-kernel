@@ -115,7 +115,14 @@ func (p *Projector) project(ctx context.Context, values map[string]any, definiti
 	return p.projectValues(ctx, values, definitions, selected, onlyPublic, make(map[mediaKey]any))
 }
 
-func (p *Projector) projectValues(ctx context.Context, values map[string]any, definitions []field.Definition, selected map[string]bool, onlyPublic bool, resolved map[mediaKey]any) (map[string]any, error) {
+func (p *Projector) projectValues(
+	ctx context.Context,
+	values map[string]any,
+	definitions []field.Definition,
+	selected map[string]bool,
+	onlyPublic bool,
+	resolved map[mediaKey]any,
+) (map[string]any, error) {
 	result := make(map[string]any)
 	for _, definition := range definitions {
 		if err := ctx.Err(); err != nil {

@@ -650,7 +650,12 @@ func (r resourceRepository) BreadcrumbCandidates(_ context.Context, siteID site.
 	result := make([]resource.BreadcrumbCandidate, 0, len(items))
 	for _, item := range items {
 		if item.Path != nil {
-			result = append(result, resource.BreadcrumbCandidate{ID: item.ID, Title: item.Title, MenuTitle: item.MenuTitle, Link: *item.Path, IsPublic: item.IsPublic, PublishedAt: item.PublishedAt, UnpublishedAt: item.UnpublishedAt, DeletedAt: item.DeletedAt})
+			result = append(result, resource.BreadcrumbCandidate{
+				ID: item.ID, Title: item.Title, MenuTitle: item.MenuTitle,
+				Link: *item.Path, IsPublic: item.IsPublic,
+				PublishedAt: item.PublishedAt, UnpublishedAt: item.UnpublishedAt,
+				DeletedAt: item.DeletedAt,
+			})
 		}
 	}
 	if includeHome {
@@ -661,7 +666,12 @@ func (r resourceRepository) BreadcrumbCandidates(_ context.Context, siteID site.
 		}
 		for _, item := range r.byPath {
 			if item.SiteID == siteID && item.Path != nil && *item.Path == "/" {
-				result = append([]resource.BreadcrumbCandidate{{ID: item.ID, Title: item.Title, MenuTitle: item.MenuTitle, Link: *item.Path, IsPublic: item.IsPublic, PublishedAt: item.PublishedAt, UnpublishedAt: item.UnpublishedAt, DeletedAt: item.DeletedAt}}, result...)
+				result = append([]resource.BreadcrumbCandidate{{
+					ID: item.ID, Title: item.Title, MenuTitle: item.MenuTitle,
+					Link: *item.Path, IsPublic: item.IsPublic,
+					PublishedAt: item.PublishedAt, UnpublishedAt: item.UnpublishedAt,
+					DeletedAt: item.DeletedAt,
+				}}, result...)
 				break
 			}
 		}
@@ -2620,14 +2630,55 @@ func accessLogRecords(
 func TestPageWidgetBindingsResolveCurrentResourceAndIsolateInvalidValues(t *testing.T) {
 	ref := widget.NewRef("bound")
 	required := true
-	echo := widget.Functional{Description: widget.Definition{Reference: ref, Label: "Bound", Description: "Bound values", Fields: []field.Definition{{Key: "text", Label: "Text", Type: field.TypeString, Required: required, Validators: []field.ValidatorDefinition{{Type: "min_length", Options: map[string]any{"value": 3}}}}}}, Render: func(_ context.Context, _ widget.RenderInput, params map[string]any) (map[string]any, error) {
-		return params, nil
-	}}
+	echo := widget.Functional{
+		Description: widget.Definition{
+			Reference: ref, Label: "Bound", Description: "Bound values",
+			Fields: []field.Definition{{
+				Key: "text", Label: "Text", Type: field.TypeString,
+				Required: required,
+				Validators: []field.ValidatorDefinition{{
+					Type: "min_length", Options: map[string]any{"value": 3},
+				}},
+			}},
+		},
+		Render: func(_ context.Context, _ widget.RenderInput, params map[string]any) (map[string]any, error) {
+			return params, nil
+		}}
 	order := []string{}
 	module := transportModule{code: "binding", resourceType: transportResourceType{code: "binding_test"}, order: &order, widgets: []widget.Widget{echo}}
 	code := template.Code("bound_page")
-	repo := resourceRepository{byPath: map[string]resource.Resource{"/bound": {ID: 7, SiteID: 1, Type: resourcetype.Page, Template: &code, Title: "First title", Path: stringPointer("/bound"), IsPublic: true, Fields: map[string]any{"headline": "First field"}, Widgets: []widget.Binding{{ID: 1, Code: "binding_bound", Area: "body", Presentation: widget.DefaultPresentation(), ParamBindings: widget.ParamBindings{"text": widget.ResourceField("headline")}}}}}}
-	app := newTransportTestApp(t, module, repo, template.Definition{Code: code, Label: "Bound", Fields: []field.Definition{{Key: "headline", Label: "Headline", Type: field.TypeString}}, Layout: template.Layout{{Code: "body", Label: "Основная область", Items: []template.Item{template.Widget{Widget: ref, ParamBindings: widget.ParamBindings{"text": widget.ResourceProperty("title")}}, template.ResourceWidgets{}}}}})
+	repo := resourceRepository{byPath: map[string]resource.Resource{
+		"/bound": {
+			ID: 7, SiteID: 1, Type: resourcetype.Page, Template: &code,
+			Title: "First title", Path: stringPointer("/bound"), IsPublic: true,
+			Fields: map[string]any{"headline": "First field"},
+			Widgets: []widget.Binding{{
+				ID: 1, Code: "binding_bound", Area: "body",
+				Presentation: widget.DefaultPresentation(),
+				ParamBindings: widget.ParamBindings{
+					"text": widget.ResourceField("headline"),
+				},
+			}},
+		},
+	}}
+	app := newTransportTestApp(t, module, repo, template.Definition{
+		Code: code, Label: "Bound",
+		Fields: []field.Definition{{
+			Key: "headline", Label: "Headline", Type: field.TypeString,
+		}},
+		Layout: template.Layout{{
+			Code: "body", Label: "Основная область",
+			Items: []template.Item{
+				template.Widget{
+					Widget: ref,
+					ParamBindings: widget.ParamBindings{
+						"text": widget.ResourceProperty("title"),
+					},
+				},
+				template.ResourceWidgets{},
+			},
+		}},
+	})
 	handler, err := newTestHandler(app)
 	if err != nil {
 		t.Fatal(err)

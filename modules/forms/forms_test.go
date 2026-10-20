@@ -82,8 +82,11 @@ func TestConditionalFieldsUseNormalizedControllersAndIgnoreInactiveValues(t *tes
 func TestLayoutRejectsCyclesAndForeignReferencesAndSortsSiblings(t *testing.T) {
 	fieldID, elementID := FieldID(1), ElementID(2)
 	detail := FormDetail{
-		Form:     Form{ID: 1},
-		Fields:   []FormField{{ID: fieldID, FormID: 1, Code: MandatoryConsentCode, Type: FieldTypeConsent, Required: true}, {ID: 3, FormID: 1, Code: MandatoryCaptchaCode, Type: FieldTypeCaptcha, Required: true}},
+		Form: Form{ID: 1},
+		Fields: []FormField{
+			{ID: fieldID, FormID: 1, Code: MandatoryConsentCode, Type: FieldTypeConsent, Required: true},
+			{ID: 3, FormID: 1, Code: MandatoryCaptchaCode, Type: FieldTypeCaptcha, Required: true},
+		},
 		Elements: []Element{{ID: elementID, FormID: 1, Code: MandatorySubmitCode, Type: ElementSubmitButton}},
 		Layout:   []LayoutNode{{ID: 10}, {ID: 11}, {ID: 12}, {ID: 13}, {ID: 14}},
 	}
@@ -538,11 +541,25 @@ func TestCreateFormBuildsMandatoryDefaultsBeforeAtomicRepositoryCall(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := NewService(5, repository, formsFieldResolver(), elements, newActionRegistry(), map[string]CaptchaProvider{"test": &captchaStub{}}, "test", allowAuthorizer{}, &filesStub{}, &mediaStub{}, nil, PublicLimits{
-		MaxRequestSize: 1 << 20, MaxScalarFields: 20, MaxScalarValueSize: 1 << 10,
-		MaxUploadFileSize: 1 << 20, MaxUploadCount: 4, MaxTotalUploadBytes: 1 << 20,
-		SubmissionTimeout: time.Second, RateLimit: 10, RateWindow: time.Minute, RateEntries: 100,
-	}, nil)
+	service, err := NewService(
+		5,
+		repository,
+		formsFieldResolver(),
+		elements,
+		newActionRegistry(),
+		map[string]CaptchaProvider{"test": &captchaStub{}},
+		"test",
+		allowAuthorizer{},
+		&filesStub{},
+		&mediaStub{},
+		nil,
+		PublicLimits{
+			MaxRequestSize: 1 << 20, MaxScalarFields: 20, MaxScalarValueSize: 1 << 10,
+			MaxUploadFileSize: 1 << 20, MaxUploadCount: 4, MaxTotalUploadBytes: 1 << 20,
+			SubmissionTimeout: time.Second, RateLimit: 10, RateWindow: time.Minute, RateEntries: 100,
+		},
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -551,7 +568,11 @@ func TestCreateFormBuildsMandatoryDefaultsBeforeAtomicRepositoryCall(t *testing.
 		t.Fatal(err)
 	}
 	input := repository.formInput
-	if created.Form.SiteID != 5 || input.Consent.Code != MandatoryConsentCode || !input.Consent.Required || input.Captcha.Code != MandatoryCaptchaCode || !input.Captcha.Required || input.Submit.Type != ElementSubmitButton || input.Status.Code != DefaultStatusCode || !input.Status.IsDefault {
+	if created.Form.SiteID != 5 ||
+		input.Consent.Code != MandatoryConsentCode || !input.Consent.Required ||
+		input.Captcha.Code != MandatoryCaptchaCode || !input.Captcha.Required ||
+		input.Submit.Type != ElementSubmitButton ||
+		input.Status.Code != DefaultStatusCode || !input.Status.IsDefault {
 		t.Fatalf("default form input = %#v", input)
 	}
 }
@@ -661,7 +682,14 @@ func actionJobEnvelope(t *testing.T, siteID site.ID, executionID ActionExecution
 
 func TestWorkerDoesNotRepeatSucceededExecutionAndBoundsRetries(t *testing.T) {
 	const siteID site.ID = 5
-	baseWork := ExecutionWork{Execution: ActionExecution{ID: 11, SiteID: siteID, ResultID: 19, ActionCode: "custom", ActionType: "custom", Trigger: Trigger{Type: TriggerSubmitted}, Config: []byte(`{}`)}, Result: Result{ID: 19, SiteID: siteID}}
+	baseWork := ExecutionWork{
+		Execution: ActionExecution{
+			ID: 11, SiteID: siteID, ResultID: 19,
+			ActionCode: "custom", ActionType: "custom",
+			Trigger: Trigger{Type: TriggerSubmitted}, Config: []byte(`{}`),
+		},
+		Result: Result{ID: 19, SiteID: siteID},
+	}
 
 	t.Run("success and duplicate delivery", func(t *testing.T) {
 		repository := &workerRepository{work: baseWork, status: ExecutionPending}
@@ -710,7 +738,17 @@ func TestWorkerDoesNotRepeatSucceededExecutionAndBoundsRetries(t *testing.T) {
 
 func TestWorkerTerminalizesUnavailableActionAndAcknowledgesObsoleteJob(t *testing.T) {
 	const siteID site.ID = 5
-	repository := &workerRepository{work: ExecutionWork{Execution: ActionExecution{ID: 12, SiteID: siteID, ResultID: 20, ActionCode: "gone", ActionType: "gone", Trigger: Trigger{Type: TriggerSubmitted}, Config: []byte(`{}`)}, Result: Result{ID: 20, SiteID: siteID}}, status: ExecutionPending}
+	repository := &workerRepository{
+		work: ExecutionWork{
+			Execution: ActionExecution{
+				ID: 12, SiteID: siteID, ResultID: 20,
+				ActionCode: "gone", ActionType: "gone",
+				Trigger: Trigger{Type: TriggerSubmitted}, Config: []byte(`{}`),
+			},
+			Result: Result{ID: 20, SiteID: siteID},
+		},
+		status: ExecutionPending,
+	}
 	worker, err := newWorker(siteID, repository, newActionRegistry(), nil, &runtimeLifecycle{}, 3, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -827,10 +865,20 @@ func TestMailActionValidatesMappingsAndCopiesTransientStreams(t *testing.T) {
 		t.Fatal(err)
 	}
 	incompatible := json.RawMessage(`{"template_code":"feedback","values":{"email":"age"}}`)
-	if err := action.ValidateConfig(context.Background(), ActionValidationContext{Actor: security.User(1), Fields: append(fields, FormField{Code: "age", Type: field.TypeInteger, Options: field.IntegerOptions{}}), Trigger: Trigger{Type: TriggerSubmitted}}, incompatible); !errors.Is(err, ErrInvalid) {
+	if err := action.ValidateConfig(context.Background(), ActionValidationContext{
+		Actor: security.User(1),
+		Fields: append(fields, FormField{
+			Code: "age", Type: field.TypeInteger, Options: field.IntegerOptions{},
+		}),
+		Trigger: Trigger{Type: TriggerSubmitted},
+	}, incompatible); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("incompatible Mail mapping error = %v", err)
 	}
-	if err := action.ValidateConfig(context.Background(), ActionValidationContext{Actor: security.User(1), Fields: fields, Trigger: Trigger{Type: TriggerStatusChanged}}, config); !errors.Is(err, ErrInvalid) {
+	if err := action.ValidateConfig(context.Background(), ActionValidationContext{
+		Actor:   security.User(1),
+		Fields:  fields,
+		Trigger: Trigger{Type: TriggerStatusChanged},
+	}, config); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("delayed upload mapping error = %v", err)
 	}
 	result, err := action.Execute(context.Background(), ActionExecutionContext{

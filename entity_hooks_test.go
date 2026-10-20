@@ -25,7 +25,16 @@ func TestGlobalEntityHooksAreIndependentOfSiteBuilds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	factory, err := kernel.NewProfileRuntimeFactory(emptyDatabaseResolver{}, kernel.RuntimeServices{EventBus: testRuntimeServices().EventBus, Logger: testRuntimeServices().Logger, ModuleApplications: []kernel.ModuleApplication{application}})
+	factory, err := kernel.NewProfileRuntimeFactory(
+		emptyDatabaseResolver{},
+		kernel.RuntimeServices{
+			EventBus: testRuntimeServices().EventBus,
+			Logger:   testRuntimeServices().Logger,
+			ModuleApplications: []kernel.ModuleApplication{
+				application,
+			},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync/atomic"
+	"time"
 )
 
 func NewSlogObserver(logger *slog.Logger) Observer {
@@ -35,14 +37,12 @@ func NewSlogObserver(logger *slog.Logger) Observer {
 
 type observedStore struct {
 	LoadLocks
-	store    Store
-	observer Observer
+	store         Store
+	observer      Observer
+	readFailUntil atomic.Int64
 }
 
 func observeStore(store Store, observer Observer) Store {
-	if observer == nil {
-		return store
-	}
 	return &observedStore{store: store, observer: observer}
 }
 
@@ -53,7 +53,15 @@ func (s *observedStore) Ping(ctx context.Context) error {
 }
 
 func (s *observedStore) Get(ctx context.Context, key string) ([]byte, error) {
-	value, err := s.store.Get(ctx, key)
+	if err := s.readBackoffError(); err != nil {
+		return nil, err
+	}
+	operationCtx, cancel := cacheOperationContext(ctx)
+	defer cancel()
+	value, err := s.store.Get(operationCtx, key)
+	if s.isBackendFailure(ctx, err) {
+		s.openReadBackoff()
+	}
 	event := Event{Type: EventHit, Store: s.Code(), Key: key, Error: err}
 	switch {
 	case errors.Is(err, ErrCorrupt):
@@ -64,7 +72,7 @@ func (s *observedStore) Get(ctx context.Context, key string) ([]byte, error) {
 	case err != nil:
 		event.Type = EventReadError
 	}
-	s.observer.Observe(ctx, event)
+	s.observe(ctx, event)
 	return value, err
 }
 
@@ -74,9 +82,17 @@ func (s *observedStore) Set(
 	value []byte,
 	options SetOptions,
 ) error {
-	err := s.store.Set(ctx, key, value, options)
+	if err := s.readBackoffError(); err != nil {
+		return err
+	}
+	operationCtx, cancel := cacheOperationContext(ctx)
+	defer cancel()
+	err := s.store.Set(operationCtx, key, value, options)
+	if s.isBackendFailure(ctx, err) {
+		s.openReadBackoff()
+	}
 	if err != nil {
-		s.observer.Observe(ctx, Event{
+		s.observe(ctx, Event{
 			Type: EventWriteError, Store: s.Code(), Key: key, Error: err,
 		})
 	}
@@ -84,17 +100,23 @@ func (s *observedStore) Set(
 }
 
 func (s *observedStore) Exists(ctx context.Context, key string) (bool, error) {
-	return s.store.Exists(ctx, key)
+	operationCtx, cancel := cacheOperationContext(ctx)
+	defer cancel()
+	return s.store.Exists(operationCtx, key)
 }
 
 func (s *observedStore) Delete(ctx context.Context, key string) error {
-	return s.store.Delete(ctx, key)
+	operationCtx, cancel := cacheOperationContext(ctx)
+	defer cancel()
+	return s.store.Delete(operationCtx, key)
 }
 
 func (s *observedStore) InvalidateTag(ctx context.Context, tag Tag) error {
-	err := s.store.InvalidateTag(ctx, tag)
+	operationCtx, cancel := cacheOperationContext(ctx)
+	defer cancel()
+	err := s.store.InvalidateTag(operationCtx, tag)
 	if err != nil {
-		s.observer.Observe(ctx, Event{
+		s.observe(ctx, Event{
 			Type: EventInvalidationError, Store: s.Code(), Tag: tag, Error: err,
 		})
 	}
@@ -103,11 +125,58 @@ func (s *observedStore) InvalidateTag(ctx context.Context, tag Tag) error {
 
 func (s *observedStore) Close() error { return s.store.Close() }
 
+// Cache operations are optional and must not inherit a slow remote store's
+// retry duration on a request path.
+const (
+	cacheOperationTimeout = 2 * time.Second
+	cacheReadBackoff      = 5 * time.Second
+)
+
+var errStoreBackoff = errors.New("cache store temporarily unavailable")
+
+func cacheOperationContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithTimeout(ctx, cacheOperationTimeout)
+}
+
+func (s *observedStore) isBackendFailure(
+	requestCtx context.Context,
+	err error,
+) bool {
+	return err != nil && !errors.Is(err, ErrMiss) &&
+		(requestCtx == nil || requestCtx.Err() == nil)
+}
+
+func (s *observedStore) openReadBackoff() {
+	s.readFailUntil.Store(time.Now().Add(cacheReadBackoff).UnixNano())
+}
+
+func (s *observedStore) readBackoffError() error {
+	until := s.readFailUntil.Load()
+	if until == 0 || time.Now().UnixNano() >= until {
+		return nil
+	}
+	return errStoreBackoff
+}
+
+func (s *observedStore) observe(ctx context.Context, event Event) {
+	if s.observer == nil {
+		return
+	}
+	event.Store = s.Code()
+	s.observer.Observe(ctx, event)
+}
+
 type eventReporter interface {
 	report(context.Context, Event)
 }
 
 func (s *observedStore) report(ctx context.Context, event Event) {
+	if s.observer == nil {
+		return
+	}
 	event.Store = s.Code()
 	s.observer.Observe(ctx, event)
 }

@@ -1,9 +1,25 @@
 package httptransport
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+
+	"github.com/vernal96/go-cms-kernel/security"
 )
+
+type tokenIssuerContextKey struct{}
+
+// WithAccessTokenIssuer supplies the transport's session issuer to installed
+// authentication controllers without coupling the application to their module.
+func WithAccessTokenIssuer(ctx context.Context, issuer security.AccessTokenIssuer) context.Context {
+	return context.WithValue(ctx, tokenIssuerContextKey{}, issuer)
+}
+
+func AccessTokenIssuerFromContext(ctx context.Context) (security.AccessTokenIssuer, bool) {
+	issuer, ok := ctx.Value(tokenIssuerContextKey{}).(security.AccessTokenIssuer)
+	return issuer, ok && issuer != nil
+}
 
 type errorEnvelope struct {
 	Error errorBody `json:"error"`

@@ -56,7 +56,13 @@ func TestSearchHTTPUsesHostScopedRuntime(t *testing.T) {
 	}}
 	app, err := appkernel.New(context.Background(), appkernel.Definition{
 		Logger: loggerFactory{}, PasswordHasher: argon2id.Factory{}, SiteAccessPolicy: admin.AllowAllSitesPolicy{}, EventBus: eventBusFactory{},
-		MainDatabase: appkernel.DatabaseDefinition{Connector: connectorFactory{}, Adapters: []kernel.ModuleDatabaseFactory{databaseFactory{sites: sites, resources: searchRouteRepository{}}, searchTestDatabase{engine: engine}}},
+		MainDatabase: appkernel.DatabaseDefinition{
+			Connector: connectorFactory{},
+			Adapters: []kernel.ModuleDatabaseFactory{
+				databaseFactory{sites: sites, resources: searchRouteRepository{}},
+				searchTestDatabase{engine: engine},
+			},
+		},
 		Profiles: []kernel.Profile{
 			{Code: "searching", Modules: []kernel.Module{core.New(core.Config{}), search.New(), admin.New()}},
 			{Code: "plain", Modules: []kernel.Module{core.New(core.Config{}), admin.New()}},

@@ -43,7 +43,14 @@ func (s *Services) ConfigureManagementImages(files *management.Files, profiles [
 		return err
 	}
 	limited := image.NewLimitedProcessor(processor, 2)
-	editor, err := media.NewImageService(s.database.Media(), s.Files, media.FilePolicies{resource.ImageMediaUsage: resource.ValidateImageMediaFile, user.AvatarMediaUsage: user.ValidateAvatarMediaFile, media.FileFieldUsage: s.validateMediaFileOccurrence}, s.Authorization, limited, limits, logger)
+	policies := media.FilePolicies{
+		resource.ImageMediaUsage: resource.ValidateImageMediaFile,
+		user.AvatarMediaUsage:    user.ValidateAvatarMediaFile,
+		media.FileFieldUsage:     s.validateMediaFileOccurrence,
+	}
+	editor, err := media.NewImageService(
+		s.database.Media(), s.Files, policies, s.Authorization, limited, limits, logger,
+	)
 	if err != nil {
 		return err
 	}

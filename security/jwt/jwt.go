@@ -45,6 +45,8 @@ type accessClaims struct {
 	jwtlib.RegisteredClaims
 }
 
+// New requires WithSessions so issuance, verification, and revocation share
+// authoritative authentication state. Missing session storage is a startup error.
 func New(config Config, options ...Option) (*Service, error) {
 	if len([]byte(config.SigningKey)) < minimumSigningKeyBytes {
 		return nil, fmt.Errorf(
@@ -90,6 +92,9 @@ func New(config Config, options ...Option) (*Service, error) {
 			return nil, fmt.Errorf("apply JWT option at index %d: %w", index, err)
 		}
 	}
+	if service.sessions == nil {
+		return nil, errors.New("JWT session store is required")
+	}
 	return service, nil
 }
 
@@ -131,10 +136,14 @@ func (s *Service) IssueAccessToken(
 	if err != nil {
 		return security.AccessToken{}, fmt.Errorf("sign JWT access token: %w", err)
 	}
-	if s.sessions != nil {
-		if err := s.sessions.CreateSession(ctx, security.Session{TokenHash: tokenHash(value), UserID: userID, Version: actor.SessionVersion(), ExpiresAt: expiresAt.Add(s.clockSkew)}); err != nil {
-			return security.AccessToken{}, err
-		}
+	session := security.Session{
+		TokenHash: tokenHash(value),
+		UserID:    userID,
+		Version:   actor.SessionVersion(),
+		ExpiresAt: expiresAt.Add(s.clockSkew),
+	}
+	if err := s.sessions.CreateSession(ctx, session); err != nil {
+		return security.AccessToken{}, fmt.Errorf("create JWT session: %w", err)
 	}
 	return security.AccessToken{
 		Value:     value,
@@ -186,10 +195,8 @@ func (s *Service) VerifyAccessToken(
 	if err != nil || id <= 0 {
 		return security.Actor{}, security.ErrInvalidAccessToken
 	}
-	if s.sessions != nil {
-		if err := s.sessions.ValidateSession(ctx, tokenHash(value), security.UserID(id)); err != nil {
-			return security.Actor{}, err
-		}
+	if err := s.sessions.ValidateSession(ctx, tokenHash(value), security.UserID(id)); err != nil {
+		return security.Actor{}, fmt.Errorf("validate JWT session: %w", err)
 	}
 	return security.User(security.UserID(id)), nil
 }

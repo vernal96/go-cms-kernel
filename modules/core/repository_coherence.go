@@ -338,7 +338,12 @@ func (r *invalidatingResourceRepository) RestoreRevision(ctx context.Context, ac
 	return result, err
 }
 
-func (r *invalidatingResourceRepository) RestoreLibraryItemRevision(ctx context.Context, actorID *security.UserID, current, candidate resource.LibraryItem, source int64) (resource.LibraryItem, error) {
+func (r *invalidatingResourceRepository) RestoreLibraryItemRevision(
+	ctx context.Context,
+	actorID *security.UserID,
+	current, candidate resource.LibraryItem,
+	source int64,
+) (resource.LibraryItem, error) {
 	repository, err := r.revisionRepository()
 	if err != nil {
 		return resource.LibraryItem{}, err
@@ -524,7 +529,14 @@ func (r *invalidatingResourceRepository) Update(
 	return result, err
 }
 
-func (r *invalidatingResourceRepository) CreateWidget(ctx context.Context, actorID *security.UserID, id resource.ID, expectedVersion int64, binding widget.Binding, recordRevision bool) (widget.Binding, error) {
+func (r *invalidatingResourceRepository) CreateWidget(
+	ctx context.Context,
+	actorID *security.UserID,
+	id resource.ID,
+	expectedVersion int64,
+	binding widget.Binding,
+	recordRevision bool,
+) (widget.Binding, error) {
 	repository, ok := r.base.(resource.WidgetRepository)
 	if !ok {
 		return widget.Binding{}, errors.New("resource widget repository is unavailable")
@@ -538,7 +550,14 @@ func (r *invalidatingResourceRepository) CreateWidget(ctx context.Context, actor
 	return result, err
 }
 
-func (r *invalidatingResourceRepository) UpdateWidget(ctx context.Context, actorID *security.UserID, id resource.ID, expectedVersion int64, binding widget.Binding, recordRevision bool) (widget.Binding, error) {
+func (r *invalidatingResourceRepository) UpdateWidget(
+	ctx context.Context,
+	actorID *security.UserID,
+	id resource.ID,
+	expectedVersion int64,
+	binding widget.Binding,
+	recordRevision bool,
+) (widget.Binding, error) {
 	repository, ok := r.base.(resource.WidgetRepository)
 	if !ok {
 		return widget.Binding{}, errors.New("resource widget repository is unavailable")
@@ -562,7 +581,14 @@ func (r *invalidatingResourceRepository) DeleteWidget(ctx context.Context, actor
 	})
 }
 
-func (r *invalidatingResourceRepository) ReorderWidgets(ctx context.Context, actorID *security.UserID, id resource.ID, expectedVersion int64, order []widget.Order, recordRevision bool) ([]widget.Binding, error) {
+func (r *invalidatingResourceRepository) ReorderWidgets(
+	ctx context.Context,
+	actorID *security.UserID,
+	id resource.ID,
+	expectedVersion int64,
+	order []widget.Order,
+	recordRevision bool,
+) ([]widget.Binding, error) {
 	repository, ok := r.base.(resource.WidgetRepository)
 	if !ok {
 		return nil, errors.New("resource widget repository is unavailable")
@@ -746,7 +772,13 @@ func (r *invalidatingResourceRepository) RestoreLibraryItem(ctx context.Context,
 func (r *invalidatingResourceRepository) DeleteLibraryItem(ctx context.Context, id resource.ID) error {
 	return r.mutateLibraryItem(ctx, id, func(repository resource.LibraryItemRepository) error { return repository.DeleteLibraryItem(ctx, id) })
 }
-func (r *invalidatingResourceRepository) MoveLibraryItem(ctx context.Context, actorID *security.UserID, id, target resource.ID, expectedVersion int64, recordRevision bool) (resource.LibraryItem, error) {
+func (r *invalidatingResourceRepository) MoveLibraryItem(
+	ctx context.Context,
+	actorID *security.UserID,
+	id, target resource.ID,
+	expectedVersion int64,
+	recordRevision bool,
+) (resource.LibraryItem, error) {
 	repository, err := r.libraryItems()
 	if err != nil {
 		return resource.LibraryItem{}, err
@@ -772,7 +804,13 @@ func (r *invalidatingResourceRepository) QueryLibraryItems(ctx context.Context, 
 	if err != nil {
 		return resource.LibraryItemPage{}, err
 	}
-	return withRepositoryCacheRead(r.policy, []cache.Tag{siteResourcesTag(query.SiteID), resourceTag(query.LibraryID)}, func() (resource.LibraryItemPage, error) { return repository.QueryLibraryItems(ctx, query) })
+	return withRepositoryCacheRead(
+		r.policy,
+		[]cache.Tag{siteResourcesTag(query.SiteID), resourceTag(query.LibraryID)},
+		func() (resource.LibraryItemPage, error) {
+			return repository.QueryLibraryItems(ctx, query)
+		},
+	)
 }
 func (r *invalidatingResourceRepository) LibraryItemTemplateCodes(ctx context.Context, siteID site.ID, libraryID resource.ID) ([]template.Code, error) {
 	repository, err := r.libraryItems()

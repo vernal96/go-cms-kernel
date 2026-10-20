@@ -54,7 +54,14 @@ func TestPostgresLibraryMirrorRoutesLifecycleAndSearch(t *testing.T) {
 		}
 		return page
 	}
-	filtered, err := f.libraryItems.QueryLibraryItems(f.ctx, resource.LibraryItemQuery{SiteID: source.SiteID, LibraryID: source.ID, Limit: 10, PublicOnly: true, Filters: []resource.FilterCondition{{Field: resource.FieldID, Operator: resource.FilterEqual, Value: int64(item.ID)}}})
+	filtered, err := f.libraryItems.QueryLibraryItems(f.ctx, resource.LibraryItemQuery{
+		SiteID: source.SiteID, LibraryID: source.ID, Limit: 10,
+		PublicOnly: true,
+		Filters: []resource.FilterCondition{{
+			Field: resource.FieldID, Operator: resource.FilterEqual,
+			Value: int64(item.ID),
+		}},
+	})
 	if err != nil || len(filtered.Items) != 1 || filtered.Items[0].ID != item.ID || filtered.NextCursor != "" {
 		t.Fatalf("filter: %+v %v", filtered, err)
 	}

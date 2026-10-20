@@ -28,7 +28,15 @@ func TestProfileResourceImageConfigurationAndSnapshot(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			blueprint, err := factory.Compile(context.Background(), kernel.Profile{Code: "image", Settings: kernel.ProfileSettings{FileSystem: kernel.ProfileFileSystem{ResourceImage: tc.image}}, Modules: []kernel.Module{widgetFileModule{widgetProviderModule{code: "fields"}}}})
+			blueprint, err := factory.Compile(context.Background(), kernel.Profile{
+				Code: "image",
+				Settings: kernel.ProfileSettings{FileSystem: kernel.ProfileFileSystem{
+					ResourceImage: tc.image,
+				}},
+				Modules: []kernel.Module{
+					widgetFileModule{widgetProviderModule{code: "fields"}},
+				},
+			})
 			if (err == nil) != tc.valid {
 				t.Fatalf("error=%v valid=%t", err, tc.valid)
 			}

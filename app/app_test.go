@@ -2123,7 +2123,16 @@ func TestAppRunsBackgroundTasksPerSiteAndReplacesStaleRuntimeTasks(t *testing.T)
 		MainDatabase: appkernel.DatabaseDefinition{Connector: &fakeConnectorFactory{connector: newFakeConnector("main")}, Adapters: []kernel.ModuleDatabaseFactory{&fakeDatabaseFactory{
 			code: core.ModuleCode, database: &fakeCoreDatabase{repository: repository},
 		}}},
-		Profiles: []kernel.Profile{{Code: "dev", Params: []field.Definition{{Key: "generation", Type: field.TypeString, Label: "Generation"}}, Modules: []kernel.Module{core.New(core.Config{}), admin.New(), backgroundLifecycleModule{events: events}}}},
+		Profiles: []kernel.Profile{{
+			Code: "dev",
+			Params: []field.Definition{{
+				Key: "generation", Type: field.TypeString, Label: "Generation",
+			}},
+			Modules: []kernel.Module{
+				core.New(core.Config{}), admin.New(),
+				backgroundLifecycleModule{events: events},
+			},
+		}},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -107,7 +107,17 @@ func TestResultFieldValueAndMailPreserveHistoricalMultiplicity(t *testing.T) {
 }
 
 func TestInvalidListBoundsAreConfigurationErrors(t *testing.T) {
-	err := validateFormField(FormField{FormID: 1, Code: "emails", Label: "Emails", Type: field.TypeEmail, Options: field.StringOptions{Multiple: true}, Validators: []field.ValidatorDefinition{{Type: "min_items", Options: map[string]any{"value": 3}}, {Type: "max_items", Options: map[string]any{"value": 2}}}}, formsFieldResolver())
+	err := validateFormField(
+		FormField{
+			FormID: 1, Code: "emails", Label: "Emails", Type: field.TypeEmail,
+			Options: field.StringOptions{Multiple: true},
+			Validators: []field.ValidatorDefinition{
+				{Type: "min_items", Options: map[string]any{"value": 3}},
+				{Type: "max_items", Options: map[string]any{"value": 2}},
+			},
+		},
+		formsFieldResolver(),
+	)
 	if !errors.Is(err, ErrInvalid) {
 		t.Fatalf("configuration error: %v", err)
 	}

@@ -70,7 +70,12 @@ func ReadJSON[T any](ctx context.Context, store Store, key string) (T, bool) {
 	return DecodeCachedJSON[T](ctx, store, key, ReadResult{Value: raw})
 }
 
-func DecodeCachedJSON[T any](ctx context.Context, store Store, key string, value ReadResult) (T, bool) {
+func DecodeCachedJSON[T any](
+	ctx context.Context,
+	store Store,
+	key string,
+	value ReadResult,
+) (T, bool) {
 	var zero T
 	if value.Err != nil {
 		return zero, false
@@ -116,7 +121,36 @@ func (s *scopedStore) GetMany(ctx context.Context, keys []string) map[string]Rea
 }
 
 func (s *observedStore) GetMany(ctx context.Context, keys []string) map[string]ReadResult {
-	result := GetMany(ctx, s.store, keys)
+	if err := s.readBackoffError(); err != nil {
+		result := make(map[string]ReadResult, len(keys))
+		for _, key := range keys {
+			result[key] = ReadResult{Err: err}
+		}
+		return result
+	}
+	operationCtx, cancel := cacheOperationContext(ctx)
+	defer cancel()
+	result := make(map[string]ReadResult, len(keys))
+	if batch, ok := s.store.(BatchReader); ok {
+		result = batch.GetMany(operationCtx, keys)
+	} else {
+		for index, key := range keys {
+			if err := s.readBackoffError(); err != nil {
+				result[key] = ReadResult{Err: err}
+				continue
+			}
+			value, err := s.store.Get(operationCtx, key)
+			result[key] = ReadResult{Value: value, Err: err}
+			if s.isBackendFailure(ctx, err) {
+				s.openReadBackoff()
+				for _, pending := range keys[index+1:] {
+					result[pending] = ReadResult{Err: errStoreBackoff}
+				}
+				break
+			}
+		}
+	}
+	observedFailure := false
 	for key, item := range result {
 		event := Event{Type: EventHit, Store: s.Code(), Key: key, Error: item.Err}
 		switch {
@@ -128,7 +162,17 @@ func (s *observedStore) GetMany(ctx context.Context, keys []string) map[string]R
 		case item.Err != nil:
 			event.Type = EventReadError
 		}
-		s.observer.Observe(ctx, event)
+		if errors.Is(item.Err, errStoreBackoff) {
+			continue
+		}
+		if event.Type == EventReadError && observedFailure {
+			continue
+		}
+		s.observe(ctx, event)
+		if s.isBackendFailure(ctx, item.Err) {
+			s.openReadBackoff()
+			observedFailure = true
+		}
 	}
 	return result
 }

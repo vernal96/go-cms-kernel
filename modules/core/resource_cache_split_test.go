@@ -105,7 +105,15 @@ func TestSplitCacheReusesResourceIdentityAndLoadsOnlyMissingWidgets(t *testing.T
 func TestSplitCacheRejectsMixedWidgetSnapshots(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryCacheStore()
-	base := &splitRepository{resourceRepositoryStub: &resourceRepositoryStub{item: resource.Resource{ID: 7, SiteID: 3, Title: "old", Widgets: []widget.Binding{{ID: 11, Code: "core_html", Area: "body", Params: map[string]any{"html": "old"}}}}}}
+	base := &splitRepository{
+		resourceRepositoryStub: &resourceRepositoryStub{item: resource.Resource{
+			ID: 7, SiteID: 3, Title: "old",
+			Widgets: []widget.Binding{{
+				ID: 11, Code: "core_html", Area: "body",
+				Params: map[string]any{"html": "old"},
+			}},
+		}},
+	}
 	repo := &cachedResourceRepository{siteID: 3, base: base, store: store, ttl: time.Minute}
 	if _, err := repo.ByID(ctx, 7); err != nil {
 		t.Fatal(err)
@@ -169,7 +177,11 @@ func TestMirrorRouteCacheReflectsSourceChangesWithoutTargetInvalidation(t *testi
 	path := "/mirror"
 	ctx := context.Background()
 	store := newMemoryCacheStore()
-	base := &mirrorCacheRepository{splitRepository: &splitRepository{resourceRepositoryStub: &resourceRepositoryStub{}}, item: resource.LibraryItem{ID: 100, SiteID: 1, LibraryID: 10, Slug: "old", Title: "Before"}, mount: resource.Resource{ID: 20, SiteID: 2, Path: &path}}
+	base := &mirrorCacheRepository{
+		splitRepository: &splitRepository{resourceRepositoryStub: &resourceRepositoryStub{}},
+		item:            resource.LibraryItem{ID: 100, SiteID: 1, LibraryID: 10, Slug: "old", Title: "Before"},
+		mount:           resource.Resource{ID: 20, SiteID: 2, Path: &path},
+	}
 	repo := &cachedResourceRepository{siteID: 2, base: base, store: store, ttl: time.Hour}
 	first, _, err := repo.ResolveLibraryItemRoute(ctx, 2, "/mirror/old")
 	if err != nil || first.Title != "Before" {

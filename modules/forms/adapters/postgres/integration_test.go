@@ -107,12 +107,29 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 		t.Fatalf("cross-site form read error = %v", err)
 	}
 
-	email, _, err := repository.CreateField(ctx, siteIDs[0], first.Form.ID, forms.FormField{Code: "email", Type: field.TypeEmail, Label: "Email", Validators: []field.ValidatorDefinition{{Type: "max_length", Options: map[string]any{"value": 100}}}, ResultLabel: "Контакт", ShowInResults: true, ResultPosition: 2}, forms.LayoutPlacement{Position: 1})
+	email, _, err := repository.CreateField(
+		ctx,
+		siteIDs[0],
+		first.Form.ID,
+		forms.FormField{
+			Code:           "email",
+			Type:           field.TypeEmail,
+			Label:          "Email",
+			Validators:     []field.ValidatorDefinition{{Type: "max_length", Options: map[string]any{"value": 100}}},
+			ResultLabel:    "Контакт",
+			ShowInResults:  true,
+			ResultPosition: 2,
+		},
+		forms.LayoutPlacement{Position: 1},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	stored, err := repository.FormDetail(ctx, siteIDs[0], first.Form.ID)
-	if err != nil || len(stored.Fields) != 3 || len(stored.Fields[2].Validators) != 1 || stored.Fields[2].Validators[0].Type != "max_length" || stored.Fields[2].Validators[0].Options.(map[string]any)["value"] != json.Number("100") {
+	if err != nil || len(stored.Fields) != 3 ||
+		len(stored.Fields[2].Validators) != 1 ||
+		stored.Fields[2].Validators[0].Type != "max_length" ||
+		stored.Fields[2].Validators[0].Options.(map[string]any)["value"] != json.Number("100") {
 		t.Fatalf("persisted validators: %#v %v", stored.Fields, err)
 	}
 
@@ -130,7 +147,14 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 		if err != nil || child.ParentID == nil || *child.ParentID != inner.ID {
 			t.Fatalf("nested field: %#v %v", child, err)
 		}
-		_, heading, err := repository.CreateElement(ctx, siteIDs[0], formID, forms.Element{Code: "heading", Type: forms.ElementHeading, Config: []byte(`{"text":"Heading","level":2}`)}, forms.LayoutPlacement{ParentID: &outer.ID, Position: 1}, nil)
+		_, heading, err := repository.CreateElement(
+			ctx,
+			siteIDs[0],
+			formID,
+			forms.Element{Code: "heading", Type: forms.ElementHeading, Config: []byte(`{"text":"Heading","level":2}`)},
+			forms.LayoutPlacement{ParentID: &outer.ID, Position: 1},
+			nil,
+		)
 		if err != nil || heading.ParentID == nil || *heading.ParentID != outer.ID {
 			t.Fatalf("nested element: %#v %v", heading, err)
 		}
@@ -141,7 +165,14 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 				t.Fatal("accepted invalid parent", parent)
 			}
 		}
-		if _, _, err := repository.CreateElement(ctx, siteIDs[0], formID, forms.Element{Code: "invalid", Type: forms.ElementText, Config: []byte(`{"content":"Invalid"}`)}, forms.LayoutPlacement{Position: 999}, nil); !errors.Is(err, forms.ErrInvalid) {
+		if _, _, err := repository.CreateElement(
+			ctx,
+			siteIDs[0],
+			formID,
+			forms.Element{Code: "invalid", Type: forms.ElementText, Config: []byte(`{"content":"Invalid"}`)},
+			forms.LayoutPlacement{Position: 999},
+			nil,
+		); !errors.Is(err, forms.ErrInvalid) {
 			t.Fatalf("invalid position: %v", err)
 		}
 		if err := repository.DeleteContainer(ctx, siteIDs[1], formID, outer.ID); !errors.Is(err, forms.ErrNotFound) {
@@ -216,7 +247,16 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 		}
 	})
 
-	action, err := repository.CreateAction(ctx, siteIDs[0], first.Form.ID, forms.Action{Code: "notify", Name: "Notify", Enabled: true, Trigger: forms.Trigger{Type: forms.TriggerSubmitted}, ActionType: "test", Config: []byte(`{}`)})
+	action, err := repository.CreateAction(
+		ctx,
+		siteIDs[0],
+		first.Form.ID,
+		forms.Action{
+			Code: "notify", Name: "Notify", Enabled: true,
+			Trigger:    forms.Trigger{Type: forms.TriggerSubmitted},
+			ActionType: "test", Config: []byte(`{}`),
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +329,11 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 			t.Fatalf("stored file snapshots = %#v", values.References)
 		}
 		snapshot := values.References[0]
-		if snapshot.ID != int64(storedMedia.ID) || snapshot.Target != field.ReferenceMedia || snapshot.Options.Disk != "public" || snapshot.Options.VirtualPath != "forms/documents" || !reflect.DeepEqual(snapshot.Path, occurrence.Path) {
+		if snapshot.ID != int64(storedMedia.ID) ||
+			snapshot.Target != field.ReferenceMedia ||
+			snapshot.Options.Disk != "public" ||
+			snapshot.Options.VirtualPath != "forms/documents" ||
+			!reflect.DeepEqual(snapshot.Path, occurrence.Path) {
 			t.Fatalf("stored file snapshot = %#v, occurrence = %#v", snapshot, occurrence)
 		}
 	})
@@ -322,14 +366,33 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repository.CreateAction(ctx, siteIDs[0], first.Form.ID, forms.Action{Code: "on_done", Name: "On done", Enabled: true, Trigger: forms.Trigger{Type: forms.TriggerStatusChanged, To: "done"}, ActionType: "test", Config: []byte(`{}`), Position: 1}); err != nil {
+	if _, err := repository.CreateAction(
+		ctx,
+		siteIDs[0],
+		first.Form.ID,
+		forms.Action{
+			Code: "on_done", Name: "On done", Enabled: true,
+			Trigger:    forms.Trigger{Type: forms.TriggerStatusChanged, To: "done"},
+			ActionType: "test", Config: []byte(`{}`), Position: 1,
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
-	changed, err := repository.ChangeResultStatus(ctx, forms.ResultStatusChange{SiteID: siteIDs[0], ResultID: created.Result.ID, FromStatusID: first.Statuses[0].ID, ToStatusID: doneStatus.ID})
+	changed, err := repository.ChangeResultStatus(ctx, forms.ResultStatusChange{
+		SiteID:       siteIDs[0],
+		ResultID:     created.Result.ID,
+		FromStatusID: first.Statuses[0].ID,
+		ToStatusID:   doneStatus.ID,
+	})
 	if err != nil || changed.Result.StatusCode != "done" || len(changed.Executions) != 2 {
 		t.Fatalf("status change = %#v, %v", changed, err)
 	}
-	if _, err := repository.ChangeResultStatus(ctx, forms.ResultStatusChange{SiteID: siteIDs[0], ResultID: created.Result.ID, FromStatusID: first.Statuses[0].ID, ToStatusID: second.Statuses[0].ID}); !errors.Is(err, forms.ErrConflict) {
+	if _, err := repository.ChangeResultStatus(ctx, forms.ResultStatusChange{
+		SiteID:       siteIDs[0],
+		ResultID:     created.Result.ID,
+		FromStatusID: first.Statuses[0].ID,
+		ToStatusID:   second.Statuses[0].ID,
+	}); !errors.Is(err, forms.ErrConflict) {
 		t.Fatalf("cross-form status change error = %v", err)
 	}
 
@@ -436,11 +499,34 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 
 	t.Run("historical multiple values remain arrays", func(t *testing.T) {
 		sid, fid := siteIDs[0], first.Form.ID
-		item, _, err := repository.CreateField(ctx, sid, fid, forms.FormField{Code: "numbers", Type: field.TypeInteger, Label: "Numbers", ShowInResults: true, ShowOnSite: true, Options: field.IntegerOptions{Multiple: true}, Validators: []field.ValidatorDefinition{{Type: "max_items", Options: map[string]any{"value": 3}}}}, forms.LayoutPlacement{Position: 0})
+		item, _, err := repository.CreateField(
+			ctx,
+			sid,
+			fid,
+			forms.FormField{
+				Code: "numbers", Type: field.TypeInteger, Label: "Numbers",
+				ShowInResults: true, ShowOnSite: true,
+				Options: field.IntegerOptions{Multiple: true},
+				Validators: []field.ValidatorDefinition{{
+					Type: "max_items", Options: map[string]any{"value": 3},
+				}},
+			},
+			forms.LayoutPlacement{Position: 0},
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		record, err := repository.CreateResult(ctx, forms.SubmissionRecord{Result: forms.Result{SiteID: sid, FormID: fid, FormCode: "feedback", FormName: "Feedback", StatusID: first.Statuses[0].ID}, Values: []forms.ResultValue{{FieldID: &item.ID, FieldCode: item.Code, FieldType: item.Type, FieldLabel: item.Label, ResultLabel: item.Label, StorageKind: field.StorageInteger, Multiple: true, Value: int64(7)}}})
+		record, err := repository.CreateResult(ctx, forms.SubmissionRecord{
+			Result: forms.Result{
+				SiteID: sid, FormID: fid, FormCode: "feedback",
+				FormName: "Feedback", StatusID: first.Statuses[0].ID,
+			},
+			Values: []forms.ResultValue{{
+				FieldID: &item.ID, FieldCode: item.Code, FieldType: item.Type,
+				FieldLabel: item.Label, ResultLabel: item.Label,
+				StorageKind: field.StorageInteger, Multiple: true, Value: int64(7),
+			}},
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -487,7 +573,16 @@ func TestPostgresFormsSiteIsolationResultsActionsAndCascade(t *testing.T) {
 
 	t.Run("integer validator precision survives create update and reload", func(t *testing.T) {
 		const initial int64 = 9007199254740993
-		item, _, err := repository.CreateField(ctx, siteIDs[0], first.Form.ID, forms.FormField{Code: "precise", Type: field.TypeInteger, Label: "Precise", Validators: []field.ValidatorDefinition{validation.In(initial)}}, forms.LayoutPlacement{Position: 0})
+		item, _, err := repository.CreateField(
+			ctx,
+			siteIDs[0],
+			first.Form.ID,
+			forms.FormField{
+				Code: "precise", Type: field.TypeInteger, Label: "Precise",
+				Validators: []field.ValidatorDefinition{validation.In(initial)},
+			},
+			forms.LayoutPlacement{Position: 0},
+		)
 		if err != nil {
 			t.Fatal(err)
 		}

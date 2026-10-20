@@ -28,7 +28,12 @@ func TestPostgresImageDeletionImpactCascadeAndFields(t *testing.T) {
 	})
 	makeFile := func(parent *file.ID) file.File {
 		t.Helper()
-		f, err := files.CreateFile(ctx, file.File{Storage: filesystem.Code("images-" + suffix), Name: fmt.Sprintf("image-%d.png", time.Now().UnixNano()), Path: fmt.Sprint(time.Now().UnixNano()), MIMEType: "image/png", Size: 1, ChecksumSHA256: fmt.Sprintf("%064d", 1), ParentID: parent})
+		f, err := files.CreateFile(ctx, file.File{
+			Storage: filesystem.Code("images-" + suffix),
+			Name:    fmt.Sprintf("image-%d.png", time.Now().UnixNano()),
+			Path:    fmt.Sprint(time.Now().UnixNano()), MIMEType: "image/png",
+			Size: 1, ChecksumSHA256: fmt.Sprintf("%064d", 1), ParentID: parent,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -136,7 +141,12 @@ func TestPostgresConcurrentMediaImageSwitch(t *testing.T) {
 	t.Cleanup(func() { conn.Pool().Exec(context.Background(), `DELETE FROM core.files WHERE storage=$1`, storage) })
 	create := func(parent *file.ID) file.File {
 		t.Helper()
-		f, err := files.CreateFile(ctx, file.File{Storage: filesystem.Code(storage), Name: fmt.Sprint(time.Now().UnixNano()) + ".png", Path: fmt.Sprint(time.Now().UnixNano()), MIMEType: "image/png", Size: 1, ChecksumSHA256: fmt.Sprintf("%064d", 1), ParentID: parent})
+		f, err := files.CreateFile(ctx, file.File{
+			Storage: filesystem.Code(storage),
+			Name:    fmt.Sprint(time.Now().UnixNano()) + ".png",
+			Path:    fmt.Sprint(time.Now().UnixNano()), MIMEType: "image/png",
+			Size: 1, ChecksumSHA256: fmt.Sprintf("%064d", 1), ParentID: parent,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}

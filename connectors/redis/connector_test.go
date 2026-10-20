@@ -112,7 +112,8 @@ func TestRedisCacheTreatsCorruptEntryAsObservableMiss(t *testing.T) {
 	backend := &memoryClient{values: make(map[string][]byte)}
 	store := newConnector(Config{Code: "redis", Prefix: "test"}, backend)
 	backend.values[store.entryKey("corrupt")] = []byte("bad")
-	if _, err := store.Get(context.Background(), "corrupt"); !errors.Is(err, cache.ErrMiss) || !errors.Is(err, cache.ErrCorrupt) {
+	_, err := store.Get(context.Background(), "corrupt")
+	if !errors.Is(err, cache.ErrMiss) || !errors.Is(err, cache.ErrCorrupt) {
 		t.Fatalf("corrupt entry error = %v", err)
 	}
 }
@@ -150,7 +151,8 @@ func TestUniversalOptionsCoverStandaloneSentinelAndCluster(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(standalone.Addrs) != 1 || standalone.MasterName != "" {
+	if len(standalone.Addrs) != 1 || standalone.MasterName != "" ||
+		!standalone.ContextTimeoutEnabled {
 		t.Fatalf("standalone options = %#v", standalone)
 	}
 
@@ -287,7 +289,12 @@ func TestEvictedGenerationNeverRevivesEntry(t *testing.T) {
 	backend := &memoryClient{values: make(map[string][]byte)}
 	store := newConnector(Config{Code: "test"}, backend)
 	ctx := context.Background()
-	if err := store.Set(ctx, "resource", []byte("old"), cache.SetOptions{TTL: time.Hour, Tags: []cache.Tag{"resource:1"}}); err != nil {
+	if err := store.Set(
+		ctx,
+		"resource",
+		[]byte("old"),
+		cache.SetOptions{TTL: time.Hour, Tags: []cache.Tag{"resource:1"}},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.InvalidateTag(ctx, "resource:1"); err != nil {

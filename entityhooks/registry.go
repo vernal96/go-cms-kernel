@@ -131,7 +131,16 @@ func add[T any](r Registrar, key Key[T], code string, before any, after func(con
 			return fmt.Errorf("conflicting entity hook definition %q", key.name)
 		}
 	}
-	registry.entries = append(registry.entries, entry{owner: key.owner, name: key.name, token: (*T)(nil), target: Target{Module: r.module, Handler: code, Scope: registry.scope, ScopeID: registry.id}, before: before, after: after})
+	registry.entries = append(registry.entries, entry{
+		owner: key.owner,
+		name:  key.name,
+		token: (*T)(nil),
+		target: Target{
+			Module: r.module, Handler: code, Scope: registry.scope, ScopeID: registry.id,
+		},
+		before: before,
+		after:  after,
+	})
 	return nil
 }
 

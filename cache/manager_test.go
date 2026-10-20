@@ -3,7 +3,11 @@ package cache
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -95,6 +99,26 @@ func (s *testStore) Close() error {
 	return s.closeErr
 }
 
+type delayedHTTPReadStore struct {
+	*testStore
+	endpoint string
+	reads    atomic.Int32
+}
+
+func (s *delayedHTTPReadStore) Get(ctx context.Context, _ string) ([]byte, error) {
+	s.reads.Add(1)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, s.endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	return io.ReadAll(response.Body)
+}
+
 func TestManagerLifecycleAndReverseClose(t *testing.T) {
 	var order []Code
 	first := &testStore{code: "first", closeOrder: &order}
@@ -111,7 +135,7 @@ func TestManagerLifecycleAndReverseClose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if store, exists := manager.Store("second"); !exists || store != second {
+	if store, exists := manager.Store("second"); !exists || store.Code() != second.Code() {
 		t.Fatal("second cache store was not resolved")
 	}
 	if err := manager.Close(); err != nil {
@@ -165,6 +189,55 @@ func TestManagerStrictPingClosesStore(t *testing.T) {
 	)
 	if !errors.Is(err, pingErr) {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestManagerBoundsCacheOutageAndSkipsRepeatedReads(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(
+		_ http.ResponseWriter,
+		request *http.Request,
+	) {
+		<-request.Context().Done()
+	}))
+	defer server.Close()
+	physical := &delayedHTTPReadStore{
+		testStore: &testStore{code: "slow"},
+		endpoint:  server.URL,
+	}
+	manager, err := NewManager(
+		context.Background(),
+		[]Factory{testFactory{code: physical.code, store: physical}},
+		Dependencies{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+
+	store, ok := manager.Store(physical.code)
+	if !ok {
+		t.Fatal("cache store was not resolved")
+	}
+	started := time.Now()
+	values := GetMany(context.Background(), store, []string{"a", "b", "c"})
+	if len(values) != 3 {
+		t.Fatalf("batch result count = %d", len(values))
+	}
+	for key, value := range values {
+		if value.Err == nil {
+			t.Errorf("batch result %q unexpectedly succeeded", key)
+		}
+	}
+	for range 4 {
+		if _, hit := ReadJSON[string](context.Background(), store, "repeated"); hit {
+			t.Fatal("outage read unexpectedly hit")
+		}
+	}
+	if elapsed := time.Since(started); elapsed >= 4*time.Second {
+		t.Fatalf("repeated cache reads took %s, want under 4s", elapsed)
+	}
+	if got := physical.reads.Load(); got != 1 {
+		t.Fatalf("backend reads = %d, want one before read backoff", got)
 	}
 }
 

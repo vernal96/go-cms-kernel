@@ -210,7 +210,13 @@ func TestValidatorCodeAndFailureParamsAreStable(t *testing.T) {
 
 func TestValidatorCompileRejectsBadDefinitionsAndCollectsFailures(t *testing.T) {
 	resolver := field.StandardTypes()
-	bad := []field.ValidatorDefinition{{Type: "missing"}, {Type: "min", Options: map[string]any{}}, {Type: "regex", Options: map[string]any{"value": "("}}, {Type: "min_items", Options: map[string]any{"value": 1}}, {Type: "min_length", Options: map[string]any{"value": 2}}}
+	bad := []field.ValidatorDefinition{
+		{Type: "missing"},
+		{Type: "min", Options: map[string]any{}},
+		{Type: "regex", Options: map[string]any{"value": "("}},
+		{Type: "min_items", Options: map[string]any{"value": 1}},
+		{Type: "min_length", Options: map[string]any{"value": 2}},
+	}
 	for _, v := range bad {
 		typ := field.TypeInteger
 		if v.Type == "regex" {

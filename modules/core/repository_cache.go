@@ -344,7 +344,14 @@ func (r *cachedResourceRepository) Update(
 	return result, nil
 }
 
-func (r *cachedResourceRepository) CreateWidget(ctx context.Context, actorID *security.UserID, id resource.ID, expectedVersion int64, binding widget.Binding, recordRevision bool) (widget.Binding, error) {
+func (r *cachedResourceRepository) CreateWidget(
+	ctx context.Context,
+	actorID *security.UserID,
+	id resource.ID,
+	expectedVersion int64,
+	binding widget.Binding,
+	recordRevision bool,
+) (widget.Binding, error) {
 	repository, ok := r.base.(resource.WidgetRepository)
 	if !ok {
 		return widget.Binding{}, errors.New("resource widget repository is unavailable")
@@ -352,7 +359,14 @@ func (r *cachedResourceRepository) CreateWidget(ctx context.Context, actorID *se
 	return repository.CreateWidget(ctx, actorID, id, expectedVersion, binding, recordRevision)
 }
 
-func (r *cachedResourceRepository) UpdateWidget(ctx context.Context, actorID *security.UserID, id resource.ID, expectedVersion int64, binding widget.Binding, recordRevision bool) (widget.Binding, error) {
+func (r *cachedResourceRepository) UpdateWidget(
+	ctx context.Context,
+	actorID *security.UserID,
+	id resource.ID,
+	expectedVersion int64,
+	binding widget.Binding,
+	recordRevision bool,
+) (widget.Binding, error) {
 	repository, ok := r.base.(resource.WidgetRepository)
 	if !ok {
 		return widget.Binding{}, errors.New("resource widget repository is unavailable")
@@ -368,7 +382,14 @@ func (r *cachedResourceRepository) DeleteWidget(ctx context.Context, actorID *se
 	return repository.DeleteWidget(ctx, actorID, id, expectedVersion, bindingID, recordRevision)
 }
 
-func (r *cachedResourceRepository) ReorderWidgets(ctx context.Context, actorID *security.UserID, id resource.ID, expectedVersion int64, order []widget.Order, recordRevision bool) ([]widget.Binding, error) {
+func (r *cachedResourceRepository) ReorderWidgets(
+	ctx context.Context,
+	actorID *security.UserID,
+	id resource.ID,
+	expectedVersion int64,
+	order []widget.Order,
+	recordRevision bool,
+) ([]widget.Binding, error) {
 	repository, ok := r.base.(resource.WidgetRepository)
 	if !ok {
 		return nil, errors.New("resource widget repository is unavailable")

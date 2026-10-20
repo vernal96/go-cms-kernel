@@ -20,8 +20,18 @@ const (
 	defaultThreads uint8  = 1
 	defaultSaltLen        = 16
 	defaultKeyLen  uint32 = 32
+
+	maximumMemory     uint32 = 256 * 1024
+	maximumTime       uint32 = 10
+	maximumThreads    uint8  = 16
+	maximumSaltLen           = 64
+	maximumKeyLen     uint32 = 64
+	maximumEncodedLen        = 256
 )
 
+// Config controls Argon2id work. Zero fields use defaults. Memory is in KiB
+// (at least 8 per thread, at most 256 MiB); Time is 1..10, Threads 1..16,
+// SaltLen 8..64 bytes, and KeyLen 16..64 bytes.
 type Config struct {
 	Memory  uint32
 	Time    uint32
@@ -53,6 +63,9 @@ func NewWithRandom(
 	random io.Reader,
 ) (*Hasher, error) {
 	config = normalizeConfig(config)
+	if err := validateConfig(config); err != nil {
+		return nil, err
+	}
 	if random == nil {
 		return nil, errors.New("argon2id random reader is nil")
 	}
@@ -79,6 +92,9 @@ func NewWithRandom(
 func (h *Hasher) Hash(password string) (string, error) {
 	if h == nil {
 		return "", errors.New("argon2id hasher is nil")
+	}
+	if err := validateConfig(h.config); err != nil {
+		return "", err
 	}
 	salt := make([]byte, h.config.SaltLen)
 	if _, err := io.ReadFull(h.random, salt); err != nil {
@@ -125,6 +141,27 @@ func (h *Hasher) DummyHash() string {
 	return h.dummy
 }
 
+// validateConfig bounds both deployment configuration and stored PHC parameters
+// before Argon2 can allocate memory or start expensive work. Memory is in KiB.
+func validateConfig(config Config) error {
+	if config.Threads == 0 || config.Threads > maximumThreads {
+		return errors.New("argon2id threads must be between 1 and 16")
+	}
+	if config.Memory < 8*uint32(config.Threads) || config.Memory > maximumMemory {
+		return errors.New("argon2id memory must be at least 8 KiB per thread and at most 256 MiB")
+	}
+	if config.Time == 0 || config.Time > maximumTime {
+		return errors.New("argon2id iterations must be between 1 and 10")
+	}
+	if config.SaltLen < 8 || config.SaltLen > maximumSaltLen {
+		return errors.New("argon2id salt length must be between 8 and 64 bytes")
+	}
+	if config.KeyLen < 16 || config.KeyLen > maximumKeyLen {
+		return errors.New("argon2id key length must be between 16 and 64 bytes")
+	}
+	return nil
+}
+
 func normalizeConfig(config Config) Config {
 	if config.Memory == 0 {
 		config.Memory = defaultMemory
@@ -162,6 +199,9 @@ func encode(config Config, salt, hash []byte) string {
 func decode(
 	encoded string,
 ) (Config, []byte, []byte, error) {
+	if len(encoded) > maximumEncodedLen {
+		return Config{}, nil, nil, errors.New("argon2id hash encoding is too long")
+	}
 	parts := strings.Split(encoded, "$")
 	if len(parts) != 6 || parts[0] != "" ||
 		parts[1] != "argon2id" ||
@@ -207,11 +247,15 @@ func decode(
 		)
 	}
 
-	return Config{
+	config := Config{
 		Memory:  memory,
 		Time:    iterations,
 		Threads: threads,
 		SaltLen: len(salt),
 		KeyLen:  uint32(len(hash)),
-	}, salt, hash, nil
+	}
+	if err := validateConfig(config); err != nil {
+		return Config{}, nil, nil, err
+	}
+	return config, salt, hash, nil
 }

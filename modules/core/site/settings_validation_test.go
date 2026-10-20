@@ -81,7 +81,12 @@ func TestSiteSettingsRequiredOnlyOnUpdate(t *testing.T) {
 		if _, err := catalog.Update(ctx, security.System(), input); err == nil || !strings.Contains(err.Error(), "image/jpeg") || !strings.Contains(err.Error(), "image/png") {
 			t.Fatalf("update MIME mismatch error = %v", err)
 		}
-		if _, err := catalog.Create(ctx, security.System(), CreateInput{ProfileCode: "settings", Name: "Invalid", Domain: "invalid.test", Locale: "ru-RU", Settings: input.Settings}); err == nil || !strings.Contains(err.Error(), "image/jpeg") || !strings.Contains(err.Error(), "image/png") {
+		if _, err := catalog.Create(ctx, security.System(), CreateInput{
+			ProfileCode: "settings", Name: "Invalid", Domain: "invalid.test",
+			Locale: "ru-RU", Settings: input.Settings,
+		}); err == nil ||
+			!strings.Contains(err.Error(), "image/jpeg") ||
+			!strings.Contains(err.Error(), "image/png") {
 			t.Fatalf("create MIME mismatch error = %v", err)
 		}
 		for _, id := range []int{1, 2} {

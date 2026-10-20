@@ -127,7 +127,14 @@ func TestPostgresMediaCascadeHooksAtomicity(t *testing.T) {
 	}
 	itemImage, itemField := makeMedia(), makeMedia()
 	library := db.Resources().(resource.LibraryItemRepository)
-	item, err := library.CreateLibraryItem(ctx, nil, resource.LibraryItem{SiteID: siteID, LibraryID: resourceID, Title: "Item", Slug: "item", ImageMediaID: &itemImage, FieldValues: []field.StoredValue{{Key: "photo", Kind: field.StorageReference, ReferenceTarget: field.ReferenceMedia, Value: int64(itemField)}}}, false)
+	item, err := library.CreateLibraryItem(ctx, nil, resource.LibraryItem{
+		SiteID: siteID, LibraryID: resourceID, Title: "Item", Slug: "item",
+		ImageMediaID: &itemImage,
+		FieldValues: []field.StoredValue{{
+			Key: "photo", Kind: field.StorageReference,
+			ReferenceTarget: field.ReferenceMedia, Value: int64(itemField),
+		}},
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}

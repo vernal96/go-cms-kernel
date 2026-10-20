@@ -109,7 +109,13 @@ func scanLibraryItemColumns(scanner rowScanner, extra ...any) (resource.LibraryI
 	var item resource.LibraryItem
 	var templateCode, contentType *string
 	var imageMediaID *int64
-	columns := []any{&item.ID, &item.SiteID, &item.LibraryID, &templateCode, &contentType, &item.Title, &item.Slug, &item.Annotation, &item.Content, &imageMediaID, &item.IsPublic, &item.IsSearchable, &item.PublishedAt, &item.UnpublishedAt, &item.CreatedAt, &item.UpdatedAt, &item.CreatedBy, &item.UpdatedBy, &item.DeletedAt, &item.DeletedBy}
+	columns := []any{
+		&item.ID, &item.SiteID, &item.LibraryID, &templateCode, &contentType,
+		&item.Title, &item.Slug, &item.Annotation, &item.Content, &imageMediaID,
+		&item.IsPublic, &item.IsSearchable, &item.PublishedAt, &item.UnpublishedAt,
+		&item.CreatedAt, &item.UpdatedAt, &item.CreatedBy, &item.UpdatedBy,
+		&item.DeletedAt, &item.DeletedBy,
+	}
 	err := scanner.Scan(append(columns, extra...)...)
 	if err != nil {
 		return resource.LibraryItem{}, err

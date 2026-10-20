@@ -49,7 +49,14 @@ func TestPostgresMediaFileDeletionClearsResourceAndLibraryImage(t *testing.T) {
 			}
 			ownerID, beforeVersion := owner.ID, owner.Version
 			if libraryItem {
-				item, err := db.Resources().(resource.LibraryItemRepository).CreateLibraryItem(ctx, nil, resource.LibraryItem{SiteID: site.ID(sid), LibraryID: owner.ID, Title: "Item", Slug: "item", ImageMediaID: &m.ID}, true)
+				item, err := db.Resources().(resource.LibraryItemRepository).CreateLibraryItem(
+					ctx, nil,
+					resource.LibraryItem{
+						SiteID: site.ID(sid), LibraryID: owner.ID,
+						Title: "Item", Slug: "item", ImageMediaID: &m.ID,
+					},
+					true,
+				)
 				if err != nil {
 					t.Fatal(err)
 				}

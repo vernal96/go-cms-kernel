@@ -64,7 +64,11 @@ func TestPostgresMediaUpdateValidatesNormalizedOccurrencesWithoutImageMisclassif
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.Sites().(site.ManagementRepository).Update(ctx, nil, site.Site{ID: sid, ProfileCode: "guard", Name: "Guard", Domain: "media-guard-" + suffix + ".test", Locale: "en", Version: siteVersion, Settings: rowValues, MediaOccurrences: rowRefs})
+	_, err = db.Sites().(site.ManagementRepository).Update(ctx, nil, site.Site{
+		ID: sid, ProfileCode: "guard", Name: "Guard",
+		Domain: "media-guard-" + suffix + ".test", Locale: "en",
+		Version: siteVersion, Settings: rowValues, MediaOccurrences: rowRefs,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

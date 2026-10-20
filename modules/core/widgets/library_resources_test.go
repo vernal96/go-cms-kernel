@@ -25,7 +25,13 @@ func TestLibraryResourcesUsesSourceSchemaAndIndependentCursor(t *testing.T) {
 			if q.LibraryID != mount.ID || q.SiteID != mount.SiteID || q.Cursor != "own-cursor" || q.Limit != 5 || !q.PublicOnly || len(q.Filters) != 1 || q.Filters[0].Field != "resource.field.score" || q.Filters[0].Kind != "" {
 				t.Fatalf("query=%+v", q)
 			}
-			return resource.LibraryItemPage{Items: []resource.LibraryItem{{ID: 100, Slug: "entry", Template: &templateCode, Fields: map[string]any{"cover": int64(42)}}}, NextCursor: "next"}, resource.LibraryCollection{Source: source, Mount: mount, Runtime: sourceRuntime}, nil
+			return resource.LibraryItemPage{
+				Items: []resource.LibraryItem{{
+					ID: 100, Slug: "entry", Template: &templateCode,
+					Fields: map[string]any{"cover": int64(42)},
+				}},
+				NextCursor: "next",
+			}, resource.LibraryCollection{Source: source, Mount: mount, Runtime: sourceRuntime}, nil
 		}
 		projected := false
 		instance, err := NewLibraryResources(query, mirror, func(_ context.Context, runtime *site.Runtime, code *template.Code, fields map[string]any) (map[string]any, error) {

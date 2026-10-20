@@ -109,7 +109,19 @@ func MediaType(settings map[string][]Definition) Type {
 			copy[code] = CloneDefinitions(definitions)
 		}
 	}
-	return DescribedType{Type: mediaType{settings: copy}, Presentation: Metadata{Label: "Медиа", Editor: "media", Options: []ConfigField{{Key: "disk", Label: "Диск", Type: TypeString, Required: true}, {Key: "virtual_path", Label: "Путь загрузки", Type: TypeString, Required: true}, {Key: "settings_code", Label: "Настройки медиа", Type: TypeString, Required: true}, {Key: "mime_types", Label: "MIME-типы", Type: TypeJSON, Editor: "core.string-list"}, {Key: "multiple", Label: "Несколько значений", Type: TypeCheckbox}}}}
+	return DescribedType{
+		Type: mediaType{settings: copy},
+		Presentation: Metadata{
+			Label: "Медиа", Editor: "media",
+			Options: []ConfigField{
+				{Key: "disk", Label: "Диск", Type: TypeString, Required: true},
+				{Key: "virtual_path", Label: "Путь загрузки", Type: TypeString, Required: true},
+				{Key: "settings_code", Label: "Настройки медиа", Type: TypeString, Required: true},
+				{Key: "mime_types", Label: "MIME-типы", Type: TypeJSON, Editor: "core.string-list"},
+				{Key: "multiple", Label: "Несколько значений", Type: TypeCheckbox},
+			},
+		},
+	}
 }
 
 func (mediaType) Code() TypeCode { return TypeMedia }

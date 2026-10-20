@@ -88,3 +88,49 @@ func TestVerifyDetectsOldProfileAndMalformedEncoding(t *testing.T) {
 		t.Fatalf("expected encoding error, got %v", err)
 	}
 }
+
+func TestRejectsUnsafeConfigurationBeforeHashing(t *testing.T) {
+	for name, config := range map[string]Config{
+		"negative salt":     {SaltLen: -1},
+		"huge salt":         {SaltLen: 1 << 30},
+		"short salt":        {SaltLen: 1},
+		"huge key":          {KeyLen: ^uint32(0)},
+		"short key":         {KeyLen: 1},
+		"huge memory":       {Memory: ^uint32(0)},
+		"memory per thread": {Memory: 8, Threads: 2},
+		"huge iterations":   {Time: ^uint32(0)},
+		"huge threads":      {Threads: 255},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := NewWithRandom(config, bytes.NewReader(nil)); err == nil {
+				t.Fatal("unsafe configuration accepted")
+			}
+		})
+	}
+	var zero Hasher
+	if _, err := zero.Hash("password"); err == nil {
+		t.Fatal("zero-value hasher accepted")
+	}
+}
+
+func TestVerifyRejectsUnboundedStoredParameters(t *testing.T) {
+	hasher, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, encoded := range map[string]string{
+		"memory":     "$argon2id$v=19$m=4294967295,t=2,p=1$MTIzNDU2Nzg$MTIzNDU2Nzg5MDEyMzQ1Ng",
+		"iterations": "$argon2id$v=19$m=8192,t=4294967295,p=1$MTIzNDU2Nzg$MTIzNDU2Nzg5MDEyMzQ1Ng",
+		"threads":    "$argon2id$v=19$m=8192,t=2,p=255$MTIzNDU2Nzg$MTIzNDU2Nzg5MDEyMzQ1Ng",
+		"length":     strings.Repeat("x", maximumEncodedLen+1),
+		"short salt": "$argon2id$v=19$m=8192,t=2,p=1$YQ$MTIzNDU2Nzg5MDEyMzQ1Ng",
+		"short key":  "$argon2id$v=19$m=8192,t=2,p=1$MTIzNDU2Nzg$YQ",
+	} {
+		t.Run(name, func(t *testing.T) {
+			valid, _, err := hasher.Verify("password", encoded)
+			if err == nil || valid {
+				t.Fatalf("unsafe PHC string accepted: valid=%v err=%v", valid, err)
+			}
+		})
+	}
+}

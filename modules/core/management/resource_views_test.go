@@ -39,7 +39,13 @@ func (r *storedViews) Total(_ context.Context, siteID site.ID, id resource.ID) (
 func TestMirrorViewsUseSourceIdentityWithoutSourceEditorAccess(t *testing.T) {
 	policy := &siteSpecificPolicy{denied: map[site.ID]error{1: security.ErrForbidden}}
 	stats := &storedViews{}
-	management := &Resources{authorization: authorization{authorizer: managementAuthorizer{}, policy: policy}, views: stats, resourceRepo: sourceViewRepository{source: resource.Resource{ID: 10, SiteID: 1, Type: resourcetype.Library}}}
+	management := &Resources{
+		authorization: authorization{authorizer: managementAuthorizer{}, policy: policy},
+		views:         stats,
+		resourceRepo: sourceViewRepository{source: resource.Resource{
+			ID: 10, SiteID: 1, Type: resourcetype.Library,
+		}},
+	}
 	mirror := resource.Resource{ID: 20, SiteID: 2, Type: resourcetype.LibraryMirror, TypeSettings: map[string]any{"source_library_id": int64(10)}}
 	if err := management.requireSite(context.Background(), security.User(8), 2, ResourceReadPermission, SiteAccessEdit); err != nil {
 		t.Fatal(err)

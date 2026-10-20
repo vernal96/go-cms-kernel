@@ -6,15 +6,17 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/vernal96/go-cms-kernel/connectors/localstorage"
 	"github.com/vernal96/go-cms-kernel/cache"
+	"github.com/vernal96/go-cms-kernel/connectors/localstorage"
 	"github.com/vernal96/go-cms-kernel/filesystem"
 )
 
@@ -42,7 +44,10 @@ func TestLocalFilesystemCacheOverwriteExpiryAndTags(t *testing.T) {
 			Layout: LayoutAuto,
 			Prefix: "cache/test",
 			Now:    func() time.Time { return now },
-			Random: bytes.NewReader(bytes.Repeat([]byte{7}, 128)),
+			Random: bytes.NewReader(append(
+				bytes.Repeat([]byte{7}, 32),
+				bytes.Repeat([]byte{8}, 96)...,
+			)),
 		},
 		disk,
 	)
@@ -172,8 +177,9 @@ func TestFilesystemCacheTreatsCorruptEntryAsMiss(t *testing.T) {
 	if err := os.WriteFile(objectPath, []byte("bad"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Get(context.Background(), "corrupt"); !errors.Is(err, cache.ErrMiss) || !errors.Is(err, cache.ErrCorrupt) {
-		t.Fatalf("corrupt entry error = %v", err)
+	_, getErr := store.Get(context.Background(), "corrupt")
+	if !errors.Is(getErr, cache.ErrMiss) || !errors.Is(getErr, cache.ErrCorrupt) {
+		t.Fatalf("corrupt entry error = %v", getErr)
 	}
 }
 
@@ -197,7 +203,10 @@ func TestFilesystemCachePruneAndFlush(t *testing.T) {
 		Disk:   "private",
 		Prefix: "cache/maintenance",
 		Now:    func() time.Time { return now },
-		Random: bytes.NewReader(bytes.Repeat([]byte{4}, 128)),
+		Random: bytes.NewReader(append(
+			bytes.Repeat([]byte{4}, 32),
+			bytes.Repeat([]byte{5}, 96)...,
+		)),
 	}, disk)
 	if err != nil {
 		t.Fatal(err)
@@ -208,7 +217,12 @@ func TestFilesystemCachePruneAndFlush(t *testing.T) {
 	if err := store.Set(context.Background(), "expired", []byte("value"), cache.SetOptions{TTL: time.Second}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Set(context.Background(), "stale", []byte("value"), cache.SetOptions{Tags: []cache.Tag{"resource:7"}}); err != nil {
+	if err := store.Set(
+		context.Background(),
+		"stale",
+		[]byte("value"),
+		cache.SetOptions{Tags: []cache.Tag{"resource:7"}},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.InvalidateTag(context.Background(), "resource:7"); err != nil {
@@ -231,6 +245,69 @@ func TestFilesystemCachePruneAndFlush(t *testing.T) {
 	}
 	if _, err := store.Get(context.Background(), "keep"); !errors.Is(err, cache.ErrMiss) {
 		t.Fatalf("flushed value error = %v", err)
+	}
+}
+
+func TestFilesystemCacheMissingTagGenerationInvalidatesEntry(t *testing.T) {
+	ctx := context.Background()
+	disk := &memoryDisk{
+		code:         "private",
+		visibility:   filesystem.VisibilityPrivate,
+		distribution: filesystem.KeyDistributionSelfManaged,
+		values:       make(map[string][]byte),
+	}
+	store, err := New(ctx, Config{Code: "cache", Prefix: "cache/missing-tag"}, disk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set(
+		ctx,
+		"resource",
+		[]byte("stale"),
+		cache.SetOptions{Tags: []cache.Tag{"resource:7"}},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := disk.Delete(ctx, store.tagKey("resource:7")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Get(ctx, "resource"); !errors.Is(err, cache.ErrMiss) {
+		t.Fatalf("entry with missing tag generation error = %v, want cache miss", err)
+	}
+}
+
+func TestFilesystemCacheFlushUsesBoundedPrefixScan(t *testing.T) {
+	ctx := context.Background()
+	disk := &scanningMemoryDisk{memoryDisk: &memoryDisk{
+		code:         "private",
+		visibility:   filesystem.VisibilityPrivate,
+		distribution: filesystem.KeyDistributionSelfManaged,
+		values:       make(map[string][]byte),
+	}}
+	store, err := New(ctx, Config{Code: "cache", Prefix: "cache/flush"}, disk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entryCount := 2*flushScanPageSize + 1
+	for index := 0; index < entryCount; index++ {
+		key := fmt.Sprintf("key:%d", index)
+		if err := store.Set(ctx, key, []byte("value"), cache.SetOptions{}); err != nil {
+			t.Fatalf("set %q: %v", key, err)
+		}
+	}
+	if err := store.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(disk.values) != 0 {
+		t.Fatalf("flush left %d filesystem cache objects", len(disk.values))
+	}
+	if len(disk.limits) < 3 {
+		t.Fatalf("prefix scan calls = %d, want multiple bounded pages", len(disk.limits))
+	}
+	for _, limit := range disk.limits {
+		if limit != flushScanPageSize {
+			t.Fatalf("prefix scan limit = %d, want %d", limit, flushScanPageSize)
+		}
 	}
 }
 
@@ -291,6 +368,50 @@ type memoryDisk struct {
 	distribution filesystem.KeyDistribution
 	values       map[string][]byte
 }
+
+type scanningMemoryDisk struct {
+	*memoryDisk
+	limits []int
+}
+
+type memoryPrefixScan struct {
+	disk   *scanningMemoryDisk
+	keys   []string
+	offset int
+}
+
+func (d *scanningMemoryDisk) OpenPrefixScan(
+	_ context.Context,
+	prefix string,
+) (filesystem.PrefixScan, error) {
+	keys := make([]string, 0, len(d.values))
+	for key := range d.values {
+		if strings.HasPrefix(key, prefix+"/") {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return &memoryPrefixScan{disk: d, keys: keys}, nil
+}
+
+func (s *memoryPrefixScan) Next(
+	_ context.Context,
+	limit int,
+) (filesystem.PrefixScanPage, error) {
+	s.disk.limits = append(s.disk.limits, limit)
+	end := s.offset + limit
+	if end > len(s.keys) {
+		end = len(s.keys)
+	}
+	page := filesystem.PrefixScanPage{
+		Keys: append([]string(nil), s.keys[s.offset:end]...),
+		Done: end == len(s.keys),
+	}
+	s.offset = end
+	return page, nil
+}
+
+func (*memoryPrefixScan) Close() error { return nil }
 
 func (d *memoryDisk) Code() filesystem.Code {
 	return d.code

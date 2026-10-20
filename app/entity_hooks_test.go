@@ -53,7 +53,12 @@ func TestEntityHooksBlockRemovalAndAbortFailedPublication(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := &pendingHookSource{items: []entityhooks.PendingTarget{{Name: transitionTestKey.Name(), Target: entityhooks.Target{Module: "hook_test", Handler: "listener", Scope: entityhooks.Site, ScopeID: "1"}}}}
-	a := &App{definition: Definition{Profiles: profiles}, hookSources: []entityhooks.Source{source}, applicationHooks: entityhooks.EmptyRegistry(entityhooks.Application, ""), logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	a := &App{
+		definition:       Definition{Profiles: profiles},
+		hookSources:      []entityhooks.Source{source},
+		applicationHooks: entityhooks.EmptyRegistry(entityhooks.Application, ""),
+		logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
 	if _, _, err := a.prepareEntityHooks(ctx, catalog); err != nil {
 		t.Fatal(err)
 	}
